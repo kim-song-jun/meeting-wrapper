@@ -1,3 +1,7 @@
+import type { RecurrenceRule } from "./recurrence";
+
+export type { RecurrenceRule, RecurrenceFreq, Occurrence } from "./recurrence";
+
 /** 회의실. rooms.config.json 에서 로드한다 (Directory API 는 관리자 권한이 필요해 못 쓴다). */
 export interface Room {
   id: string;
@@ -24,6 +28,10 @@ export interface Booking {
   title: string;
   organizerName: string;
   organizerEmail: string;
+  /** 주최자 부서. 부서별 보기용. 디렉터리에서 못 찾으면 null */
+  organizerDepartment: string | null;
+  /** 반복 일정의 일부이면 시리즈 id. 단발 예약이면 null */
+  recurringEventId: string | null;
   start: Date;
   end: Date;
   /**
@@ -52,6 +60,8 @@ export interface BookingDraft {
   headcount: number;
   attendeeEmails: string[];
   conference: Conference | null;
+  /** 반복 규칙. null 이면 단발 예약 */
+  recurrence: RecurrenceRule | null;
 }
 
 /** 사내 구성원. People API 디렉터리 검색 결과 또는 프리셋 팀 구성원. */

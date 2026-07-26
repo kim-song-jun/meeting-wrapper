@@ -37,6 +37,8 @@ function booking(startH: number, startM: number, endH: number, endM: number, ove
     title: "회의",
     organizerName: "김철수",
     organizerEmail: "chulsoo@molcube.com",
+    organizerDepartment: "개발팀",
+    recurringEventId: null,
     start: at(startH, startM),
     end: at(endH, endM),
     headcount: 2,

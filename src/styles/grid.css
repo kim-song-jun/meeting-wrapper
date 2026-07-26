@@ -25,6 +25,59 @@
   cursor: pointer;
 }
 
+/* ---------- 뷰 공통 필터 바 (인원·부서) ---------- */
+
+.grid-filterbar.mr-row {
+  margin: 16px 0;
+  align-items: flex-start;
+}
+
+.grid-deptchips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+/*
+ * 부서 칩 · 주간 뷰의 회의실 칩이 공유하는 지오메트리.
+ * 두 컨트롤 모두 새로 만드는 것이라 기존 .mr-picker__team(36px)을 그대로
+ * 베끼지 않고, 모바일 터치 타깃 하한(44px)을 처음부터 만족시킨다.
+ */
+.grid-deptchip,
+.grid-roomchip {
+  display: inline-flex;
+  align-items: center;
+  height: var(--h-action);
+  padding: 0 16px;
+  border-radius: var(--r-pill);
+  border: 1px solid var(--c-border);
+  background: var(--c-surface);
+  color: var(--c-secondary);
+  font-size: var(--t-small-size);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.grid-deptchip.is-active,
+.grid-roomchip.is-active {
+  border-color: var(--c-action-border);
+  background: var(--c-action-tint);
+  color: var(--c-action);
+  font-weight: 600;
+}
+
+.grid-filter-reset {
+  display: inline-flex;
+  align-items: center;
+  height: var(--h-action);
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--c-link);
+  text-decoration: underline;
+  font: inherit;
+  cursor: pointer;
+}
+
 /* ---------- 데스크톱/태블릿 격자 (>=768px) ---------- */
 
 .grid-scroll {
@@ -281,6 +334,97 @@
 /* 768~1023px: 회의실 일부만 보이고 가로 스크롤로 나머지를 본다.
  * grid-col-min + minmax(1fr) 조합이 이미 그 동작을 만들어내므로 별도 규칙이 필요 없다. */
 
+/* ---------- 주간 뷰 ----------
+ * 시간 x 요일 격자는 .grid-scroll/.grid-table/.grid-corner/.grid-room-header/
+ * .grid-axis/.grid-col/.grid-event 를 일간 뷰와 그대로 공유한다 (구조가 동일하다 —
+ * 열의 의미만 회의실에서 요일로 바뀐다). 모바일(<768px)에서도 세로 리스트로
+ * 무너뜨리지 않고 .grid-scroll 의 가로 스크롤을 그대로 쓴다: 7일 x 132px 열 폭이
+ * 뷰포트보다 넓어져 자연히 가로 스크롤이 생긴다. */
+
+.grid-roomchips {
+  margin-top: 12px;
+}
+
+/* 오늘 열은 색이 아니라 헤더 굵기로 구분한다 (DESIGN.md — 예약 상태색 외 강조는 만들지 않는다) */
+.grid-room-header--today .grid-room-header__name {
+  font-weight: 700;
+}
+
+/* ---------- 월간 뷰 ----------
+ * 밀도를 낮춘 개요다 — 시간 격자를 그리지 않는다. 날짜 칸마다 건수와
+ * 회의실별 점유율만 중립색 막대로 보여준다. 초록/빨강 없음, 유채색 액센트는
+ * 화면당 하나("내 것")에만 쓰므로 여기서도 회색 계열만 쓴다. */
+
+.grid-month {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 1px;
+  background: var(--c-border);
+  border: 1px solid var(--c-border);
+  border-radius: var(--r-lg);
+  overflow: hidden;
+}
+
+.grid-month__weekday {
+  background: var(--c-surface);
+  padding: 8px 10px;
+  text-align: center;
+}
+
+.grid-month__cell {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  min-height: 92px;
+  padding: 8px 10px;
+  border: none;
+  background: var(--c-surface);
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
+  color: var(--c-fg);
+  transition: background-color var(--dur-cell) var(--ease-out);
+}
+.grid-month__cell:hover {
+  background: var(--c-canvas);
+}
+
+/* 이번 달이 아닌 칸(앞뒤 달 채움) — 뒤로 물러나되 흐림(opacity)이 아니라
+ * 중립색으로 구분한다. 비활성 표현(opacity)과 헷갈리지 않게 하기 위해서다. */
+.grid-month__cell--outside {
+  color: var(--c-muted);
+  background: var(--c-canvas);
+}
+
+.grid-month__cell--today .grid-month__daynum {
+  font-weight: 700;
+}
+
+.grid-month__daynum {
+  font-size: var(--t-small-size);
+}
+
+.grid-month__count {
+  color: var(--c-secondary);
+}
+
+.grid-month__bars {
+  display: flex;
+  align-items: flex-end;
+  gap: 3px;
+  height: 20px;
+  width: 100%;
+  margin-top: auto;
+}
+
+.grid-month__bar {
+  flex: 1;
+  min-width: 4px;
+  background: var(--c-border-strong);
+  border-radius: 2px 2px 0 0;
+}
+
 /* ---------- 모바일 (<768px): 격자 대신 하루 단위 세로 리스트 ---------- */
 
 .grid-mobile {
@@ -317,6 +461,19 @@
   }
   .grid-mobile {
     display: block;
+  }
+
+  /*
+   * 주간 뷰는 가로 스크롤로 격자를 유지한다 (일간처럼 리스트로 무너뜨리면
+   * "매주 화요일 오후가 계속 비나" 라는 이 화면의 목적 자체가 사라진다).
+   * 대신 슬롯을 키워 30분짜리 블록도 손가락으로 누를 수 있게 한다.
+   *
+   * --grid-slot-h 는 여기서 바꾸지 않는다. JS(placeInGrid)가 이벤트 좌표를
+   * 그 값으로 계산하므로 CSS 에서만 바꾸면 화면과 좌표가 갈라진다.
+   * 대신 WeekView 가 인라인 style 로 같은 숫자를 내려준다 — 단일 진실 소스.
+   */
+  .grid-week {
+    --grid-col-min: 108px;
   }
 }
 

@@ -3,8 +3,18 @@ import { Alert, Button, Dialog, Field } from "../components/ui";
 import { POLICY, roomById } from "../app/config";
 import { repo } from "../data";
 import { hhmm, humanDuration, validateDraft, MINUTE } from "../domain/time";
-import type { Booking, Conference, DirectoryPerson, UserPrefs } from "../domain/types";
+import {
+  describeRecurrence,
+  expandRecurrence,
+  lastOccurrenceExceedsAdvance,
+  FREQ_LABEL,
+  MAX_OCCURRENCES,
+} from "../domain/recurrence";
+import type { RecurrenceFreq, RecurrenceRule } from "../domain/recurrence";
+import type { Booking, BookingDraft, Conference, DirectoryPerson, UserPrefs } from "../domain/types";
+import type { RecurringCreateResult } from "../data/BookingRepository";
 import { AttendeePicker } from "./AttendeePicker";
+import { RecurrenceResult } from "./RecurrenceResult";
 
 const PROBLEM_TEXT: Record<string, string> = {
   "too-long": "한 번에 " + humanDuration(POLICY.maxDurationMinutes) + "까지 예약할 수 있어요",
@@ -33,15 +43,30 @@ export function BookingDialog({ roomId, start, end, prefs, onClose, onCreated }:
   const [vc, setVc] = useState<VcKind>("meet");
   const [zoomUrl, setZoomUrl] = useState(prefs.defaultZoomUrl ?? "");
   const [saveZoom, setSaveZoom] = useState(true);
+  const [recurrenceOpen, setRecurrenceOpen] = useState(false);
+  const [freq, setFreq] = useState<RecurrenceFreq | "none">("none");
+  const [count, setCount] = useState(4);
   const [busy, setBusy] = useState(false);
   const [failure, setFailure] = useState<string | null>(null);
+  const [recurrenceResult, setRecurrenceResult] = useState<RecurringCreateResult | null>(null);
 
   const problems = validateDraft({ start, end }, POLICY, new Date());
   const durationMin = (end.getTime() - start.getTime()) / MINUTE;
   // 정원 초과는 예약을 막지 않고 경고만 한다 — 옆방이 없어 그냥 껴 앉는 경우가 있다
   const capacityOver = room !== null && headcount > room.capacity;
   const zoomMissing = vc === "zoom" && zoomUrl.trim().length === 0;
-  const blocked = problems.length > 0 || zoomMissing;
+
+  const recurrence: RecurrenceRule | null = freq === "none" ? null : { freq, count };
+  // 마지막 회차가 선행 예약 한도를 넘는지는 반복 날짜를 실제로 펼쳐봐야 안다
+  // (다섯째 요일 없는 달을 건너뛰면 "12회 뒤" 가 산술로 계산한 날짜와 달라진다).
+  const advanceExceeded =
+    recurrence !== null &&
+    lastOccurrenceExceedsAdvance(expandRecurrence(start, end, recurrence), POLICY.maxAdvanceDays, new Date());
+
+  const blocked = problems.length > 0 || zoomMissing || advanceExceeded;
+
+  const saveLabel = recurrence !== null ? String(recurrence.count) + "회 예약하기" : "예약하기";
+  const savingLabel = recurrence !== null ? String(recurrence.count) + "회 예약하는 중…" : "예약하는 중…";
 
   async function submit() {
     if (blocked || busy) return;
@@ -52,16 +77,44 @@ export function BookingDialog({ roomId, start, end, prefs, onClose, onCreated }:
     if (vc === "meet") conference = { kind: "meet", url: null };
     if (vc === "zoom") conference = { kind: "zoom", url: zoomUrl.trim() };
 
+    const draft: BookingDraft = {
+      roomId,
+      title: title.trim().length > 0 ? title.trim() : "회의",
+      start,
+      end,
+      headcount,
+      attendeeEmails: invitees.map((p) => p.email),
+      conference,
+      recurrence,
+    };
+
     try {
-      const result = await repo.create({
-        roomId,
-        title: title.trim().length > 0 ? title.trim() : "회의",
-        start,
-        end,
-        headcount,
-        attendeeEmails: invitees.map((p) => p.email),
-        conference,
-      });
+      if (recurrence !== null) {
+        const result = await repo.createRecurring(draft);
+
+        // 최소 한 회차가 잡혔으면 그 회의들에 걸린 Zoom 링크이니 저장해도 된다.
+        if (result.booked.length > 0 && vc === "zoom" && saveZoom) {
+          await repo.savePrefs({ defaultZoomUrl: zoomUrl.trim() });
+        }
+
+        // 부분 성공이 정상 경로다 — 거절된 회차가 하나라도 있으면 조용히 닫지 않고
+        // 결과 화면을 보여준다. "12회 다 잡혔겠지" 하고 넘어가면 그 방에 갔을 때
+        // 다른 팀이 앉아 있다.
+        if (result.rejected.length > 0) {
+          setRecurrenceResult(result);
+          return;
+        }
+
+        const first = result.booked[0];
+        if (first) {
+          onCreated(first);
+        } else {
+          setFailure("반복 예약을 만들지 못했어요. 잠시 후 다시 시도해 주세요.");
+        }
+        return;
+      }
+
+      const result = await repo.create(draft);
 
       if (result.ok) {
         if (vc === "zoom" && saveZoom) {
@@ -84,6 +137,24 @@ export function BookingDialog({ roomId, start, end, prefs, onClose, onCreated }:
     } finally {
       setBusy(false);
     }
+  }
+
+  if (recurrenceResult) {
+    return (
+      <RecurrenceResult
+        totalRequested={recurrenceResult.booked.length + recurrenceResult.rejected.length}
+        booked={recurrenceResult.booked}
+        rejected={recurrenceResult.rejected}
+        onConfirm={() => {
+          const first = recurrenceResult.booked[0];
+          if (first) {
+            onCreated(first);
+          } else {
+            onClose();
+          }
+        }}
+      />
+    );
   }
 
   const subtitle =
@@ -109,7 +180,7 @@ export function BookingDialog({ roomId, start, end, prefs, onClose, onCreated }:
             취소
           </Button>
           <Button onClick={submit} disabled={blocked || busy}>
-            {busy ? "예약하는 중…" : "예약하기"}
+            {busy ? savingLabel : saveLabel}
           </Button>
         </>
       }
@@ -178,6 +249,69 @@ export function BookingDialog({ roomId, start, end, prefs, onClose, onCreated }:
         ) : (
           <button type="button" className="mr-disclosure" onClick={() => setInvitesOpen(true)}>
             참석자 초대하기 (선택)
+          </button>
+        )}
+      </div>
+
+      {/* 반복도 선택. 접어두면 단발 예약 흐름이 그대로 유지된다. */}
+      <div style={{ marginTop: 16 }}>
+        {recurrenceOpen ? (
+          <fieldset style={{ border: "none", padding: 0, margin: 0 }}>
+            <legend className="mr-field__label" style={{ padding: 0 }}>
+              반복 (선택)
+            </legend>
+            {(
+              [
+                ["none", "없음"],
+                ["weekly", FREQ_LABEL.weekly],
+                ["biweekly", FREQ_LABEL.biweekly],
+                ["monthly-nth-weekday", FREQ_LABEL["monthly-nth-weekday"]],
+              ] as const
+            ).map(([value, label]) => (
+              <label key={value} className="mr-row" style={{ gap: 8, padding: "4px 0" }}>
+                <input
+                  type="radio"
+                  name="molroom-recurrence-freq"
+                  checked={freq === value}
+                  onChange={() => setFreq(value)}
+                />
+                <span>{label}</span>
+              </label>
+            ))}
+
+            {recurrence !== null ? (
+              <div style={{ marginTop: 8 }}>
+                <label className="mr-field" htmlFor="molroom-recurrence-count">
+                  <span className="mr-field__label">횟수</span>
+                  <select
+                    id="molroom-recurrence-count"
+                    className="mr-input"
+                    value={count}
+                    onChange={(e) => setCount(Number(e.target.value))}
+                  >
+                    {Array.from({ length: MAX_OCCURRENCES }, (_, i) => i + 1).map((n) => (
+                      <option key={n} value={n}>
+                        {n}회
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <p className="mr-field__hint">{describeRecurrence(start, recurrence)}</p>
+
+                {advanceExceeded ? (
+                  <div style={{ marginTop: 8 }}>
+                    <Alert>
+                      {"마지막 회차가 " + String(POLICY.maxAdvanceDays) + "일 선행 예약 한도를 넘어요. 횟수를 줄이거나 반복 주기를 바꿔 주세요."}
+                    </Alert>
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
+          </fieldset>
+        ) : (
+          <button type="button" className="mr-disclosure" onClick={() => setRecurrenceOpen(true)}>
+            반복 설정하기 (선택)
           </button>
         )}
       </div>

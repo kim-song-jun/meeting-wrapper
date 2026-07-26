@@ -24,6 +24,21 @@ export interface BookingRepository {
 
   create(draft: BookingDraft): Promise<CreateResult>;
 
+  /**
+   * 반복 예약. draft.recurrence 가 있어야 한다.
+   * 구현은 회차를 펼쳐 각각의 회의실 응답을 확인하고 부분 성공을 그대로 돌려준다.
+   */
+  createRecurring(draft: BookingDraft): Promise<RecurringCreateResult>;
+
+  /** 여러 날에 걸친 한 회의실의 예약. 주간 뷰가 쓴다. */
+  listByRoomRange(roomId: string, from: Date, to: Date): Promise<Booking[]>;
+
+  /** 여러 날에 걸친 전체 회의실 예약. 월 개요가 쓴다. */
+  listByRange(from: Date, to: Date): Promise<Booking[]>;
+
+  /** 시리즈 전체 취소 */
+  cancelSeries(seriesId: string): Promise<void>;
+
   /** 종료 시각 변경 (연장·단축) */
   changeEnd(bookingId: string, newEnd: Date): Promise<ChangeResult>;
 
@@ -46,6 +61,25 @@ export interface BookingRepository {
    * "자동완성 없음"으로 다루고 자유 입력으로 넘어가야 한다.
    */
   searchDirectory(query: string): Promise<DirectoryPerson[]>;
+}
+
+/**
+ * 반복 예약 결과.
+ *
+ * **부분 성공이 정상 경로다.** Google 은 반복 일정의 각 인스턴스에 대해
+ * 회의실이 개별적으로 수락/거절한다 — 12주 중 3주만 이미 차 있으면
+ * 나머지 9주는 예약되고 3주는 거절된다. events.insert 는 그래도 200 을 준다.
+ *
+ * 그래서 이 결과는 boolean 이 아니라 회차별 목록이다. 호출부는 반드시
+ * 실패한 회차를 사용자에게 보여줘야 한다 — "12주 다 잡혔겠지" 하고
+ * 넘어가면 그 방에 갔을 때 다른 팀이 앉아 있다.
+ */
+export interface RecurringCreateResult {
+  /** 시리즈 id. 하나도 못 만들었으면 null */
+  seriesId: string | null;
+  booked: Booking[];
+  /** 회의실이 거절했거나 이미 차 있던 회차 */
+  rejected: Array<{ start: Date; end: Date; reason: string }>;
 }
 
 export type CreateResult =
