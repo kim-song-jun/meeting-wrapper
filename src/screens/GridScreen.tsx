@@ -189,8 +189,17 @@ function DateStepper({
   todayLabel: string;
   rangeLabel: string;
 }) {
+  /*
+   * 배치 순서는 실제 캘린더 제품들(Proton Calendar, Front)에서 가져왔다:
+   * [현재로 점프] → [‹ ›] → [큰 기간 제목]. 셋 다 왼쪽에 모여 있고 제목이 가장 크다.
+   * 우리는 스테퍼가 먼저 오고 제목이 작아서 "지금 어느 날짜를 보고 있나" 가
+   * 컨트롤보다 약하게 읽혔다.
+   */
   return (
     <div className="grid-toolbar mr-row">
+      <Button variant="secondary" onClick={onToday}>
+        {todayLabel}
+      </Button>
       <div className="grid-datestepper" role="group" aria-label="날짜 이동">
         <button type="button" className="grid-datestepper__btn" onClick={onPrev} aria-label={prevLabel}>
           <span aria-hidden="true">‹</span>
@@ -200,10 +209,7 @@ function DateStepper({
           <span aria-hidden="true">›</span>
         </button>
       </div>
-      <Button variant="secondary" onClick={onToday}>
-        {todayLabel}
-      </Button>
-      <span className="t-small t-muted">{rangeLabel}</span>
+      <h2 className="grid-topbar__title">{rangeLabel}</h2>
     </div>
   );
 }
@@ -451,15 +457,12 @@ export function GridScreen() {
 
   return (
     <div className="grid-screen">
-      <GridViewSwitch active={view} onChange={setView} />
-
       {/*
-       * 필터(인원/부서)와 날짜 탐색(오늘·이전/다음)은 성격이 다르지만 둘 다
-       * "이 화면에 지금 뭐가 보이는지"를 조정하는 컨트롤이라 하나의 컨테이너
-       * (옅은 배경 + 보더)로 묶는다. 위 뷰 전환(성격이 다른 클러스터)과는
-       * 28px 로 크게 떼어 놓는다. 날짜 툴바는 뷰마다 구성이 달라 이 컨테이너
-       * 안에서 조건부로 이어 붙인다 — ROOMS 가 0건일 때는 원래도
-       * 격자 자체를 보여주지 않았으므로 툴바도 같이 접는다.
+       * 상단은 한 줄이다: 왼쪽에 날짜 이동(현재로 점프 · ‹ › · 큰 제목),
+       * 오른쪽에 보기 범위(부서 필터 · 일간/주간/월간).
+       * Proton Calendar · Front 의 실제 배치이고, 뷰 스위처를 왼쪽 위에 따로
+       * 띄워 두던 것보다 세로를 한 줄 덜 쓴다 — 잠긴 판에서는 그게 격자 높이다.
+       * 좁은 화면에서는 자연히 두 줄로 접힌다(flex-wrap).
        */}
       <div className="grid-controlbar">
         {/*
@@ -467,41 +470,13 @@ export function GridScreen() {
           이라는 질문 자체가 성립하지 않는다 — 걸러낼 근거가 없는 필터는 아무 방도
           빼지 않으면서 세로 한 줄과 컨트롤 넷을 차지한다.
         */}
-        <div className="grid-filterbar mr-row">
-          {departments.length > 0 ? (
-            <div className="grid-deptchips" role="group" aria-label="부서 필터">
-              <button
-                type="button"
-                className={cx("grid-deptchip", deptFilter === null && "is-active")}
-                aria-pressed={deptFilter === null}
-                onClick={() => setDeptFilter(null)}
-              >
-                전체
-              </button>
-              {departments.map((d) => (
-                <button
-                  key={d}
-                  type="button"
-                  className={cx("grid-deptchip", deptFilter === d && "is-active")}
-                  aria-pressed={deptFilter === d}
-                  onClick={() => setDeptFilter(d)}
-                >
-                  {d}
-                </button>
-              ))}
-            </div>
-          ) : null}
-
-          {activeFilterCount > 0 ? (
-            <button type="button" className="grid-filter-reset" onClick={resetFilters}>
-              필터 {activeFilterCount}개 · 해제
-            </button>
-          ) : null}
-        </div>
 
         {ROOMS.length > 0 ? (
           view === "day" ? (
             <div className="grid-toolbar mr-row">
+              <Button variant="secondary" onClick={() => setSelectedDate(startOfDay(new Date()))}>
+                오늘
+              </Button>
               {/* 주간·월간과 같은 ‹ › 스테퍼를 쓴다 — 뷰를 바꿔도 날짜 이동 위치가 안 변한다.
                   "내일" 버튼은 ›  하나로 대체됐다. */}
               <div className="grid-datestepper" role="group" aria-label="날짜 이동">
@@ -523,9 +498,6 @@ export function GridScreen() {
                   <span aria-hidden="true">›</span>
                 </button>
               </div>
-              <Button variant="secondary" onClick={() => setSelectedDate(startOfDay(new Date()))}>
-                오늘
-              </Button>
               {/*
                 날짜 라벨 자체가 피커다. 네이티브 date input 은 표시 형식을 못 바꾸고
                 (2026. 07. 26. 고정) 폭도 커서 툴바를 잡아먹는다. 라벨을 보여주고
@@ -533,7 +505,7 @@ export function GridScreen() {
                 네이티브 피커를 그대로 쓰므로 키보드·모바일 동작은 브라우저 것이다.
               */}
               <span className="grid-datepick">
-                <span className="grid-datepick__label t-body">{dateLabel}</span>
+                <span className="grid-datepick__label grid-topbar__title">{dateLabel}</span>
                 <input
                   type="date"
                   className="grid-datepick__input"
@@ -565,6 +537,41 @@ export function GridScreen() {
             />
           )
         ) : null}
+
+        <div className="grid-controlbar__right">
+          <div className="grid-filterbar mr-row">
+            {departments.length > 0 ? (
+              <div className="grid-deptchips" role="group" aria-label="부서 필터">
+                <button
+                  type="button"
+                  className={cx("grid-deptchip", deptFilter === null && "is-active")}
+                  aria-pressed={deptFilter === null}
+                  onClick={() => setDeptFilter(null)}
+                >
+                  전체
+                </button>
+                {departments.map((d) => (
+                  <button
+                    key={d}
+                    type="button"
+                    className={cx("grid-deptchip", deptFilter === d && "is-active")}
+                    aria-pressed={deptFilter === d}
+                    onClick={() => setDeptFilter(d)}
+                  >
+                    {d}
+                  </button>
+                ))}
+              </div>
+            ) : null}
+  
+            {activeFilterCount > 0 ? (
+              <button type="button" className="grid-filter-reset" onClick={resetFilters}>
+                필터 {activeFilterCount}개 · 해제
+              </button>
+            ) : null}
+          </div>
+          <GridViewSwitch active={view} onChange={setView} />
+        </div>
       </div>
 
       {prefsState.error ? (

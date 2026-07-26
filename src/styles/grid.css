@@ -76,7 +76,7 @@
   background: var(--c-surface-muted);
   border: 1px solid var(--c-border);
   border-radius: var(--r-sm);
-  margin-bottom: 28px; /* 아래 필터/날짜 컨트롤 클러스터와 성격이 다른 그룹이라 크게 뗀다 */
+  margin-bottom: 0; /* 이제 날짜 툴바와 같은 줄에 있다 — 아래 여백이 필요 없다 */
 }
 
 .grid-viewswitch__btn {
@@ -111,7 +111,7 @@
  */
 @media (min-width: 768px) and (hover: hover) {
   .grid-viewswitch {
-    margin-bottom: 16px;
+    margin-bottom: 0;
   }
   .grid-viewswitch__btn {
     height: 30px;
@@ -185,6 +185,17 @@
     flex-wrap: wrap;
     gap: 8px 20px;
   }
+  /* 오른쪽 그룹(부서 필터 + 뷰 스위처)을 반대쪽 끝으로 밀어낸다 */
+  .grid-controlbar__right {
+    margin-left: auto;
+  }
+}
+
+.grid-controlbar__right {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 12px;
 }
 
 /* ---------- 날짜 스테퍼 (주간·월간 공유) ----------
@@ -266,6 +277,18 @@
 .grid-datepick:hover {
   background: var(--c-surface-muted);
 }
+/* 기간 제목 — Proton/Front 둘 다 툴바에서 가장 큰 글자다. 지금 어느 날짜를
+ * 보고 있는지가 컨트롤보다 먼저 읽혀야 한다. */
+.grid-topbar__title {
+  margin: 0;
+  font-size: var(--t-section-size);
+  line-height: var(--t-section-lh);
+  font-weight: 600;
+  letter-spacing: var(--ls-section);
+  color: var(--c-fg);
+  white-space: nowrap;
+}
+
 .grid-datepick__label {
   font-weight: 600;
   white-space: nowrap;
