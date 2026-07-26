@@ -521,10 +521,9 @@
   gap: 12px;
   flex-wrap: wrap;
 }
-/* 390px 화면에서 정원 경고가 스테퍼 옆에 끼면 두 줄로 깨진다. 아래 줄로 내린다. */
+/* 390px 화면에서 설명 문구가 스테퍼 옆에 끼면 두 줄로 깨진다. 아래 줄로 내린다. */
 @media (max-width: 460px) {
-  .mr-stepper__note,
-  .mr-stepper__note--warn {
+  .mr-stepper__note {
     flex-basis: 100%;
   }
 }
@@ -538,9 +537,6 @@
   font-size: var(--t-small-size);
   line-height: var(--t-small-lh);
   color: var(--c-muted);
-}
-.mr-stepper__note--warn {
-  color: var(--c-attn-fg);
 }
 
 /* ---------- 참석자 선택 ---------- */

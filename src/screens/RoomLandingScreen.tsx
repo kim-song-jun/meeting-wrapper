@@ -120,7 +120,7 @@ export function RoomLandingScreen() {
             {ROOMS.map((r) => (
               <li key={r.id}>
                 <Link to={"/r/" + r.id} className="mr-landing__roomlink">
-                  {r.name} · {String(r.capacity)}인 · {r.floor}
+                  {r.name} · {r.floor}
                 </Link>
               </li>
             ))}
@@ -233,7 +233,7 @@ export function RoomLandingScreen() {
       <main className="mr-landing__main">
         <h1 className="t-display mr-landing__title">{room.name}</h1>
         <p className="t-body mr-landing__meta">
-          {String(room.capacity)}인 · {room.floor}
+          {room.floor}
         </p>
 
         {prefsState.error ? (

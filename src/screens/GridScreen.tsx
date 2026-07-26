@@ -253,18 +253,8 @@ export function GridScreen() {
   );
 
   /* ---- 필터 (모든 뷰 공통) ---- */
-  const [headcountFilter, setHeadcountFilter] = useState(0);
   const [deptFilter, setDeptFilter] = useState<string | null>(null);
 
-  const filteredRooms = useMemo(
-    () => (headcountFilter > 0 ? ROOMS.filter((r) => r.capacity >= headcountFilter) : ROOMS),
-    [headcountFilter],
-  );
-  const biggestRoom = useMemo(
-    () =>
-      ROOMS.reduce<Room | null>((max, r) => (max === null || r.capacity > max.capacity ? r : max), null),
-    [],
-  );
 
   function matchesDept(b: Booking): boolean {
     return deptFilter === null || b.organizerDepartment === deptFilter;
@@ -308,13 +298,13 @@ export function GridScreen() {
 
   // 인원 필터로 현재 고른 방이 후보에서 빠지면 남은 후보 중 첫 방으로 옮긴다.
   useEffect(() => {
-    if (filteredRooms.length === 0) return;
-    if (!filteredRooms.some((r) => r.id === weekRoomId)) {
-      const first = filteredRooms[0];
+    if (ROOMS.length === 0) return;
+    if (!ROOMS.some((r) => r.id === weekRoomId)) {
+      const first = ROOMS[0];
       if (first) setWeekRoomId(first.id);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filteredRooms]);
+  }, [ROOMS]);
 
   /* ---- 월간 뷰 상태 ---- */
   const [monthAnchor, setMonthAnchor] = useState<Date>(() => startOfMonth(new Date()));
@@ -356,10 +346,9 @@ export function GridScreen() {
     activeBookings.length > 0 &&
     !activeBookings.some((b) => b.organizerDepartment === deptFilter);
 
-  const activeFilterCount = (headcountFilter > 0 ? 1 : 0) + (deptFilter !== null ? 1 : 0);
+  const activeFilterCount = deptFilter !== null ? 1 : 0;
 
   function resetFilters() {
-    setHeadcountFilter(0);
     setDeptFilter(null);
   }
 
@@ -458,7 +447,7 @@ export function GridScreen() {
   }
 
   const gridTemplateColumns =
-    "var(--grid-axis-w) repeat(" + String(filteredRooms.length) + ", minmax(var(--grid-col-min), 1fr))";
+    "var(--grid-axis-w) repeat(" + String(ROOMS.length) + ", minmax(var(--grid-col-min), 1fr))";
 
   return (
     <div className="grid-screen">
@@ -469,38 +458,16 @@ export function GridScreen() {
        * "이 화면에 지금 뭐가 보이는지"를 조정하는 컨트롤이라 하나의 컨테이너
        * (옅은 배경 + 보더)로 묶는다. 위 뷰 전환(성격이 다른 클러스터)과는
        * 28px 로 크게 떼어 놓는다. 날짜 툴바는 뷰마다 구성이 달라 이 컨테이너
-       * 안에서 조건부로 이어 붙인다 — filteredRooms 가 0건일 때는 원래도
+       * 안에서 조건부로 이어 붙인다 — ROOMS 가 0건일 때는 원래도
        * 격자 자체를 보여주지 않았으므로 툴바도 같이 접는다.
        */}
       <div className="grid-controlbar">
+        {/*
+          인원 필터는 없앴다. 두 회의실 모두 정원 제한이 없어서 "N명 들어가는 방"
+          이라는 질문 자체가 성립하지 않는다 — 걸러낼 근거가 없는 필터는 아무 방도
+          빼지 않으면서 세로 한 줄과 컨트롤 넷을 차지한다.
+        */}
         <div className="grid-filterbar mr-row">
-          <div>
-            <span className="mr-field__label">인원</span>
-            <div className="mr-stepper">
-              {/* 함수형 업데이터를 쓴다 — 연타할 때 같은 렌더의 옛 값을 읽어 증가분이 유실되는 것을 막는다.
-                  secondary(44px)를 쓰는 이유: 이 필터바는 모바일에서도 그대로 보인다.
-                  compact(36px)는 DESIGN.md §4 가 "데스크톱 격자 인접 컨텍스트에서만" 으로 못박은 값이다. */}
-              <Button
-                variant="secondary"
-                onClick={() => setHeadcountFilter((n) => Math.max(0, n - 1))}
-                disabled={headcountFilter <= 0}
-                aria-label="인원 필터 줄이기"
-              >
-                −
-              </Button>
-              <span className="mr-stepper__value">
-                {headcountFilter === 0 ? "전체" : String(headcountFilter) + "명"}
-              </span>
-              <Button
-                variant="secondary"
-                onClick={() => setHeadcountFilter((n) => n + 1)}
-                aria-label="인원 필터 늘리기"
-              >
-                +
-              </Button>
-            </div>
-          </div>
-
           {departments.length > 0 ? (
             <div className="grid-deptchips" role="group" aria-label="부서 필터">
               <button
@@ -532,7 +499,7 @@ export function GridScreen() {
           ) : null}
         </div>
 
-        {filteredRooms.length > 0 ? (
+        {ROOMS.length > 0 ? (
           view === "day" ? (
             <div className="grid-toolbar mr-row">
               {/* 주간·월간과 같은 ‹ › 스테퍼를 쓴다 — 뷰를 바꿔도 날짜 이동 위치가 안 변한다.
@@ -615,13 +582,10 @@ export function GridScreen() {
         </div>
       ) : null}
 
-      {filteredRooms.length === 0 ? (
+      {ROOMS.length === 0 ? (
         <div style={{ marginTop: 16 }}>
           <Alert>
-            {String(headcountFilter)}명 들어가는 방이 없어요.
-            {biggestRoom
-              ? " 가장 큰 방은 " + biggestRoom.name + "(" + String(biggestRoom.capacity) + "인)입니다."
-              : ""}
+            회의실이 등록되지 않았어요. src/config/rooms.json 을 확인해 주세요.
           </Alert>
         </div>
       ) : view === "day" ? (
@@ -650,7 +614,7 @@ export function GridScreen() {
               <div className={cx("grid-table", drag && "is-dragging")} style={{ gridTemplateColumns }}>
                 <div className="grid-corner" />
 
-                {filteredRooms.map((room) => (
+                {ROOMS.map((room) => (
                   <div key={room.id} className="grid-room-header">
                     {bookingsState.loading ? (
                       <>
@@ -660,10 +624,7 @@ export function GridScreen() {
                     ) : (
                       <>
                         <span className="grid-room-header__name">{room.name}</span>
-                        <span className="grid-room-header__meta t-cap">
-                          <span className="grid-room-header__cap t-num">{room.capacity}인</span>
-                          <span className="t-muted">{room.floor}</span>
-                        </span>
+                        <span className="grid-room-header__meta t-cap t-muted">{room.floor}</span>
                       </>
                     )}
                   </div>
@@ -687,7 +648,7 @@ export function GridScreen() {
                   })}
                 </div>
 
-                {filteredRooms.map((room) => {
+                {ROOMS.map((room) => {
                   const roomBookings = bookingsState.loading
                     ? []
                     : (bookingsByRoom.get(room.id) ?? []).filter(
@@ -765,7 +726,7 @@ export function GridScreen() {
               모바일에서는 회의실 문에 붙은 QR 코드가 예약의 시작점이에요. QR을 스캔하면 그 자리에서 바로
               예약·체크인할 수 있어요.
             </p>
-            {filteredRooms.map((room) => {
+            {ROOMS.map((room) => {
               const roomBookings = bookingsState.loading
                 ? []
                 : (bookingsByRoom.get(room.id) ?? []).filter(matchesDept);
@@ -774,7 +735,7 @@ export function GridScreen() {
                   <header className="grid-mobile__room-head">
                     <span className="t-body grid-mobile__room-name">{room.name}</span>
                     <span className="t-cap t-muted">
-                      {room.capacity}인 · {room.floor}
+                      {room.floor}
                     </span>
                   </header>
                   {bookingsState.loading ? (
@@ -807,7 +768,7 @@ export function GridScreen() {
         </div>
       ) : view === "week" ? (
         <WeekView
-          filteredRooms={filteredRooms}
+          ROOMS={ROOMS}
           weekRoomId={weekRoomId}
           onRoomChange={setWeekRoomId}
           weekStart={weekStart}
@@ -827,7 +788,7 @@ export function GridScreen() {
           loading={monthState.loading}
           error={monthState.error}
           onReload={monthState.reload}
-          filteredRooms={filteredRooms}
+          ROOMS={ROOMS}
           matchesDept={matchesDept}
           onSelectDate={(d) => {
             setSelectedDate(startOfDay(d));
@@ -951,7 +912,7 @@ function GridEventBlock({
  * 축이 회의실에서 요일로 바뀔 뿐이다. 각 요일 열의 dayStart 만 그 날짜로 넘긴다. */
 
 function WeekView({
-  filteredRooms,
+  ROOMS,
   weekRoomId,
   onRoomChange,
   weekStart,
@@ -964,7 +925,7 @@ function WeekView({
   now,
   onSelectBooking,
 }: {
-  filteredRooms: readonly Room[];
+  ROOMS: readonly Room[];
   weekRoomId: string;
   onRoomChange: (id: string) => void;
   weekStart: Date;
@@ -1005,9 +966,9 @@ function WeekView({
 
   return (
     <div>
-      {filteredRooms.length > 0 ? (
+      {ROOMS.length > 0 ? (
         <div className="grid-roomchips mr-row" role="group" aria-label="회의실 선택">
-          {filteredRooms.map((room) => (
+          {ROOMS.map((room) => (
             <button
               key={room.id}
               type="button"
@@ -1015,7 +976,7 @@ function WeekView({
               aria-pressed={room.id === weekRoomId}
               onClick={() => onRoomChange(room.id)}
             >
-              {room.name} · {room.capacity}인
+              {room.name}
             </button>
           ))}
         </div>
@@ -1133,7 +1094,7 @@ function MonthView({
   loading,
   error,
   onReload,
-  filteredRooms,
+  ROOMS,
   matchesDept,
   onSelectDate,
   now,
@@ -1143,7 +1104,7 @@ function MonthView({
   loading: boolean;
   error: Error | null;
   onReload: () => void;
-  filteredRooms: readonly Room[];
+  ROOMS: readonly Room[];
   matchesDept: (b: Booking) => boolean;
   onSelectDate: (d: Date) => void;
   now: Date;
@@ -1194,7 +1155,7 @@ function MonthView({
             const cellBookings = bookings.filter(
               (b) =>
                 matchesDept(b) &&
-                filteredRooms.some((r) => r.id === b.roomId) &&
+                ROOMS.some((r) => r.id === b.roomId) &&
                 b.end.getTime() > cellStart.getTime() &&
                 b.start.getTime() < cellEnd.getTime(),
             );
@@ -1346,8 +1307,6 @@ function EventDetail({
   const subtitle =
     (room?.name ?? booking.roomId) +
     " · " +
-    String(room?.capacity ?? 0) +
-    "인 · " +
     hhmm(booking.start) +
     "–" +
     hhmm(booking.end) +

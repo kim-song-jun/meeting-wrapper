@@ -10,7 +10,11 @@ export interface Room {
   name: string;
   /** 월간 칩처럼 이름을 다 쓸 수 없는 좁은 자리에 쓰는 한두 글자 약칭 */
   short: string;
-  capacity: number;
+  /*
+   * 정원(capacity)은 두지 않는다. 두 회의실 모두 인원 제한이 없어서,
+   * 정원을 적어두면 있지도 않은 제약을 UI 가 검사하고 경고하게 된다.
+   * 예약의 headcount 는 계속 받는다 — 그건 제약이 아니라 기록이다.
+   */
   floor: string;
 }
 

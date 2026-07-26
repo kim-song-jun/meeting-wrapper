@@ -4,7 +4,6 @@
     "email": "molcube.com_room-small@resource.calendar.google.com",
     "name": "소회의실",
     "short": "소",
-    "capacity": 4,
     "floor": "3F"
   },
   {
@@ -12,7 +11,6 @@
     "email": "molcube.com_room-large@resource.calendar.google.com",
     "name": "대회의실",
     "short": "대",
-    "capacity": 12,
     "floor": "3F"
   }
 ]

@@ -52,8 +52,6 @@ export function BookingDialog({ roomId, start, end, prefs, onClose, onCreated }:
 
   const problems = validateDraft({ start, end }, POLICY, new Date());
   const durationMin = (end.getTime() - start.getTime()) / MINUTE;
-  // 정원 초과는 예약을 막지 않고 경고만 한다 — 옆방이 없어 그냥 껴 앉는 경우가 있다
-  const capacityOver = room !== null && headcount > room.capacity;
   const zoomMissing = vc === "zoom" && zoomUrl.trim().length === 0;
 
   const recurrence: RecurrenceRule | null = freq === "none" ? null : { freq, count };
@@ -160,8 +158,6 @@ export function BookingDialog({ roomId, start, end, prefs, onClose, onCreated }:
   const subtitle =
     (room?.name ?? roomId) +
     " · " +
-    String(room?.capacity ?? 0) +
-    "인 · " +
     hhmm(start) +
     "–" +
     hhmm(end) +
@@ -227,11 +223,9 @@ export function BookingDialog({ roomId, start, end, prefs, onClose, onCreated }:
             >
               +
             </Button>
-            <span className={capacityOver ? "mr-stepper__note--warn" : "mr-stepper__note"}>
-              {capacityOver
-                ? String(room?.capacity ?? 0) + "인실이라 자리가 부족해요"
-                : String(room?.capacity ?? 0) + "인실 · 여유 있음"}
-            </span>
+            {/* 정원 제한이 없으므로 초과 경고가 없다. 인원은 초대와 별개의 기록이라
+                무엇에 쓰이는지만 밝힌다. */}
+            <span className="mr-stepper__note">참석 인원 기록용 — 초대와 별개예요</span>
           </div>
         </div>
 

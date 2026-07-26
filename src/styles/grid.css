@@ -715,16 +715,6 @@
   align-items: center;
   gap: 6px;
 }
-.grid-room-header__cap {
-  display: inline-flex;
-  align-items: center;
-  height: var(--h-badge);
-  padding: 0 8px;
-  border-radius: var(--r-pill);
-  background: var(--c-surface-muted);
-  color: var(--c-secondary);
-  font-weight: 500;
-}
 
 /* 방 경계는 30분선(--c-surface-muted)보다 진하게. 마지막 열은 오른쪽 선을 두지 않는다. */
 .grid-col {
