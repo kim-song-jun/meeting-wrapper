@@ -46,9 +46,9 @@ body::before {
   z-index: -1;
   pointer-events: none;
   background:
-    radial-gradient(720px 560px at -10% -10%, var(--ambient-mint), transparent 60%),
-    radial-gradient(680px 540px at 110% -5%, var(--ambient-amber), transparent 60%),
-    radial-gradient(760px 600px at 50% 120%, var(--ambient-blue), transparent 60%);
+    radial-gradient(720px 560px at -10% -10%, var(--ambient-blue-deep), transparent 60%),
+    radial-gradient(680px 540px at 110% -5%, var(--ambient-blue), transparent 60%),
+    radial-gradient(760px 600px at 50% 120%, var(--ambient-blue-deep), transparent 60%);
 }
 
 /*
@@ -59,9 +59,9 @@ body::before {
 @media (max-width: 767px) {
   body::before {
     background:
-      radial-gradient(300px 240px at -20% -6%, var(--ambient-mint), transparent 65%),
-      radial-gradient(280px 220px at 120% -3%, var(--ambient-amber), transparent 65%),
-      radial-gradient(340px 260px at 50% 115%, var(--ambient-blue), transparent 65%);
+      radial-gradient(300px 240px at -20% -6%, var(--ambient-blue-deep), transparent 65%),
+      radial-gradient(280px 220px at 120% -3%, var(--ambient-blue), transparent 65%),
+      radial-gradient(340px 260px at 50% 115%, var(--ambient-blue-deep), transparent 65%);
   }
 }
 
