@@ -119,3 +119,10 @@
   font-size: var(--t-small-size);
   line-height: var(--t-small-lh);
 }
+
+/* 이 파일은 리스트 화면이라 유리를 쓰지 않는다 (mine-list 카드는 반복 항목,
+ * 불투명 유지). 캔버스색을 다시 칠하는 선언이 없어 앰비언트 배경을 가리지
+ * 않는다 — 확인만 하고 손대지 않음. 탭 바 유리는 components.css 소관. */
+@media (prefers-reduced-transparency: reduce), (prefers-contrast: more) {
+  /* 이 파일에 backdrop-filter 선언이 없어 끌 것이 없다. 문서화 목적의 no-op. */
+}

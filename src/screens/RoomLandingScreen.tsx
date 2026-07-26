@@ -76,7 +76,7 @@ function extendReasonText(result: ExtendResult): string {
 function LandingHeader() {
   return (
     <header className="mr-landing__header">
-      <span className="mr-landing__brand">molroom</span>
+      <span className="mr-landing__brand">MolRoom</span>
     </header>
   );
 }
@@ -273,7 +273,7 @@ export function RoomLandingScreen() {
             <div className="mr-landing__section">
               {state.kind === "free" ? (
                 <>
-                  <Card>
+                  <Card glass>
                     <div className="mr-landing__statusline">
                       <span className="mr-landing__dot" data-tone="free" />
                       <span className="t-body">지금 비어있음</span>
@@ -298,7 +298,7 @@ export function RoomLandingScreen() {
                 </>
               ) : state.kind === "busy" ? (
                 <>
-                  <Card>
+                  <Card glass>
                     <div className="mr-landing__statusline">
                       <span className="mr-landing__dot" data-tone="busy" />
                       <span className="t-body">
@@ -306,7 +306,7 @@ export function RoomLandingScreen() {
                       </span>
                     </div>
                   </Card>
-                  <Card className="mr-landing__gapcard">
+                  <Card glass className="mr-landing__gapcard">
                     {gap ? (
                       <>
                         <p className="t-small mr-landing__gaplabel">다음 빈 시간</p>
@@ -329,7 +329,7 @@ export function RoomLandingScreen() {
                   </Card>
                 </>
               ) : (
-                <Card mine>
+                <Card mine glass>
                   <div className="mr-landing__mine-head">
                     <span className="mr-landing__dot" data-tone="busy" />
                     <span className="t-body">

@@ -9,11 +9,23 @@
   background: var(--c-canvas);
 }
 
+/* 앱바처럼 보이는 미니 헤더 — 유리(기능적 크롬). 불투명 폴백 우선. */
 .mr-landing__header {
   display: flex;
   align-items: center;
   height: 44px;
   padding: 0 20px;
+  background: var(--c-surface);
+  border-bottom: 1px solid var(--glass-edge);
+}
+@supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .mr-landing__header {
+    background: var(--glass-bg);
+    -webkit-backdrop-filter: var(--glass-blur);
+    backdrop-filter: var(--glass-blur);
+    border-bottom: 1px solid var(--glass-edge);
+    box-shadow: inset 0 1px 0 var(--glass-border);
+  }
 }
 
 .mr-landing__brand {
@@ -146,6 +158,7 @@
   gap: 8px;
 }
 
+/* 반복 항목 — 유리 금지, 항상 불투명. */
 .mr-landing__item {
   display: flex;
   align-items: center;
@@ -194,6 +207,24 @@
   text-decoration: underline;
 }
 
+/* ================= 접근성 폴백 ================= */
+@media (prefers-reduced-transparency: reduce), (prefers-contrast: more) {
+  .mr-landing__header {
+    background: var(--c-surface) !important;
+    -webkit-backdrop-filter: none !important;
+    backdrop-filter: none !important;
+    border-bottom: 1px solid var(--c-border) !important;
+    box-shadow: none !important;
+  }
+  .mr-card--glass {
+    background: var(--c-surface) !important;
+    border: 1px solid var(--c-border) !important;
+    -webkit-backdrop-filter: none !important;
+    backdrop-filter: none !important;
+    box-shadow: var(--shadow-soft) !important;
+  }
+}
+
 /* ---- 알 수 없는 회의실 ---- */
 .mr-landing__roomlist {
   list-style: none;
@@ -204,6 +235,7 @@
   gap: 8px;
 }
 
+/* 반복 항목 — 유리 금지, 항상 불투명. */
 .mr-landing__roomlink {
   display: flex;
   align-items: center;
@@ -214,4 +246,19 @@
   padding: 0 14px;
   color: var(--c-link);
   text-decoration: none;
+}
+
+/* ---- 상태 카드 (Card 컴포넌트가 이 modifier 를 받아 쓴다) ----
+ * QR 랜딩은 요소가 적어 유리가 가장 잘 사는 화면 — "지금 비었나" 단일 상태를
+ * 담는 카드 하나에만 적용한다. className 부여는 tsx 쪽 책임, 여기서는 재질만. */
+/* .mr-card--glass 의 재질 정의는 components.css 한 곳에만 둔다.
+ * 여기서 다시 정의하면 두 규칙의 승패가 번들 import 순서라는 우연에 걸린다. */
+
+/* 유리 위 텍스트는 --c-fg / --c-secondary 만. --c-muted 는 대비가 위험하다. */
+.mr-card--glass .mr-landing__meta,
+.mr-card--glass .mr-landing__gaplabel,
+.mr-card--glass .mr-landing__empty,
+.mr-card--glass .mr-landing__sub,
+.mr-card--glass .t-muted {
+  color: var(--c-secondary);
 }

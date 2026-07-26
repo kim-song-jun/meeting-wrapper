@@ -75,16 +75,23 @@ export function Field({ label, hint, hintTone = "muted", id, ...rest }: FieldPro
 export function Card({
   children,
   mine,
+  glass,
   className,
   style,
 }: {
   children: ReactNode;
   mine?: boolean;
+  /** 기능적 크롬 표면(상태 카드 등)에만 쓴다. 반복되는 리스트 항목에는 쓰지 않는다. */
+  glass?: boolean;
   className?: string;
   style?: React.CSSProperties;
 }) {
   return (
-    <div className={cx("mr-card", mine && "mr-card--mine", className)} style={style}>
+    <div
+      // mine 이 유리보다 우선하도록 뒤에 둔다 — 캐스케이드에서 mine 배경이 이긴다.
+      className={cx("mr-card", glass && "mr-card--glass", mine && "mr-card--mine", className)}
+      style={style}
+    >
       {children}
     </div>
   );

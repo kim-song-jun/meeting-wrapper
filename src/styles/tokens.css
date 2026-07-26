@@ -112,6 +112,36 @@
   --shadow-modal: 0 8px 32px rgba(0, 0, 0, 0.12);     /* [brand] boxShadow.modal */
   --shadow-soft: 4px 0 50px rgba(17, 20, 21, 0.05);   /* [brand] boxShadow.soft */
 
+  /* ================= 유리 재질 (Liquid Glass) =================
+   *
+   * Apple HIG: "Controls and navigation occupy a translucent functional layer
+   * above content; they should not become a decorative glass effect spread
+   * across the content layer."
+   *
+   * 그래서 유리는 **크롬에만** 쓴다 — 앱바, 다이얼로그, 하단 시트, 상태 카드,
+   * 격자의 sticky 헤더/시간축. 예약 격자의 셀과 이벤트는 불투명하게 둔다.
+   * 24슬롯 x N방의 조밀한 데이터가 반투명해지면 읽기가 무너지고,
+   * 셀마다 blur 를 걸면 모바일에서 프레임이 떨어진다.
+   *
+   * 모든 유리 표면은 @supports 로 불투명 폴백을 갖는다. 유리는 장식이지
+   * 기능이 아니므로, 안 되는 브라우저에서 깨지면 안 된다.
+   */
+  --glass-bg: rgba(255, 255, 255, 0.72);        /* [local] 기본 크롬 */
+  --glass-bg-strong: rgba(255, 255, 255, 0.86); /* [local] 다이얼로그 — 본문이 얹히므로 더 불투명 */
+  --glass-bg-tint: rgba(230, 241, 251, 0.78);   /* [local] 내 예약 카드. dna-bg 기반 */
+  --glass-blur: saturate(180%) blur(20px);      /* [local] */
+  --glass-blur-strong: saturate(180%) blur(32px);
+  --glass-border: rgba(255, 255, 255, 0.65);    /* [local] 위쪽 하이라이트 */
+  --glass-edge: rgba(23, 23, 23, 0.06);         /* [local] 바깥 경계 */
+  --glass-shadow: 0 4px 24px rgba(7, 27, 51, 0.06);
+
+  /* 유리가 유리로 보이려면 뒤에 blur 할 것이 있어야 한다.
+   * 로고 3색을 아주 옅게 깐 앰비언트 층 — 로고 색을 텍스트 뒤가 아닌 곳에
+   * 쓰는 유일한 자리다. 알파를 올리지 말 것: 올리면 유리 위 텍스트 대비가 떨어진다. */
+  --ambient-mint: rgba(115, 254, 221, 0.20);
+  --ambient-blue: rgba(66, 129, 255, 0.14);
+  --ambient-amber: rgba(255, 192, 6, 0.13);
+
   /* ================= 예약 격자 (local) ================= */
   --grid-slot-min: 30;
   --grid-slot-h: 28px;

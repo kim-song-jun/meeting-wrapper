@@ -29,13 +29,18 @@
   background: var(--c-action-hover);
 }
 .mr-btn--secondary {
-  background: transparent;
+  background: var(--c-action-tint);
   color: var(--c-action);
   border: 1px solid var(--c-action-border);
   border-radius: var(--r-sm);
   padding: var(--pad-action);
   height: var(--h-action);
   font-size: var(--t-body-size);
+}
+@supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .mr-btn--secondary {
+    background: var(--glass-bg);
+  }
 }
 .mr-btn--compact {
   background: var(--c-action);
@@ -49,9 +54,14 @@
   background: var(--c-action-hover);
 }
 .mr-btn--compact.mr-btn--quiet {
-  background: transparent;
+  background: var(--c-action-tint);
   color: var(--c-action);
   border: 1px solid var(--c-action-border);
+}
+@supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .mr-btn--compact.mr-btn--quiet {
+    background: var(--glass-bg);
+  }
 }
 .mr-btn--compact.mr-btn--quiet:hover:not(:disabled) {
   background: transparent;
@@ -126,12 +136,67 @@
   padding: var(--pad-content);
   border: 1px solid var(--c-border);
 }
+/*
+ * 내 예약 카드는 blur 를 걸지 않는다. 리스트에서 반복되는 클래스라
+ * (내 예약 탭의 모든 행, 모바일 격자의 모든 카드) 항목마다 blur 를 걸면
+ * 레이어가 항목 수만큼 늘어난다. 틴트만으로 "내 것" 은 충분히 읽힌다.
+ */
 .mr-card--mine {
   background: var(--c-mine-bg);
   border-color: var(--c-mine-border);
 }
 .mr-card--flat {
   border: none;
+}
+
+/* QR 랜딩 상태 카드처럼 화면에 하나뿐인 자리용 — sparse 하게 쓸 것 */
+.mr-card--glass {
+  background: var(--c-surface);
+  border-radius: var(--r-lg);
+  padding: var(--pad-content);
+  border: 1px solid var(--glass-edge);
+  box-shadow: var(--glass-shadow);
+}
+@supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .mr-card--glass {
+    background: var(--glass-bg-strong);
+    backdrop-filter: var(--glass-blur-strong);
+    -webkit-backdrop-filter: var(--glass-blur-strong);
+    box-shadow: inset 0 1px 0 var(--glass-border), var(--glass-shadow);
+  }
+}
+
+/*
+ * mine 과 glass 를 함께 받는 카드 (QR 랜딩의 "내 회의 진행 중").
+ * 두 클래스는 specificity 가 같아서 나중에 선언된 쪽이 이긴다 —
+ * class 속성에 적는 순서는 캐스케이드와 무관하다.
+ * 복합 선택자로 명시해야 "내 것" 틴트가 살아남는다.
+ */
+.mr-card--glass.mr-card--mine {
+  background: var(--c-mine-bg);
+  border-color: var(--c-mine-border);
+}
+@supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .mr-card--glass.mr-card--mine {
+    background: var(--glass-bg-tint);
+    backdrop-filter: var(--glass-blur-strong);
+    -webkit-backdrop-filter: var(--glass-blur-strong);
+    border-color: var(--c-mine-border);
+  }
+}
+
+/*
+ * 유리 위 텍스트 보정.
+ * --c-muted(#737373) 는 불투명 흰 배경에서도 4.54:1 이라 반투명 위에서는 그 아래로 떨어진다.
+ * 유리 표면 안의 보조 텍스트는 --c-secondary(7.48:1) 로 올린다.
+ */
+.mr-appbar .mr-navlink,
+.mr-dialog .mr-dialog__sub,
+.mr-dialog .mr-reason,
+.mr-card--glass .mr-reason,
+.mr-card--glass .t-muted,
+.mr-card--mine .mr-reason {
+  color: var(--c-secondary);
 }
 
 /* ---------- Badge ---------- */
@@ -156,6 +221,12 @@
 .mr-badge--neutral {
   background: var(--c-canvas);
   color: var(--c-secondary);
+}
+/* 얇은 유리 — 개수가 많으므로 blur 없이 반투명 배경만. 색 의미는 유지. */
+@supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .mr-badge--neutral {
+    background: var(--glass-bg);
+  }
 }
 
 /* ---------- Tabs ---------- */
@@ -194,6 +265,12 @@
   z-index: 50;
   animation: mr-fade var(--dur-dialog-in) var(--ease-out);
 }
+@supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .mr-backdrop {
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+  }
+}
 .mr-dialog {
   background: var(--c-surface);
   border-radius: var(--r-lg);
@@ -204,6 +281,15 @@
   max-height: 100%;
   overflow-y: auto;
   animation: mr-rise var(--dur-dialog-in) var(--ease-out);
+}
+@supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .mr-dialog {
+    background: var(--glass-bg-strong);
+    backdrop-filter: var(--glass-blur-strong);
+    -webkit-backdrop-filter: var(--glass-blur-strong);
+    box-shadow: inset 0 1px 0 var(--glass-border), var(--glass-shadow), var(--shadow-modal);
+    border: 1px solid var(--glass-edge);
+  }
 }
 .mr-dialog__title {
   font-family: var(--font-sans);
@@ -277,6 +363,15 @@
 .mr-alert--info {
   background: var(--c-mine-bg);
   color: var(--c-mine-fg);
+}
+/* 반투명 배경만 — blur 없음 */
+@supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .mr-alert {
+    background: color-mix(in srgb, var(--c-attn-bg) 85%, transparent);
+  }
+  .mr-alert--info {
+    background: var(--glass-bg-tint);
+  }
 }
 
 /* ---------- 인원 스테퍼 ----------
@@ -396,6 +491,12 @@
   color: var(--c-mine-fg);
   font-size: var(--t-small-size);
 }
+/* 얇은 유리 — 개수가 많으므로 blur 없이 반투명 배경만 */
+@supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .mr-picker__chip {
+    background: var(--glass-bg-tint);
+  }
+}
 .mr-picker__remove {
   width: 24px;
   height: 24px;
@@ -435,4 +536,55 @@
   align-items: center;
   gap: 12px;
   flex-wrap: wrap;
+}
+
+/* ---------- 유리 재질 폴백 ----------
+ * 투명 효과를 줄이거나(대비 낮은 사용자) 고대비를 요구하는 사용자에게는
+ * 이 파일에서 유리를 쓴 모든 선택자를 불투명으로 되돌린다. */
+@media (prefers-reduced-transparency: reduce), (prefers-contrast: more) {
+  .mr-btn--secondary,
+  .mr-btn--compact.mr-btn--quiet {
+    background: var(--c-action-tint);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+  .mr-card--mine {
+    background: var(--c-mine-bg);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    border-color: var(--c-mine-border);
+    box-shadow: none;
+  }
+  .mr-card--glass {
+    background: var(--c-surface);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    box-shadow: var(--shadow-modal);
+    border-color: var(--c-border);
+  }
+  .mr-badge--neutral {
+    background: var(--c-canvas);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+  .mr-backdrop {
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+  .mr-dialog {
+    background: var(--c-surface);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    box-shadow: var(--shadow-modal);
+    border-color: var(--c-border);
+  }
+  .mr-alert {
+    background: var(--c-attn-bg);
+  }
+  .mr-alert--info {
+    background: var(--c-mine-bg);
+  }
+  .mr-picker__chip {
+    background: var(--c-mine-bg);
+  }
 }

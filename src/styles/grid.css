@@ -30,8 +30,14 @@
 .grid-scroll {
   overflow: auto;
   max-height: 70vh;
-  border: 1px solid var(--c-border);
+  border: 1px solid var(--glass-edge);
   border-radius: var(--r-lg);
+  /*
+   * 불투명하게 둔다. 여기를 반투명으로 열면 빈 슬롯(격자의 대부분)이 부모 배경을
+   * 물려받아 반투명해지고, 자체 배경을 가진 예약된 셀만 불투명해진다 —
+   * "빈 시간에는 색을 주지 않는다"(DESIGN.md §2·§7)가 정확히 뒤집힌다.
+   * 유리는 그 위를 덮는 sticky 크롬(코너·헤더·시간축)이 담당한다.
+   */
   background: var(--c-canvas);
 }
 
@@ -44,6 +50,10 @@
   cursor: grabbing;
   user-select: none;
 }
+
+/* sticky 크롬 3종(모서리·회의실 헤더·시간축) — 유리의 정석 자리.
+ * 이벤트 블록이 그 밑으로 스크롤해 지나가며 비친다.
+ * 불투명 폴백을 먼저 선언하고 @supports 로만 유리를 얹는다. */
 
 .grid-corner {
   position: sticky;
@@ -67,9 +77,43 @@
   gap: 2px;
 }
 
+@supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .grid-corner,
+  .grid-room-header {
+    background: var(--glass-bg);
+    border-bottom: 1px solid var(--glass-edge);
+    box-shadow: inset 0 1px 0 var(--glass-border);
+  }
+
+  /*
+   * blur 는 코너에만 건다. 회의실 헤더는 방 수만큼 반복되는 셀이라
+   * 각각에 blur 를 걸면 레이어가 방 수에 비례해 늘어난다
+   * (방 3개 + 앱바 + 시간축 = 6개, 다이얼로그가 열리면 8개).
+   * 헤더는 반투명 배경만으로도 층으로 읽힌다.
+   */
+  .grid-corner {
+    backdrop-filter: var(--glass-blur);
+    -webkit-backdrop-filter: var(--glass-blur);
+  }
+
+  .grid-corner {
+    border-right: 1px solid var(--glass-edge);
+  }
+}
+
 .grid-room-header__name {
   font-weight: 600;
   color: var(--c-fg);
+}
+
+/*
+ * 유리 위 보조 텍스트 보정.
+ * 회의실 정원/층 캡션과 시간축 라벨은 반투명 sticky 크롬 위에 놓인다.
+ * --c-muted(4.54:1) 는 반투명 위에서 그 아래로 떨어지므로 --c-secondary(7.48:1) 로 올린다.
+ */
+.grid-room-header .t-muted,
+.grid-axis .grid-axis__label {
+  color: var(--c-secondary);
 }
 
 .grid-axis {
@@ -80,6 +124,21 @@
   border-right: 1px solid var(--c-border);
   width: var(--grid-axis-w);
 }
+
+@supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .grid-axis {
+    background: var(--glass-bg);
+    backdrop-filter: var(--glass-blur);
+    -webkit-backdrop-filter: var(--glass-blur);
+    border-right: 1px solid var(--glass-edge);
+    box-shadow: inset 1px 0 0 var(--glass-border);
+  }
+}
+
+/* ---------- 콘텐츠 레이어: 슬롯·이벤트·선택 영역은 불투명하게 둔다 ----------
+ * 24슬롯 x N방의 조밀한 데이터 위에 blur 를 걸면 주최자 이름 가독성과
+ * 모바일 스크롤 성능을 동시에 해친다. Apple HIG 도 유리를 "기능적 크롬"에만
+ * 쓰라고 못박는다 — 콘텐츠 레이어를 장식용 유리로 덮지 않는다. */
 
 .grid-slot {
   height: var(--grid-slot-h);
@@ -104,7 +163,9 @@
   top: -6px;
   right: 8px;
   color: var(--c-muted);
-  background: var(--c-canvas);
+  /* var(--c-canvas) 불투명 배경은 유리가 된 .grid-axis 위에서 어색한 사각형으로
+   * 떠 보인다. 투명하게 두고 축 자체의 유리 배경에 얹는다. */
+  background: transparent;
   padding-left: 4px;
 }
 
@@ -256,5 +317,39 @@
   }
   .grid-mobile {
     display: block;
+  }
+}
+
+/* ---------- 유리 접근성 폴백 ----------
+ * 투명도를 낮추라는 시스템 설정이거나 고대비 모드에서는 sticky 크롬 3종의
+ * 유리 효과를 끄고 불투명 배경으로 되돌린다. .grid-scroll 의 앰비언트 톤도 동일. */
+@media (prefers-reduced-transparency: reduce), (prefers-contrast: more) {
+  .grid-scroll {
+    background: var(--c-canvas);
+  }
+
+  .grid-corner,
+  .grid-room-header {
+    background: var(--c-surface);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    border-bottom: 1px solid var(--c-border);
+    box-shadow: none;
+  }
+
+  .grid-corner {
+    border-right: 1px solid var(--c-border);
+  }
+
+  .grid-axis {
+    background: var(--c-canvas);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    border-right: 1px solid var(--c-border);
+    box-shadow: none;
+  }
+
+  .grid-axis__label {
+    background: var(--c-canvas);
   }
 }

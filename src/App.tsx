@@ -3,11 +3,31 @@ import { GridScreen } from "./screens/GridScreen";
 import { RoomLandingScreen } from "./screens/RoomLandingScreen";
 import { MyBookingsScreen } from "./screens/MyBookingsScreen";
 
+/** MolCube 로고 마크. index.html 파비콘과 같은 아이소메트릭 큐브를 JSX 로 재작성. */
+function BrandMark() {
+  return (
+    <svg
+      className="mr-appbar__mark"
+      width="20"
+      height="20"
+      viewBox="0 0 100 100"
+      aria-hidden="true"
+    >
+      <polygon points="50,6 90,28 50,50 10,28" fill="#73FEDD" stroke="#202362" strokeWidth="5" strokeLinejoin="round" />
+      <polygon points="10,28 50,50 50,94 10,72" fill="#4279BC" stroke="#202362" strokeWidth="5" strokeLinejoin="round" />
+      <polygon points="90,28 50,50 50,94 90,72" fill="#FFC006" stroke="#202362" strokeWidth="5" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
 function Shell({ children }: { children: React.ReactNode }) {
   return (
     <div className="mr-shell">
       <header className="mr-appbar">
-        <span className="mr-appbar__brand">molroom</span>
+        <span className="mr-appbar__brand">
+          <BrandMark />
+          MolRoom
+        </span>
         <nav className="mr-appbar__nav">
           <NavLink to="/" end className="mr-navlink">
             예약 현황

@@ -13,17 +13,47 @@
   padding: 0 20px;
   height: 56px;
   background: var(--c-surface);
-  border-bottom: 1px solid var(--c-border);
+  border-bottom: 1px solid var(--glass-edge);
+  box-shadow: var(--glass-shadow);
   position: sticky;
   top: 0;
   z-index: 10;
 }
 
+@supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .mr-appbar {
+    background: var(--glass-bg);
+    backdrop-filter: var(--glass-blur);
+    -webkit-backdrop-filter: var(--glass-blur);
+    border-bottom-color: var(--glass-edge);
+    box-shadow: var(--glass-shadow), inset 0 1px 0 var(--glass-border);
+  }
+}
+
+@media (prefers-reduced-transparency: reduce), (prefers-contrast: more) {
+  .mr-appbar {
+    background: var(--c-surface);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    border-bottom-color: var(--c-border);
+    box-shadow: none;
+  }
+}
+
 .mr-appbar__brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   font-family: var(--font-sans);
   font-size: var(--t-body-size);
   font-weight: var(--t-title-w);
   color: var(--c-brand);
+}
+
+.mr-appbar__mark {
+  flex: none;
+  width: 20px;
+  height: 20px;
 }
 
 .mr-appbar__nav {
