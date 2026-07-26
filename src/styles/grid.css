@@ -342,8 +342,9 @@
   display: inline-flex;
   align-items: center;
   height: var(--h-action);
-  padding: 0 16px;
-  border-radius: var(--r-pill);
+  padding: 0 10px;
+  /* 맥 앱의 필터 칩은 pill 이 아니라 라운드 사각형이다 — pill 은 배지·태그의 문법 */
+  border-radius: var(--r-md);
   border: 1px solid var(--c-border);
   background: var(--c-surface);
   color: var(--c-secondary);

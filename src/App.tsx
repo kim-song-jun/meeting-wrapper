@@ -6,6 +6,8 @@ import { LoginScreen } from "./screens/LoginScreen";
 import { AuthProvider, useAuth } from "./auth/AuthProvider";
 import { RequireAuth } from "./auth/RequireAuth";
 import { BrandMark } from "./auth/BrandMark";
+import { ROOMS } from "./app/config";
+import { useRoomVisibility } from "./app/roomVisibility";
 
 /**
  * 앱바 우측 계정 클러스터. 이메일은 정보 표시 전용(클릭 불가), 로그아웃은
@@ -28,6 +30,67 @@ function AccountCluster() {
   );
 }
 
+/**
+ * 사이드바 — macOS 앱의 얼굴.
+ *
+ * 캘린더·메일·메모 모두 반투명 사이드바 + 콘텐츠 2단 창이고, 그게 "맥 앱처럼
+ * 보이는" 첫째 요인이다. 상단 내비바만 있으면 색과 폰트를 다 맞춰도 웹사이트로 읽힌다.
+ * 유리(vibrancy)의 원래 자리도 여기다 — 뒤에 캔버스와 앰비언트가 있어 실제로 비친다.
+ *
+ * 회의실 목록은 장식이 아니라 캘린더 목록과 같은 컨트롤이다: 체크를 끄면 격자에서 빠진다.
+ * 1024px 미만에서는 접히고(screens.css) 기존 상단 내비로 돌아간다 — 손가락으로 220px
+ * 사이드바를 두면 격자가 남지 않는다.
+ */
+function Sidebar() {
+  const auth = useAuth();
+  const rooms = useRoomVisibility();
+  return (
+    <aside className="mr-sidebar">
+      <div className="mr-sidebar__brand">
+        <BrandMark className="mr-sidebar__mark" />
+        MolRoom
+      </div>
+
+      <nav className="mr-sidebar__nav" aria-label="화면 이동">
+        <NavLink to="/" end className={({ isActive }) => (isActive ? "mr-sidebar__item active" : "mr-sidebar__item")}>
+          예약 현황
+        </NavLink>
+        <NavLink to="/me" className={({ isActive }) => (isActive ? "mr-sidebar__item active" : "mr-sidebar__item")}>
+          내 예약
+        </NavLink>
+      </nav>
+
+      <div className="mr-sidebar__section">
+        <h2 className="mr-sidebar__heading">회의실</h2>
+        {ROOMS.map((room) => {
+          const on = rooms.isVisible(room.id);
+          return (
+            <label key={room.id} className="mr-sidebar__room">
+              <input
+                type="checkbox"
+                className="mr-sidebar__check"
+                checked={on}
+                onChange={() => rooms.toggle(room.id)}
+              />
+              <span className="mr-sidebar__roomname">{room.name}</span>
+              <span className="mr-sidebar__roomfloor t-cap">{room.floor}</span>
+            </label>
+          );
+        })}
+      </div>
+
+      {auth.status === "signed-in" && auth.user ? (
+        <div className="mr-sidebar__foot">
+          <span className="mr-sidebar__user t-cap">{auth.user.email}</span>
+          <button type="button" className="mr-sidebar__signout" onClick={() => void auth.signOut()}>
+            로그아웃
+          </button>
+        </div>
+      ) : null}
+    </aside>
+  );
+}
+
 /*
  * pane: 예약 현황(격자) 화면 전용. 문서 스크롤을 잠그고 격자 판(.grid-scroll,
  * grid.css)만 세로로 스크롤되게 한다 — 이중 스크롤 제거. /me 같은 리스트
@@ -37,6 +100,8 @@ function AccountCluster() {
 function Shell({ children, pane = false }: { children: React.ReactNode; pane?: boolean }) {
   return (
     <div className={pane ? "mr-shell mr-shell--pane" : "mr-shell"}>
+      <Sidebar />
+      {/* 좁은 폭에서만 보이는 상단 바 — 사이드바가 접히면 이쪽이 내비게이션을 맡는다 */}
       <header className="mr-appbar">
         <span className="mr-appbar__brand">
           <BrandMark className="mr-appbar__mark" />

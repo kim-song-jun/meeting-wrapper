@@ -3,6 +3,7 @@ import type { CSSProperties } from "react";
 import { Alert, Badge, Button, ButtonWithReason, Card, Dialog } from "../components/ui";
 import { BookingDialog } from "./BookingDialog";
 import { ROOMS, POLICY, roomById } from "../app/config";
+import { useRoomVisibility } from "../app/roomVisibility";
 import { repo } from "../data";
 import { useAsync } from "../app/useAsync";
 import {
@@ -272,6 +273,16 @@ interface EditDragState {
 export function GridScreen() {
   const [view, setView] = useState<ViewMode>("day");
 
+  /*
+   * 사이드바에서 끈 회의실은 격자에서 빠진다(macOS 캘린더의 캘린더 목록과 같은 동작).
+   * 이 화면이 쓰는 "보이는 방 목록" 은 전부 이 값을 통과한 것이다.
+   */
+  const roomVisibility = useRoomVisibility();
+  const visibleRooms = useMemo(
+    () => ROOMS.filter((r) => roomVisibility.isVisible(r.id)),
+    [roomVisibility],
+  );
+
   /* ---- 일간 뷰 상태 (기존, 손대지 않음) ---- */
   const [selectedDate, setSelectedDate] = useState<Date>(() => startOfDay(new Date()));
   const dayKey = ymd(selectedDate);
@@ -313,7 +324,7 @@ export function GridScreen() {
 
   const bookingsByRoom = useMemo(() => {
     const map = new Map<string, Booking[]>();
-    for (const room of ROOMS) map.set(room.id, []);
+    for (const room of visibleRooms) map.set(room.id, []);
     for (const b of bookingsState.data ?? []) {
       const arr = map.get(b.roomId);
       if (arr) arr.push(b);
@@ -325,7 +336,7 @@ export function GridScreen() {
   }, [bookingsState.data]);
 
   /* ---- 주간 뷰 상태 ---- */
-  const [weekRoomId, setWeekRoomId] = useState<string>(() => ROOMS[0]?.id ?? "");
+  const [weekRoomId, setWeekRoomId] = useState<string>(() => visibleRooms[0]?.id ?? "");
   const [weekAnchor, setWeekAnchor] = useState<Date>(() => startOfDay(new Date()));
   const weekStart = useMemo(() => startOfWeek(weekAnchor), [weekAnchor]);
   // repo 의 날짜 범위 조회는 from·to 를 모두 포함한다 (일 단위) — "주 끝"은 그 주의
@@ -349,13 +360,13 @@ export function GridScreen() {
 
   // 인원 필터로 현재 고른 방이 후보에서 빠지면 남은 후보 중 첫 방으로 옮긴다.
   useEffect(() => {
-    if (ROOMS.length === 0) return;
-    if (!ROOMS.some((r) => r.id === weekRoomId)) {
-      const first = ROOMS[0];
+    if (visibleRooms.length === 0) return;
+    if (!visibleRooms.some((r) => r.id === weekRoomId)) {
+      const first = visibleRooms[0];
       if (first) setWeekRoomId(first.id);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ROOMS]);
+  }, [visibleRooms]);
 
   /* ---- 월간 뷰 상태 ---- */
   const [monthAnchor, setMonthAnchor] = useState<Date>(() => startOfMonth(new Date()));
@@ -603,7 +614,7 @@ export function GridScreen() {
   }
 
   const gridTemplateColumns =
-    "var(--grid-axis-w) repeat(" + String(ROOMS.length) + ", minmax(var(--grid-col-min), 1fr))";
+    "var(--grid-axis-w) repeat(" + String(visibleRooms.length) + ", minmax(var(--grid-col-min), 1fr))";
 
   return (
     <div className="grid-screen">
@@ -621,7 +632,7 @@ export function GridScreen() {
           빼지 않으면서 세로 한 줄과 컨트롤 넷을 차지한다.
         */}
 
-        {ROOMS.length > 0 ? (
+        {visibleRooms.length > 0 ? (
           view === "day" ? (
             <div className="grid-toolbar mr-row">
               <Button variant="secondary" onClick={() => setSelectedDate(startOfDay(new Date()))}>
@@ -757,7 +768,7 @@ export function GridScreen() {
         </div>
       ) : null}
 
-      {ROOMS.length === 0 ? (
+      {visibleRooms.length === 0 ? (
         <div style={{ marginTop: 16 }}>
           <Alert>
             회의실이 등록되지 않았어요. src/config/rooms.json 을 확인해 주세요.
@@ -789,7 +800,7 @@ export function GridScreen() {
               <div className={cx("grid-table", drag && "is-dragging")} style={{ gridTemplateColumns }}>
                 <div className="grid-corner" />
 
-                {ROOMS.map((room) => (
+                {visibleRooms.map((room) => (
                   <div key={room.id} className="grid-room-header">
                     {bookingsState.loading ? (
                       <>
@@ -823,7 +834,7 @@ export function GridScreen() {
                   })}
                 </div>
 
-                {ROOMS.map((room) => {
+                {visibleRooms.map((room) => {
                   const roomBookings = bookingsState.loading
                     ? []
                     : (bookingsByRoom.get(room.id) ?? []).filter(
@@ -929,7 +940,7 @@ export function GridScreen() {
               모바일에서는 회의실 문에 붙은 QR 코드가 예약의 시작점이에요. QR을 스캔하면 그 자리에서 바로
               예약·체크인할 수 있어요.
             </p>
-            {ROOMS.map((room) => {
+            {visibleRooms.map((room) => {
               const roomBookings = bookingsState.loading
                 ? []
                 : (bookingsByRoom.get(room.id) ?? []).filter(matchesDept);
@@ -971,7 +982,7 @@ export function GridScreen() {
         </div>
       ) : view === "week" ? (
         <WeekView
-          ROOMS={ROOMS}
+          visibleRooms={visibleRooms}
           weekRoomId={weekRoomId}
           onRoomChange={setWeekRoomId}
           weekStart={weekStart}
@@ -991,7 +1002,7 @@ export function GridScreen() {
           loading={monthState.loading}
           error={monthState.error}
           onReload={monthState.reload}
-          ROOMS={ROOMS}
+          visibleRooms={visibleRooms}
           matchesDept={matchesDept}
           onSelectDate={(d) => {
             setSelectedDate(startOfDay(d));
@@ -1172,7 +1183,7 @@ function GridEventBlock({
  * 축이 회의실에서 요일로 바뀔 뿐이다. 각 요일 열의 dayStart 만 그 날짜로 넘긴다. */
 
 function WeekView({
-  ROOMS,
+  visibleRooms,
   weekRoomId,
   onRoomChange,
   weekStart,
@@ -1185,7 +1196,7 @@ function WeekView({
   now,
   onSelectBooking,
 }: {
-  ROOMS: readonly Room[];
+  visibleRooms: readonly Room[];
   weekRoomId: string;
   onRoomChange: (id: string) => void;
   weekStart: Date;
@@ -1226,9 +1237,9 @@ function WeekView({
 
   return (
     <div>
-      {ROOMS.length > 0 ? (
+      {visibleRooms.length > 0 ? (
         <div className="grid-roomchips mr-row" role="group" aria-label="회의실 선택">
-          {ROOMS.map((room) => (
+          {visibleRooms.map((room) => (
             <button
               key={room.id}
               type="button"
@@ -1354,7 +1365,7 @@ function MonthView({
   loading,
   error,
   onReload,
-  ROOMS,
+  visibleRooms,
   matchesDept,
   onSelectDate,
   now,
@@ -1364,7 +1375,7 @@ function MonthView({
   loading: boolean;
   error: Error | null;
   onReload: () => void;
-  ROOMS: readonly Room[];
+  visibleRooms: readonly Room[];
   matchesDept: (b: Booking) => boolean;
   onSelectDate: (d: Date) => void;
   now: Date;
@@ -1415,7 +1426,7 @@ function MonthView({
             const cellBookings = bookings.filter(
               (b) =>
                 matchesDept(b) &&
-                ROOMS.some((r) => r.id === b.roomId) &&
+                visibleRooms.some((r) => r.id === b.roomId) &&
                 b.end.getTime() > cellStart.getTime() &&
                 b.start.getTime() < cellEnd.getTime(),
             );

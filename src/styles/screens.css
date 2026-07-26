@@ -181,3 +181,181 @@
   color: var(--c-muted);
   font-size: var(--t-small-size);
 }
+
+/* ==================== 사이드바 (macOS 2단 창) ====================
+ *
+ * 맥 앱의 창은 반투명 사이드바 + 흰 콘텐츠 2단이다. 사이드바는 vibrancy 의
+ * 원래 자리 — 뒤에 캔버스와 앰비언트가 있어 blur 가 실제로 비친다.
+ *
+ * >=1024px 에서만 켠다. 그 아래에서는 접고 기존 상단 바가 내비게이션을 맡는다:
+ * 손가락으로 쓰는 폭에서 220px 을 사이드바에 주면 격자가 남지 않는다.
+ */
+.mr-sidebar {
+  display: none;
+}
+
+@media (min-width: 1024px) {
+  .mr-shell {
+    display: grid;
+    grid-template-columns: var(--w-sidebar) minmax(0, 1fr);
+    grid-template-rows: 1fr;
+  }
+
+  /* 상단 바는 사이드바가 있으면 필요 없다 */
+  .mr-shell > .mr-appbar {
+    display: none;
+  }
+
+  .mr-sidebar {
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+    padding: 14px 10px;
+    background: var(--c-canvas);
+    border-right: 1px solid var(--c-border);
+    height: 100dvh;
+    position: sticky;
+    top: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+
+  .mr-main {
+    padding: 14px 16px 16px;
+    max-width: none;
+  }
+
+  /* pane 모드에서는 격자 판이 유일한 스크롤러라는 규칙을 유지한다 */
+  .mr-shell--pane {
+    height: 100dvh;
+    overflow: hidden;
+  }
+  .mr-shell--pane .mr-main {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    overflow: hidden;
+  }
+}
+
+@supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  @media (min-width: 1024px) {
+    .mr-sidebar {
+      background: rgba(242, 242, 247, 0.72);
+      backdrop-filter: var(--glass-blur);
+      -webkit-backdrop-filter: var(--glass-blur);
+      border-right: 1px solid var(--glass-edge);
+    }
+  }
+}
+
+@media (prefers-reduced-transparency: reduce), (prefers-contrast: more) {
+  .mr-sidebar {
+    background: var(--c-canvas);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    border-right: 1px solid var(--c-border);
+  }
+}
+
+.mr-sidebar__brand {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 0 6px;
+  font-size: var(--t-section-size);
+  line-height: var(--t-section-lh);
+  font-weight: 600;
+  letter-spacing: var(--ls-section);
+  color: var(--c-fg);
+}
+.mr-sidebar__mark {
+  flex: none;
+  width: 18px;
+  height: 18px;
+}
+
+.mr-sidebar__nav,
+.mr-sidebar__section {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.mr-sidebar__heading {
+  margin: 0 0 4px;
+  padding: 0 6px;
+  font-size: var(--t-cap-size);
+  line-height: var(--t-cap-lh);
+  font-weight: 600;
+  color: var(--c-muted);
+}
+
+/* 사이드바 행 — 선택된 항목은 채운 파란 알약이 아니라 옅은 채움이다(맥 앱 관행).
+ * 흰 텍스트를 얹지 않으므로 systemBlue 대비 문제도 피한다. */
+.mr-sidebar__item,
+.mr-sidebar__room {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: var(--h-sidebar-row);
+  padding: 0 6px;
+  border-radius: var(--r-md);
+  font-size: var(--t-body-size);
+  color: var(--c-fg);
+  text-decoration: none;
+  cursor: pointer;
+  transition: background-color var(--dur-hover) var(--ease-out);
+}
+.mr-sidebar__item:hover,
+.mr-sidebar__room:hover {
+  background: var(--c-surface-muted);
+}
+.mr-sidebar__item.active {
+  background: var(--c-action-tint);
+  color: var(--c-action);
+  font-weight: 600;
+}
+
+.mr-sidebar__roomname {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.mr-sidebar__roomfloor {
+  color: var(--c-muted);
+}
+.mr-sidebar__check {
+  flex: none;
+  width: 13px;
+  height: 13px;
+  margin: 0;
+  accent-color: var(--c-action);
+}
+
+.mr-sidebar__foot {
+  margin-top: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px 6px 0;
+  border-top: 1px solid var(--c-border);
+}
+.mr-sidebar__user {
+  color: var(--c-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.mr-sidebar__signout {
+  align-self: flex-start;
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  font-size: var(--t-small-size);
+  color: var(--c-link);
+  cursor: pointer;
+}

@@ -9,9 +9,11 @@ note: MolCube 파생 판본은 DESIGN_DEPRECATED_MOLCUBE.md 에 보존
 
 # MolRoom Design System
 
-molcube 사내 회의실 예약. **얼굴은 Apple, 로고만 우리 것.**
+molcube 사내 회의실 예약. **얼굴은 macOS 앱, 로고만 우리 것.**
 
-한때 사내 디자인 시스템(`molcube-web`)에서 값을 도출한 판본이 있었지만, 제품이 원하는 인상이 Apple 쪽이라 되돌렸다. 색·타입·지오메트리·모션은 전부 Apple 실측값을 쓰고, MolCube 에서 가져오는 것은 **로고 하나**다. 이전 판본은 `DESIGN_DEPRECATED_MOLCUBE.md` 에 남겨 뒀다.
+Apple 은 디자인 언어가 둘이다 — `apple.com` **마케팅 문법**(pill 버튼, 17px 본문, 큰 여백)과 **macOS/iOS 앱 문법**(라운드 사각 7px, 13px 본문, 사이드바, 조밀한 컨트롤). 처음에는 마케팅 쪽 레퍼런스를 도출했지만, 이 제품은 하루 종일 들여다보는 **도구**라서 캘린더·메일 같은 앱 문법이 맞다. 마케팅 문법을 앱에 씌우면 아무리 색을 맞춰도 "웹사이트" 로 읽힌다.
+
+MolCube 에서 가져오는 것은 **로고 하나**다. 그 이전 MolCube 파생 판본은 `DESIGN_DEPRECATED_MOLCUBE.md` 에 남겨 뒀다.
 
 **출처:** `DESIGN_DEPRECATED.md` 에 박제된 apple.com · Apple Store · Apple HIG 실측 토큰(oh-my-design `apple` 레퍼런스). 로고 색은 MolCube 로고 이미지 픽셀에서 추출.
 
@@ -30,9 +32,11 @@ molcube 사내 회의실 예약. **얼굴은 Apple, 로고만 우리 것.**
 
 ## 1. Visual Theme & Atmosphere
 
-Apple 의 얼굴은 **차가운 중립 위의 선명한 파랑**이다. 캔버스가 `#F5F5F7` — 순백도, 따뜻한 오프화이트도 아닌 미세하게 푸른 회색이다. 이 위에 흰 표면(`#FFFFFF`)이 얹히면서 단차가 생긴다. 테두리는 `#D2D2D7` 헤어라인 하나로 끝난다.
+macOS 앱의 창은 **두 면**이다: 반투명 사이드바(`#F2F2F7` systemGray6 계열)와 흰 콘텐츠. 이 2단 구조가 "맥 앱처럼 보이는" 첫째 요인이고, 상단 내비바만 있으면 색과 폰트를 다 맞춰도 웹사이트로 읽힌다. 테두리는 `#D8D8DC` 헤어라인 하나로 끝난다.
 
-형태 언어의 핵심은 **역할별 곡률**이다. 버튼은 완전한 pill(980px), 카드는 18px, 입력은 12px. Apple 은 버튼을 사각형으로 두지 않는다 — 누를 수 있는 것과 담는 것을 곡률로 구분한다.
+형태 언어는 **라운드 사각형**이다. 버튼·세그먼트 7px, 입력 6px, 패널 10px, 다이얼로그 12px. pill 은 배지·칩 전용이다 — 앱 컨트롤에 pill 을 쓰면 마케팅 페이지가 된다.
+
+**밀도가 곧 앱다움이다.** 본문 13px, 컨트롤 28px. 44px 짜리 컨트롤과 17px 본문은 손가락의 값이고, 포인터에는 부풀어 보인다. 그래서 모바일에서는 iOS 문법(17px·44px)으로 되돌린다 — 같은 앱의 두 표면이 서로 다른 값을 갖는다(§8).
 
 로고는 아이소메트릭 큐브에 분자 결합 모티프를 얹은 MolCube 의 것이다. 세 면(민트·파랑·노랑)이 짙은 인디고 외곽선 안에 묶여 있다. **이 네 색은 워드마크와 파비콘에만 쓴다** — UI 에 풀면 Apple 블루와 충돌한다. 남의 팔레트를 입은 대신 정체성은 이 한 자리에 모아 둔다.
 
@@ -43,8 +47,9 @@ MolRoom 에서 **주인공은 일정이다.** 예약 격자가 곧 콘텐츠이�
 **Key Characteristics:**
 - SF Pro(Apple 기기) → Pretendard(그 외 한글) 한 계열로 위계를 낸다 `apple`
 - 유채색 액션 액센트는 화면당 하나 `local`
-- 캔버스가 차갑다 — `#F5F5F7`, 순백 아님 `apple`
-- 버튼은 pill, 카드는 18px, 입력은 12px `apple`
+- 사이드바 + 콘텐츠 2단 창 (>=1024px) `apple`
+- 데스크톱 본문 13px / 컨트롤 28px, 모바일 17px / 44px `apple`
+- 버튼·세그먼트 7px 라운드 사각. pill 은 배지·칩 전용 `apple`
 - 데스크톱 격자는 30분 슬롯당 28px `local`
 - 빈 시간에는 색을 부여하지 않는다. 부재가 기본 상태다 `local`
 
@@ -63,27 +68,29 @@ MolRoom 에서 **주인공은 일정이다.** 예약 격자가 곧 콘텐츠이�
 
 ### 액션
 
-apple.com 의 채움 CTA 는 `#0071e3` + 흰 텍스트다. 실측 대비 **4.70:1** 로 WCAG AA 본문 기준(4.5:1)을 넘는다 — 레퍼런스 값을 그대로 쓸 수 있다. (이전 MolCube 판본은 브랜드 `primary` 가 3.61:1 이라 `a11y` 사유로 벗어나야 했다. 그 제약이 사라졌다.)
+macOS/iOS 의 systemBlue 는 `#007AFF` 다. 흰 텍스트 대비가 **4.02:1** 로 WCAG AA 본문 기준(4.5:1)에 못 미친다 — Apple 자신은 쓰지만 우리는 접근성이 먼저다(§12-5). 눈으로 구별되지 않을 만큼만 어둡게 내린 `#006CE0`(4.97:1)을 채움 배경으로 쓴다.
 
 | 역할 | 값 | 출처 | 대비 |
 |---|---|---|---|
-| **Action** | `#0071E3` | marketing primary `apple` | 흰 텍스트 4.70:1 |
-| **Action Hover** | `#0062C4` | `local` (Apple 은 hover 를 노출하지 않는다) | 흰 텍스트 5.93:1 |
-| **Action Tint** | `#E8F1FC` | `local` | — |
+| **systemBlue (참조)** | `#007AFF` | `apple` | 흰 텍스트 4.02:1 — **텍스트를 얹지 말 것** |
+| **Action** | `#006CE0` | `a11y` | 흰 텍스트 4.97:1 |
+| **Action Hover** | `#0057B8` | `local` | 흰 텍스트 6.55:1 |
+| **Action Tint** | `#E8F1FC` | `local` | 선택 상태의 옅은 채움 |
 | **Action Border** | `#B0D2F5` | `local` | — |
-| **Link** | `#0066CC` | light-surface link `apple` | 흰 배경 5.57:1 |
-| **Link on Dark** | `#2997FF` | dark-section link `apple` | — |
+| **Link** | `#006CE0` | `a11y` | 액션과 같은 값 |
 
-Apple 은 채움 배경(`#0071e3`)과 링크(`#0066cc`)를 구분해서 쓴다. 섞지 말 것.
+앱 UI 는 마케팅 페이지처럼 링크색을 따로 두지 않는다 — 액센트 하나로 통일한다.
+
+**사이드바 선택 상태는 채운 파란 알약이 아니라 옅은 채움(tint)이다.** 맥 앱의 관행이고, 흰 텍스트를 얹지 않으므로 systemBlue 대비 문제도 함께 피한다.
 
 ### 중립 `apple`
 
 | 역할 | 값 | 대비 (캔버스 위) |
 |---|---|---|
-| Canvas | `#F5F5F7` (fog) | — |
-| Surface | `#FFFFFF` | — |
-| Surface Muted | `#E8E8ED` `local` | — |
-| Border | `#D2D2D7` | — |
+| Canvas (사이드바·창) | `#F2F2F7` systemGray6 | — |
+| Surface (콘텐츠) | `#FFFFFF` | — |
+| Surface Muted | `#E5E5EA` systemGray5 | — |
+| Border | `#D8D8DC` separator | — |
 | Border Strong | `#C7C7CC` `local` | — |
 | Foreground | `#1D1D1F` | 15.46:1 |
 | Secondary | `#515154` | 7.27:1 |
@@ -127,52 +134,60 @@ Apple 은 채움 배경(`#0071e3`)과 링크(`#0066cc`)를 구분해서 쓴다. 
 
 ### 스케일 `apple`
 
-apple.com 의 타입 스케일. 본문이 **17px** 로 일반적인 업무 도구(16px)보다 한 단 크다 — Apple 은 밀도보다 읽기를 우선한다.
+**표면마다 다르다.** 데스크톱은 macOS 앱 밀도, 모바일은 iOS 밀도다.
 
-| Role | Size | Line | Weight | 쓰는 곳 |
+| Role | 데스크톱 | 모바일 | Weight | 쓰는 곳 |
 |---|---:|---:|---:|---|
-| Display | 40px | 44px | 600 | QR 랜딩의 회의실 이름 **한 자리뿐** |
-| Title | 28px | 32px | 600 | 다이얼로그 제목. 헤딩은 tight leading(1.14) |
-| Section | 21px | 26px | 600 | 날짜 헤딩, 섹션 |
-| Body | 17px | 25px | 400 | 본문·컨트롤·입력 |
-| Body Small | 14px | 20px | 400 | 격자 셀, 보조 정보 |
-| Caption | 12px | 16px | 400 | 시간 눈금, 힌트 |
-| Label | — | — | 500 | 필드 레이블, 버튼 |
+| Display | 28 / 34 | 34 / 40 | 600 | QR 랜딩의 회의실 이름 **한 자리뿐** |
+| Title | 22 / 26 | 22 / 28 | 600 | 다이얼로그 제목 |
+| Section | 17 / 22 | 17 / 22 | 600 | 날짜 헤딩, 사이드바 브랜드 |
+| Body | **13 / 18** | **17 / 22** | 400 | 본문·컨트롤·입력 |
+| Body Small | 12 / 16 | 15 / 20 | 400 | 보조 정보 |
+| Caption | 11 / 14 | 13 / 18 | 400 | 시간 눈금, 힌트 |
+| Grid Event | 12 / 15 | 13 / 16 | — | 격자 이벤트 블록 |
 
-입력 필드는 Body(17px)를 쓴다 — 16px 미만이면 모바일 Safari 가 자동 확대해 QR 예약 흐름을 깬다.
+**모바일 입력은 17px 를 지킨다** — 16px 미만이면 Safari 가 자동 확대해 QR 예약 흐름을 깬다. 데스크톱 입력은 13px 로 내려도 안전하다(자동 확대는 터치 전용 동작).
+
+자간도 크기를 따라간다: 13px 에 `-0.022em` 를 주면 한글 자모가 붙는다. 데스크톱 body `-0.004em`, 모바일 body `-0.02em`.
 
 데스크톱 격자에는 Display 를 쓰지 않는다. 격자 셀은 Body Small, 시간 축은 Caption + mono.
 
 ## 4. Component Stylings
 
-apple.com 의 실제 CTA 가 기준이다: pill radius 980px, 높이 44px, 패딩 `11px 21px`, 17px.
+맥 앱의 컨트롤이 기준이다: 라운드 사각 7px, 높이 28px(regular) / 22px(small). 모바일에서는 같은 컴포넌트가 44px / 36px 로 커진다.
 
 ### MolRoom Primary Action
-- Background `#0071E3` `apple` / Text `#FFFFFF` / 보더 없음
-- Radius **980px (pill)** `apple`
-- Padding `11px 21px` `apple` / Height 44px `apple`
-- Font 17px / **500** `a11y` — Apple 은 400 을 쓰지만 그건 SF Pro 가 깔린 Apple 기기 기준이다. Pretendard 로 떨어지는 환경에서 4.70:1 배경 위 400 흰 글자는 얇게 뭉갠다
-- Hover `#0062C4` `local` / Focus `0 0 0 4px rgba(0,113,227,0.35)` `local`
+- Background `#006CE0` `a11y` / Text `#FFFFFF` / 보더 없음
+- Radius **7px** `apple` — pill 아님
+- Height **28px** (데스크톱) / **44px** (모바일) / Padding `0 12px`
+- Font 13px(데스크톱) · 17px(모바일) / **500** `a11y` — Pretendard 로 떨어지는 환경에서 400 흰 글자는 얇게 뭉갠다
+- Hover `#0057B8` / Focus 4px `rgba(0,113,227,0.35)` `local`
 - Use: 예약 확정, QR 랜딩의 첫 예약 버튼. **화면당 하나**
 
 ### MolRoom Secondary Action
-- Background transparent / Text `#0066CC` / Border 1px `#0066CC` `apple` (marketing-outline)
-- 나머지 지오메트리는 Primary 와 동일 (pill, 44px)
+- Background transparent / Text `#006CE0` / Border 1px `#006CE0`
+- 나머지 지오메트리는 Primary 와 동일
 - Hover 시에만 `#E8F1FC` 로 아주 옅게 채운다 `local`
 - Use: 취소, 두 번째 이후 프리셋, 파괴적 동작의 반대편
 
 ### MolRoom Compact Action
-- Height 36px / Padding `8px 15px` / Font 14px `apple` (marketing-compact)
+- Height 22px(데스크톱) / 36px(모바일) / Padding `0 8px` / Font 12px
 - Use: **데스크톱 격자 인접 컨텍스트에서만.** 격자 상세의 `+15분` / `-15분`
-- 모바일의 같은 연장 컨트롤은 Compact 가 아니라 **Secondary(44px)** 를 쓴다. 36px 는 터치 타깃 하한을 밑돈다
+
+### MolRoom Sidebar `apple`
+맥 앱의 얼굴. `>=1024px` 에서만 보이고 그 아래에서는 상단 바로 되돌린다.
+- 폭 220px / 배경 `rgba(242,242,247,0.72)` + `--glass-blur` (vibrancy) / 우측 1px `--glass-edge`
+- 행 높이 28px / radius 6px / 선택 상태는 **옅은 채움**(`#E8F1FC` + `#006CE0`), 채운 알약 아님
+- 담는 것: 브랜드 · 화면 이동(예약 현황 / 내 예약) · **회의실 목록(체크박스로 표시 토글)** · 계정과 로그아웃
+- 회의실 목록은 장식이 아니라 컨트롤이다 — 캘린더 앱의 캘린더 목록과 같다. 단 **마지막 남은 방은 끌 수 없다**: 빈 격자는 의도가 아니라 실수다
 
 ### 비활성 처리
 opacity 로 흐리지 않는다 — 왜 못 누르는지 알 수 없다.
 배경 `#E8E8ED` + 텍스트 `#6E6E73`, 그리고 **사유를 버튼 옆에 상시 노출**한다. 툴팁 금지.
 
 ### MolRoom Input
-- Background `#FFFFFF` / Border 1px `#D2D2D7` / Radius **12px** `local`
-- Height 44px / Padding `0 12px` / Font 17px
+- Background `#FFFFFF` / Border 1px `#D8D8DC` / Radius **6px** `apple`
+- Height 28px(데스크톱) / 44px(모바일) / Padding `0 8px`
 - Focus: 보더 `#0071E3` + `--shadow-focus`
 
 ### MolRoom Booking Grid
@@ -189,7 +204,7 @@ opacity 로 흐리지 않는다 — 왜 못 누르는지 알 수 없다.
 - **격자는 이 화면의 유일한 세로 스크롤러다.** 페이지는 스크롤하지 않는다 (§5)
 
 ### MolRoom Card
-- Background `#FFFFFF` / Radius **18px** `apple` (HIG reference card)
+- Background `#FFFFFF` / Radius **10px** `apple` (앱 패널)
 - Padding 16px / Border 1px `#D2D2D7` / 그림자 없음 (§6)
 
 ### MolRoom Badge
@@ -197,13 +212,13 @@ opacity 로 흐리지 않는다 — 왜 못 누르는지 알 수 없다.
 - 기본(내 예약) `#E8F1FC` + `#0066CC` / 주의(미체크인) `#FFF3E5` + `#8F4B00`
 - 화면당 총량을 제한한다. 모든 셀에 배지가 붙으면 아무것도 강조되지 않는다
 
-### MolRoom Tabs
-- Height 53px `apple` (Apple Store 갤러리 탭) / Font 17px
+### MolRoom Tabs / Segmented
+- Height 28px(데스크톱) / 44px(모바일) — 세그먼티드는 `#E5E5EA` 트랙 + 흰 선택 조각
 - 선택: 텍스트 `#1D1D1F` + 하단 2px `#0071E3` / 비선택 `#6E6E73`
 - **선택 상태를 반드시 명시적으로 표시할 것**
 
 ### MolRoom Dialog
-- Background `#FFFFFF` / Radius 20px / Padding 24px / Max-width 480px
+- Background `#FFFFFF` / Radius 12px / Padding 20px / Max-width 480px
 - Shadow `0 8px 32px rgba(0,0,0,0.12)` / Backdrop `rgba(0,0,0,0.48)` `local`
 - 데스크톱은 중앙 모달, 모바일은 하단 시트로 전환 `local`
 - 데이터 입력·파괴적 확인 다이얼로그는 **배경 클릭으로 닫히지 않는다**
@@ -211,7 +226,8 @@ opacity 로 흐리지 않는다 — 왜 못 누르는지 알 수 없다.
 
 ## 5. Layout Principles
 
-- 데스크톱 격자는 전체 폭을 쓰되 좌측 시간 축을 sticky 로 고정한다
+- **`>=1024px` 은 2단 창이다**: 사이드바 220px + 콘텐츠. 그 아래에서는 사이드바를 접고 상단 바로 되돌린다 — 손가락 폭에서 220px 을 떼면 격자가 남지 않는다
+- 데스크톱 격자는 콘텐츠 폭을 다 쓰되 좌측 시간 축을 sticky 로 고정한다
 - **스크롤러는 화면당 하나.** 격자 화면(≥768px)은 문서 스크롤을 잠그고 격자 판 하나에 전량 위임한다. 페이지를 굴린 뒤 격자 안에서 또 굴리게 하지 않는다
 - 간격은 4의 배수. Apple 의 `11px 21px` 패딩은 예외(레퍼런스 실측값)
 - 읽기 영역은 720px 로 제한한다 — 1440px 화면에서 리스트 카드가 통째로 늘어나면 액션이 저 멀리 떨어진다
@@ -243,15 +259,16 @@ opacity 로 흐리지 않는다 — 왜 못 누르는지 알 수 없다.
 ### Do
 - SF Pro/Pretendard 한 계열로 크기·굵기만 써서 위계를 낸다
 - 채움 액션에 `#0071E3`, 링크와 아웃라인 버튼에 `#0066CC`
-- 버튼은 pill, 카드 18px, 입력 12px, 다이얼로그 20px
+- 버튼·세그먼트 7px, 입력 6px, 패널 10px, 다이얼로그 12px. pill 은 배지·칩만
 - 모든 값에 증거 등급(`apple`/`logo`/`local`/`a11y`)을 유지한다
 - 모바일 컨트롤 높이를 44px 이상으로 유지한다
 - 비활성 이유를 항상 눈에 보이게 적는다
 
 ### Don't
-- `#0066CC` 를 채움 버튼 배경으로 쓰지 않는다 (Apple 은 링크색으로만 쓴다)
+- **systemBlue `#007AFF` 에 흰 텍스트를 얹지 않는다** (4.02:1, AA 미달)
+- **앱 컨트롤에 pill radius 를 쓰지 않는다** — pill 은 마케팅과 배지의 문법이다
+- **데스크톱에 17px 본문·44px 컨트롤을 쓰지 않는다** — 손가락의 값이다
 - **로고의 네 색(인디고·파랑·민트·앰버)을 UI 에 풀지 않는다.** 워드마크·파비콘 전용
-- 버튼에 사각형 radius 를 쓰지 않는다
 - **빈 시간 슬롯에 색을 부여하지 않는다**
 - **예약된 방을 빨강으로 칠하지 않는다.** 정상 상태다
 - **격자 셀에 회의 제목을 노출하지 않는다**
@@ -264,16 +281,21 @@ opacity 로 흐리지 않는다 — 왜 못 누르는지 알 수 없다.
 
 | 폭 | 표면 | 동작 |
 |---|---|---|
-| `>= 1024px` | 데스크톱 격자 | 전체 회의실 가로 나열. 시간 축 sticky. 드래그 선택. 격자가 유일한 스크롤러 |
-| `768~1023px` | 축소 격자 | 가로 스크롤. 드래그 유지. 격자가 유일한 스크롤러 |
-| `< 768px` | 모바일 | 격자는 세로 리스트로 축약. 페이지 스크롤로 돌아간다. **주 진입점은 QR 랜딩** |
+| `>= 1024px` | **macOS 앱** | 사이드바 220px + 격자. 본문 13px · 컨트롤 28px. 시간 축 sticky. 드래그로 선택·이동·길이조절. 격자가 유일한 스크롤러 |
+| `768~1023px` | 축소 격자 | 사이드바 접힘 → 상단 바. 여전히 13px/28px(포인터 전제). 가로 스크롤 |
+| `< 768px` | **iOS** | 본문 17px · 타깃 44px. 격자는 세로 리스트로 축약. 페이지 스크롤. **주 진입점은 QR 랜딩** |
+
+같은 컴포넌트가 두 값을 갖는 것은 실수가 아니라 규칙이다 — 토큰이 `@media (max-width: 767px)` 에서 iOS 값으로 되돌아간다(`tokens.css` 끝).
 
 모바일은 데스크톱의 축소판이 아니다. 복도에서 폰을 든 사람은 격자를 훑지 않는다 — "지금 비었나" 하나만 확인하고 탭한다.
 
 ## 9. Agent Prompt Guide
 
-- "MolRoom Primary Action: `#0071E3` 배경, 흰 텍스트, 44px 높이, pill radius, 11px 21px 패딩, 17px/400."
-- "격자 셀은 28px 높이, 14px, 주최자 이름만. 내 예약은 `#E8F1FC` 배경에 `#0066CC` 텍스트."
+- "MolRoom Primary Action: `#006CE0` 배경, 흰 텍스트, 데스크톱 28px / 모바일 44px, radius 7px, 13px(모바일 17px)/500."
+- "이건 맥 앱이다: 사이드바 + 콘텐츠 2단, 본문 13px, 컨트롤 28px, pill 은 배지에만."
+- "systemBlue `#007AFF` 에 흰 텍스트를 얹지 마라 — 4.02:1 이다. 채움에는 `#006CE0`."
+- "사이드바 선택은 옅은 채움이지 채운 알약이 아니다."
+- "격자 셀은 28px 높이, 이벤트 텍스트 12px, 주최자 이름만. 내 예약은 `#E8F1FC` 배경에 `#006CE0` 왼쪽 막대."
 - "미체크인 배지는 `#FFF3E5` 배경에 `#8F4B00`, 12px, pill radius."
 - "모바일 다이얼로그는 중앙 모달이 아니라 하단 시트."
 - "로고 색은 워드마크에만. UI 에 쓰지 마라."
