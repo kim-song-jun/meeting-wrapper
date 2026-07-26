@@ -1,0 +1,12 @@
+node_modules/
+dist/
+.DS_Store
+*.local
+
+# Playwright MCP scratch output
+.playwright-mcp/
+
+# 로컬 환경변수 (Google OAuth 클라이언트 ID 등)
+.env
+.env.*
+!.env.example

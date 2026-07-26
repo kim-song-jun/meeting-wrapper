@@ -1,0 +1,447 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>molroom Design System — Preview</title>
+<style>
+  :root {
+    /* verified — Apple 2026-07-11 */
+    --primary: #0071e3;
+    --brand: #000000;
+    --canvas: #f5f5f7;
+    --surface: #ffffff;
+    --fg: #1d1d1f;
+    --muted: #6e6e73;
+    --secondary: #515154;
+    --on-primary: #ffffff;
+    --link: #0066cc;
+    --link-dark: #2997ff;
+
+    /* local — molroom extensions */
+    --mine-bg: #e8f2fd;
+    --attn-fg: #8a5300;
+    --attn-bg: #fff4e5;
+    --border: #d2d2d7;
+    --border-strong: #c7c7cc;
+
+    --slot-h: 28px;
+    --font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Apple SD Gothic Neo", "Pretendard", sans-serif;
+    --font-display: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Apple SD Gothic Neo", "Pretendard", sans-serif;
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: var(--font);
+    font-size: 17px;
+    line-height: 25px;
+    letter-spacing: -0.374px;
+    color: var(--fg);
+    background: var(--canvas);
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 1180px; margin: 0 auto; padding: 48px 24px 96px; }
+
+  h1 { font-family: var(--font-display); font-size: 40px; line-height: 44px; font-weight: 600; margin: 0 0 8px; }
+  h2 {
+    font-family: var(--font-display); font-size: 28px; line-height: 32px; font-weight: 600;
+    letter-spacing: 0.196px; margin: 64px 0 4px; padding-top: 24px; border-top: 1px solid var(--border);
+  }
+  h3 { font-size: 17px; font-weight: 600; margin: 32px 0 12px; }
+  .lede { color: var(--muted); font-size: 17px; margin: 0 0 8px; }
+  .note { color: var(--muted); font-size: 14px; line-height: 18px; letter-spacing: -0.224px; margin: 8px 0 0; }
+
+  .grade {
+    display: inline-block; font-size: 12px; line-height: 16px; letter-spacing: -0.12px;
+    padding: 0 6px; border-radius: 980px; vertical-align: 2px; margin-left: 6px; font-weight: 400;
+  }
+  .g-verified { background: var(--mine-bg); color: var(--fg); }
+  .g-local { background: var(--attn-bg); color: var(--attn-fg); }
+  .g-unres { background: var(--canvas); color: var(--muted); border: 1px solid var(--border); }
+
+  /* ---- palette ---- */
+  .swatches { display: grid; grid-template-columns: repeat(auto-fill, minmax(178px, 1fr)); gap: 12px; margin-top: 16px; }
+  .sw { background: var(--surface); border-radius: 18px; overflow: hidden; border: 1px solid var(--border); }
+  .sw .chip { height: 68px; }
+  .sw .meta { padding: 12px 14px 14px; }
+  .sw .name { font-size: 14px; line-height: 18px; font-weight: 600; }
+  .sw .hex { font-size: 12px; line-height: 16px; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .sw .ratio { font-size: 12px; line-height: 16px; color: var(--secondary); margin-top: 4px; font-variant-numeric: tabular-nums; }
+
+  /* ---- type ---- */
+  .type-row { display: grid; grid-template-columns: 148px 1fr; gap: 20px; align-items: baseline; padding: 14px 0; border-bottom: 1px solid var(--border); }
+  .type-row .lbl { font-size: 12px; line-height: 16px; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .t-hero { font-family: var(--font-display); font-size: 56px; line-height: 60px; font-weight: 600; letter-spacing: -0.28px; }
+  .t-section { font-family: var(--font-display); font-size: 40px; line-height: 44px; font-weight: 600; }
+  .t-tile { font-family: var(--font-display); font-size: 28px; line-height: 32px; font-weight: 400; letter-spacing: 0.196px; }
+  .t-body { font-size: 17px; line-height: 25px; letter-spacing: -0.374px; }
+  .t-small { font-size: 14px; line-height: 18px; letter-spacing: -0.224px; }
+  .t-cap { font-size: 12px; line-height: 16px; letter-spacing: -0.12px; }
+
+  /* ---- buttons ---- */
+  .btn {
+    font-family: var(--font); border: none; cursor: pointer;
+    display: inline-flex; align-items: center; justify-content: center;
+  }
+  .btn-primary { background: var(--primary); color: var(--on-primary); border-radius: 980px; padding: 11px 21px; height: 44px; font-size: 17px; font-weight: 400; }
+  .btn-secondary { background: transparent; color: var(--link); border: 1px solid var(--link); border-radius: 980px; padding: 11px 21px; height: 44px; font-size: 17px; }
+  .btn-compact { background: var(--primary); color: var(--on-primary); border-radius: 980px; padding: 8px 15px; height: 36px; font-size: 14px; }
+  .btn-compact[disabled] { background: var(--canvas); color: var(--muted); cursor: not-allowed; border: 1px solid var(--border); }
+  .btn-row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin-top: 8px; }
+
+  /* ---- input ---- */
+  .input {
+    background: var(--surface); color: var(--fg); border: 1px solid var(--border);
+    border-radius: 8px; height: 40px; padding: 0 12px; font-size: 17px; font-family: var(--font); width: 320px;
+  }
+  .input::placeholder { color: var(--muted); }
+  .input.focus { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(0, 113, 227, 0.2); outline: none; }
+
+  /* ---- badge ---- */
+  .badge { display: inline-flex; align-items: center; height: 20px; border-radius: 980px; padding: 0 8px; font-size: 12px; line-height: 16px; letter-spacing: -0.12px; }
+  .badge-mine { background: var(--mine-bg); color: var(--fg); }
+  .badge-attn { background: var(--attn-bg); color: var(--attn-fg); }
+
+  /* ---- tabs ---- */
+  .tabs { display: flex; gap: 24px; border-bottom: 1px solid var(--border); }
+  .tab { height: 53px; display: flex; align-items: center; font-size: 17px; color: var(--muted); border-bottom: 2px solid transparent; margin-bottom: -1px; cursor: pointer; }
+  .tab.sel { color: var(--fg); border-bottom-color: var(--primary); }
+
+  /* ---- card ---- */
+  .card { background: var(--surface); border-radius: 18px; padding: 20px; border: 1px solid var(--border); }
+
+  /* ---- booking grid ---- */
+  .grid-shell { background: var(--canvas); border: 1px solid var(--border); border-radius: 18px; overflow: hidden; }
+  .grid-head { display: grid; grid-template-columns: 64px repeat(3, minmax(132px, 1fr)); background: var(--surface); border-bottom: 1px solid var(--border-strong); }
+  .grid-head div { padding: 10px 12px; font-size: 14px; line-height: 18px; font-weight: 600; }
+  .grid-head div span { display: block; font-size: 12px; line-height: 16px; font-weight: 400; color: var(--muted); }
+  .grid-body { display: grid; grid-template-columns: 64px repeat(3, minmax(132px, 1fr)); }
+  .tcol { border-right: 1px solid var(--border-strong); background: var(--surface); }
+  .tick { height: var(--slot-h); font-size: 12px; line-height: 16px; color: var(--muted); padding: 0 8px; text-align: right; font-variant-numeric: tabular-nums; }
+  .tick.hour { border-top: 1px solid var(--border-strong); padding-top: 2px; }
+  .tick.half { border-top: 1px solid var(--border); color: transparent; }
+  .rcol { border-right: 1px solid var(--border); position: relative; }
+  .slot { height: var(--slot-h); border-top: 1px solid var(--border); }
+  .slot.hour { border-top-color: var(--border-strong); }
+  .ev {
+    position: absolute; left: 3px; right: 3px; border-radius: 8px; padding: 4px 8px;
+    font-size: 14px; line-height: 18px; letter-spacing: -0.224px; overflow: hidden;
+  }
+  .ev-other { background: var(--surface); border: 1px solid var(--border); color: var(--fg); }
+  .ev-mine { background: var(--mine-bg); border: 1px solid rgba(0, 113, 227, 0.35); color: var(--fg); }
+  .ev .when { font-size: 12px; line-height: 16px; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .ev-sel { background: var(--mine-bg); border: 1px solid var(--primary); }
+  /* 30분짜리 이벤트는 2줄이 안 들어간다 — 한 줄 레이아웃으로 전환 */
+  .ev-short { padding: 3px 8px; font-size: 12px; line-height: 16px; letter-spacing: -0.12px; white-space: nowrap; text-overflow: ellipsis; }
+  .ev-short .when { display: inline; margin-left: 4px; }
+
+  /* ---- dialog ---- */
+  .backdrop { background: rgba(0,0,0,0.4); border-radius: 18px; padding: 40px; display: flex; justify-content: center; }
+  .dialog { background: var(--surface); border-radius: 18px; padding: 24px; width: 100%; max-width: 480px; }
+  .dialog h4 { font-family: var(--font-display); font-size: 28px; line-height: 32px; font-weight: 600; margin: 0 0 4px; letter-spacing: 0.196px; }
+  .field { margin-top: 16px; }
+  .field label { display: block; font-size: 14px; line-height: 18px; color: var(--secondary); margin-bottom: 6px; }
+  .radio-row { display: flex; align-items: center; gap: 8px; font-size: 17px; padding: 4px 0; }
+  .dialog-actions { display: flex; justify-content: flex-end; gap: 12px; margin-top: 24px; }
+
+  /* ---- phone ---- */
+  .phones { display: flex; gap: 24px; flex-wrap: wrap; }
+  .phone { width: 375px; background: var(--canvas); border: 1px solid var(--border); border-radius: 18px; padding: 20px; }
+  .phone .roomname { font-family: var(--font-display); font-size: 56px; line-height: 60px; font-weight: 600; letter-spacing: -0.28px; margin: 8px 0 0; }
+  .phone .roommeta { font-size: 17px; color: var(--muted); margin: 0 0 20px; }
+  .status-card { background: var(--surface); border-radius: 18px; padding: 20px; text-align: center; }
+  .status-card .big { font-family: var(--font-display); font-size: 28px; line-height: 32px; font-weight: 600; letter-spacing: 0.196px; }
+  .status-card .sub { font-size: 14px; line-height: 18px; color: var(--muted); margin-top: 4px; font-variant-numeric: tabular-nums; }
+  .stack { display: flex; flex-direction: column; gap: 12px; margin-top: 20px; }
+  .stack .btn { width: 100%; }
+  .dot { display: inline-block; width: 10px; height: 10px; border-radius: 980px; margin-right: 8px; vertical-align: 1px; }
+
+  .dontdo { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 16px; }
+  @media (max-width: 820px) { .dontdo { grid-template-columns: 1fr; } }
+  .panel { background: var(--surface); border-radius: 18px; padding: 20px; border: 1px solid var(--border); }
+  .panel .h { font-size: 14px; font-weight: 600; margin-bottom: 12px; }
+  .bad .h { color: var(--attn-fg); }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <h1>molroom Design System</h1>
+  <p class="lede">Apple 레퍼런스(2026-07-11 실측) 기반 · 밀도 높은 애플리케이션 표면으로 해석</p>
+  <p class="note">
+    <span class="grade g-verified">verified</span> Apple 실측값 &nbsp;
+    <span class="grade g-local">local</span> molroom 로컬 확장 &nbsp;
+    <span class="grade g-unres">unresolved</span> 근거 없어 미정
+  </p>
+
+  <!-- =============== PALETTE =============== -->
+  <h2>1. 팔레트</h2>
+  <h3>검증된 팔레트 <span class="grade g-verified">verified</span></h3>
+  <div class="swatches">
+    <div class="sw"><div class="chip" style="background:#0071e3"></div><div class="meta"><div class="name">Primary Action</div><div class="hex">#0071e3</div><div class="ratio">흰 텍스트 4.70:1</div></div></div>
+    <div class="sw"><div class="chip" style="background:#000000"></div><div class="meta"><div class="name">Brand / Dark</div><div class="hex">#000000</div><div class="ratio">다크 섹션</div></div></div>
+    <div class="sw"><div class="chip" style="background:#f5f5f7"></div><div class="meta"><div class="name">Fog Canvas</div><div class="hex">#f5f5f7</div><div class="ratio">격자 배경</div></div></div>
+    <div class="sw"><div class="chip" style="background:#ffffff;border-bottom:1px solid #d2d2d7"></div><div class="meta"><div class="name">Surface</div><div class="hex">#ffffff</div><div class="ratio">카드 · 예약된 셀</div></div></div>
+    <div class="sw"><div class="chip" style="background:#1d1d1f"></div><div class="meta"><div class="name">Foreground</div><div class="hex">#1d1d1f</div><div class="ratio">on white 16.83:1</div></div></div>
+    <div class="sw"><div class="chip" style="background:#6e6e73"></div><div class="meta"><div class="name">Muted</div><div class="hex">#6e6e73</div><div class="ratio">on white 5.07:1</div></div></div>
+    <div class="sw"><div class="chip" style="background:#515154"></div><div class="meta"><div class="name">Secondary</div><div class="hex">#515154</div><div class="ratio">on white 7.91:1</div></div></div>
+    <div class="sw"><div class="chip" style="background:#0066cc"></div><div class="meta"><div class="name">Link</div><div class="hex">#0066cc</div><div class="ratio">on white 5.57:1</div></div></div>
+  </div>
+
+  <h3>예약 상태 색 <span class="grade g-local">local</span></h3>
+  <p class="note">레퍼런스에 상태색이 없어 로컬 확장으로 정의. 대비비는 실측 계산값.</p>
+  <div class="swatches">
+    <div class="sw"><div class="chip" style="background:#f5f5f7;display:flex;align-items:center;justify-content:center;color:#6e6e73;font-size:14px">색 없음</div><div class="meta"><div class="name">비어있음</div><div class="hex">#f5f5f7 (canvas)</div><div class="ratio">부재는 색을 요구하지 않음</div></div></div>
+    <div class="sw"><div class="chip" style="background:#ffffff;border-bottom:1px solid #d2d2d7"></div><div class="meta"><div class="name">남의 예약</div><div class="hex">#ffffff + #1d1d1f</div><div class="ratio">정상 상태 — 경고색 아님</div></div></div>
+    <div class="sw"><div class="chip" style="background:#e8f2fd"></div><div class="meta"><div class="name">내 예약</div><div class="hex">#e8f2fd</div><div class="ratio">fg 14.87:1 · 유일한 액센트</div></div></div>
+    <div class="sw"><div class="chip" style="background:#fff4e5;display:flex;align-items:center;justify-content:center;color:#8a5300;font-size:14px;font-weight:600">주의</div><div class="meta"><div class="name">미체크인</div><div class="hex">#8a5300 on #fff4e5</div><div class="ratio">5.82:1 (AA 통과)</div></div></div>
+  </div>
+  <p class="note"><strong>주의:</strong> <code>#e8f2fd</code> 위에서 <code>#0071e3</code>는 4.15:1로 본문 AA 미달. 내 예약 셀의 텍스트는 파랑이 아니라 <code>#1d1d1f</code>를 쓴다.</p>
+  <p class="note">빨강은 정의하지 않는다 <span class="grade g-unres">unresolved</span> — 예약된 방은 오류가 아니다.</p>
+
+  <!-- =============== TYPE =============== -->
+  <h2>2. 타이포그래피 <span class="grade g-verified">verified</span></h2>
+  <div class="type-row"><div class="lbl">Display Hero<br>56 / 60 / 600</div><div class="t-hero">3층 회의실 A</div></div>
+  <div class="type-row"><div class="lbl">Section<br>40 / 44 / 600</div><div class="t-section">오늘 예약 현황</div></div>
+  <div class="type-row"><div class="lbl">Tile Heading<br>28 / 32 / 400</div><div class="t-tile">지금 비어있음</div></div>
+  <div class="type-row"><div class="lbl">Body<br>17 / 25 / 400</div><div class="t-body">참석자에게 초대장이 발송되고 각자 캘린더에 자동으로 표시됩니다.</div></div>
+  <div class="type-row"><div class="lbl">Body Small<br>14 / 18 / 400</div><div class="t-small">김철수 · ~10:30</div></div>
+  <div class="type-row"><div class="lbl">Caption<br>12 / 16 / 400</div><div class="t-cap">09:00</div></div>
+  <p class="note">Display Hero는 QR 랜딩의 회의실 이름에만 쓴다. 데스크톱 격자에는 Display를 쓰지 않는다.</p>
+
+  <!-- =============== BOOKING GRID =============== -->
+  <h2>3. 예약 격자 — 핵심 컴포넌트</h2>
+  <p class="lede">30분 슬롯 28px <span class="grade g-local">local</span> · 셀은 주최자만 표시 (회의 제목 숨김)</p>
+  <div class="grid-shell" style="margin-top:16px">
+    <div class="grid-head">
+      <div></div>
+      <div>3층 회의실 A<span>8인</span></div>
+      <div>3층 소회의실<span>4인</span></div>
+      <div>4층 회의실 B<span>12인</span></div>
+    </div>
+    <div class="grid-body">
+      <div class="tcol">
+        <div class="tick hour">09:00</div><div class="tick half">·</div>
+        <div class="tick hour">10:00</div><div class="tick half">·</div>
+        <div class="tick hour">11:00</div><div class="tick half">·</div>
+        <div class="tick hour">12:00</div><div class="tick half">·</div>
+        <div class="tick hour">13:00</div><div class="tick half">·</div>
+        <div class="tick hour">14:00</div><div class="tick half">·</div>
+      </div>
+      <div class="rcol" data-room="a"></div>
+      <div class="rcol" data-room="b"></div>
+      <div class="rcol" data-room="c"></div>
+    </div>
+  </div>
+  <p class="note">가용성 패턴이 먼저 읽히고, 유채색은 "내 것" 하나에만 쓰인다. 빈 슬롯에는 색이 없다.</p>
+
+  <!-- =============== COMPONENTS =============== -->
+  <h2>4. 컴포넌트</h2>
+
+  <h3>Button</h3>
+  <div class="btn-row">
+    <button class="btn btn-primary">예약하기</button>
+    <button class="btn btn-secondary">취소</button>
+    <button class="btn btn-compact">+15분</button>
+    <button class="btn btn-compact" disabled>+15분</button>
+    <span class="t-small" style="color:var(--muted)">14:00에 이영희님 예약 있음</span>
+  </div>
+  <p class="note">비활성 버튼은 opacity로 흐리지 않고, 사유를 툴팁이 아니라 옆에 상시 노출한다.</p>
+
+  <h3>Input</h3>
+  <div class="btn-row">
+    <input class="input" placeholder="회의 제목">
+    <input class="input focus" value="https://zoom.us/j/1234567890">
+  </div>
+  <p class="note">17px 유지 — 16px 미만이면 모바일 Safari가 자동 확대해 QR 예약 흐름이 깨진다.</p>
+
+  <h3>Badge · Tabs</h3>
+  <div class="btn-row" style="margin-bottom:20px">
+    <span class="badge badge-mine">내 예약</span>
+    <span class="badge badge-attn">미체크인</span>
+  </div>
+  <div class="tabs">
+    <div class="tab sel">내 예약</div>
+    <div class="tab">전체 예약</div>
+  </div>
+
+  <h3>Card</h3>
+  <div class="card" style="max-width:420px;margin-top:8px">
+    <div style="font-size:17px;font-weight:600">3층 회의실 A</div>
+    <div class="t-small" style="color:var(--muted);margin-top:2px">오늘 14:00–15:00 · 참석자 4명</div>
+    <div class="btn-row" style="margin-top:16px">
+      <button class="btn btn-compact">수정</button>
+      <button class="btn btn-secondary" style="height:36px;padding:8px 15px;font-size:14px">취소</button>
+    </div>
+  </div>
+
+  <h3>Dialog</h3>
+  <div class="backdrop" style="margin-top:8px">
+    <div class="dialog">
+      <h4>회의실 예약</h4>
+      <div class="t-small" style="color:var(--muted)">3층 회의실 A · 8인 · 오늘 14:00–15:00</div>
+      <div class="field">
+        <label>회의 제목</label>
+        <input class="input" style="width:100%" placeholder="주간 기획회의">
+      </div>
+      <div class="field">
+        <label>화상회의</label>
+        <div class="radio-row"><input type="radio" name="vc"> 없음</div>
+        <div class="radio-row"><input type="radio" name="vc" checked> Google Meet 자동 생성</div>
+        <div class="radio-row"><input type="radio" name="vc"> Zoom</div>
+        <input class="input" style="width:100%;margin-top:6px" value="https://zoom.us/j/1234567890">
+        <div class="t-cap" style="color:var(--muted);margin-top:6px">저장된 기본 링크를 불러왔습니다</div>
+      </div>
+      <div class="dialog-actions">
+        <button class="btn btn-secondary">취소</button>
+        <button class="btn btn-primary">예약하기</button>
+      </div>
+    </div>
+  </div>
+  <p class="note">데스크톱은 중앙 모달, 모바일은 하단 시트로 전환 <span class="grade g-local">local</span> — 모바일 중앙 모달은 엄지가 닿지 않는다.</p>
+
+  <!-- =============== MOBILE =============== -->
+  <h2>5. 모바일 — QR 랜딩</h2>
+  <p class="lede">복도에서 폰을 들고 1초 안에 "여기 지금 되나"만 확인한다. 데스크톱의 축소판이 아니다.</p>
+  <div class="phones" style="margin-top:16px">
+
+    <div class="phone">
+      <div class="t-cap" style="color:var(--muted)">molroom</div>
+      <div class="roomname">3층 A</div>
+      <div class="roommeta">8인 · 3층</div>
+      <div class="status-card">
+        <div class="big"><span class="dot" style="background:#0071e3"></span>지금 비어있음</div>
+        <div class="sub">다음 예약 14:00</div>
+      </div>
+      <div class="stack">
+        <button class="btn btn-primary">30분 예약</button>
+        <button class="btn btn-primary">1시간 예약</button>
+        <button class="btn btn-secondary">14:00까지 전부</button>
+      </div>
+    </div>
+
+    <div class="phone">
+      <div class="t-cap" style="color:var(--muted)">molroom</div>
+      <div class="roomname">4층 B</div>
+      <div class="roommeta">12인 · 4층</div>
+      <div class="status-card">
+        <div class="big"><span class="dot" style="background:#6e6e73"></span>사용 중</div>
+        <div class="sub">이영희 · ~15:00</div>
+      </div>
+      <div class="card" style="margin-top:12px;text-align:center">
+        <div class="t-small">다음 빈 시간</div>
+        <div style="font-size:17px;font-weight:600;margin-top:2px">15:00 – 17:30</div>
+      </div>
+      <div class="stack">
+        <button class="btn btn-secondary">15:00에 예약하기</button>
+      </div>
+    </div>
+
+    <div class="phone">
+      <div class="t-cap" style="color:var(--muted)">molroom</div>
+      <div class="roomname">3층 A</div>
+      <div class="roommeta">8인 · 3층</div>
+      <div class="status-card" style="background:var(--mine-bg)">
+        <div class="big">내 회의 진행 중</div>
+        <div class="sub">주간 기획회의 · ~15:00</div>
+      </div>
+      <div class="stack">
+        <button class="btn btn-primary">체크인</button>
+        <button class="btn btn-secondary">+15분 연장</button>
+        <button class="btn btn-secondary">지금 종료</button>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- =============== DO / DONT =============== -->
+  <h2>6. 이렇게 하지 않는다</h2>
+  <div class="dontdo">
+    <div class="panel bad">
+      <div class="h">✗ 흔한 회의실 예약 UI</div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px">
+        <span style="background:#22c55e;color:#fff;padding:4px 10px;border-radius:4px;font-size:12px">비어있음</span>
+        <span style="background:#ef4444;color:#fff;padding:4px 10px;border-radius:4px;font-size:12px">사용중</span>
+        <span style="background:#f59e0b;color:#fff;padding:4px 10px;border-radius:4px;font-size:12px">곧 시작</span>
+        <span style="background:#8b5cf6;color:#fff;padding:4px 10px;border-radius:4px;font-size:12px">내 예약</span>
+      </div>
+      <div class="t-small" style="color:var(--muted)">색이 4개면 아무것도 강조되지 않는다. 빈 시간을 초록으로 칠하면 격자의 80%가 초록이 되고, 정상 상태인 "예약됨"이 빨간 경고처럼 읽힌다.</div>
+    </div>
+    <div class="panel">
+      <div class="h">✓ molroom</div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px">
+        <span style="background:#f5f5f7;color:#6e6e73;padding:4px 10px;border-radius:980px;font-size:12px;border:1px solid #d2d2d7">비어있음 (색 없음)</span>
+        <span style="background:#ffffff;color:#1d1d1f;padding:4px 10px;border-radius:980px;font-size:12px;border:1px solid #d2d2d7">사용중</span>
+        <span class="badge badge-mine" style="height:26px">내 예약</span>
+        <span class="badge badge-attn" style="height:26px">미체크인</span>
+      </div>
+      <div class="t-small" style="color:var(--muted)">유채색 하나(내 것) + 경고색 하나(진짜 예외). 나머지는 중립. 화면을 봤을 때 먼저 읽히는 건 버튼이 아니라 가용성 패턴이다.</div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+// 예약 격자 이벤트 배치 — 실제 앱이 쓸 계산식 그대로.
+// 좌표를 손으로 박지 않는다: 한 번 틀리면 눈으로 잡기 어렵다.
+var GRID_START_MIN = 9 * 60;   // 09:00
+var SLOT_MIN = 30;
+var SLOT_PX = 28;
+var SLOT_COUNT = 12;           // 09:00 ~ 14:30
+
+function toMin(hhmm) {
+  var p = hhmm.split(":");
+  return parseInt(p[0], 10) * 60 + parseInt(p[1], 10);
+}
+function slotIndex(hhmm) {
+  return (toMin(hhmm) - GRID_START_MIN) / SLOT_MIN;
+}
+function place(startHHMM, endHHMM) {
+  var i = slotIndex(startHHMM);
+  var n = slotIndex(endHHMM) - i;
+  // 1px 인셋: 이벤트 테두리가 격자선과 겹쳐 두 겹으로 보이는 것을 막는다
+  return { top: i * SLOT_PX + 1, height: n * SLOT_PX - 2, slots: n };
+}
+
+var ROOMS = {
+  a: [
+    { start: "09:00", end: "10:00", who: "김철수", kind: "other" },
+    // 틴트가 이미 "내 것"을 말한다 — 배지를 겹쳐 붙이지 않는다 (DESIGN.md §4 Badge)
+    // 셀은 주최자만 표시한다. 회의 제목은 내 예약이라도 노출하지 않는다 (DESIGN.md §7)
+    { start: "11:00", end: "12:30", who: "나", kind: "mine" }
+  ],
+  b: [
+    { start: "10:00", end: "10:30", who: "박지현", kind: "other" },
+    { start: "14:00", end: "15:00", who: "선택 중", kind: "sel" }
+  ],
+  c: [
+    { start: "09:00", end: "10:30", who: "이영희", kind: "other", badge: "미체크인", warn: true },
+    { start: "13:00", end: "15:00", who: "전사 주간회의", kind: "other" }
+  ]
+};
+
+Object.keys(ROOMS).forEach(function (roomId) {
+  var col = document.querySelector('.rcol[data-room="' + roomId + '"]');
+  var parts = [];
+  for (var s = 0; s < SLOT_COUNT; s++) {
+    parts.push('<div class="slot' + (s % 2 === 0 ? " hour" : " ") + '"></div>');
+  }
+  ROOMS[roomId].forEach(function (ev) {
+    var pos = place(ev.start, ev.end);
+    var cls = "ev ev-" + ev.kind + (pos.slots < 2 ? " ev-short" : " ");
+    var badge = ev.badge
+      ? ' <span class="badge ' + (ev.warn ? "badge-attn" : "badge-mine") + '">' + ev.badge + "</span>"
+      : " ";
+    var when = '<div class="when">' + ev.start + "–" + ev.end + "</div>";
+    parts.push(
+      '<div class="' + cls + '" style="top:' + pos.top + "px;height:" + pos.height + 'px">' +
+        ev.who + badge + when +
+      "</div>"
+    );
+  });
+  col.innerHTML = parts.join(" ");
+});
+</script>
+</body>
+</html>
