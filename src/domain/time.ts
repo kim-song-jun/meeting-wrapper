@@ -138,6 +138,58 @@ export function canExtend(
   return { ok: true, newEnd };
 }
 
+export type RescheduleResult =
+  | { ok: true; start: Date; end: Date }
+  | { ok: false; reason: "blocked"; blockedBy: Booking }
+  | { ok: false; reason: "too-long"; maxMinutes: number }
+  | { ok: false; reason: "too-short"; minMinutes: number }
+  | { ok: false; reason: "in-past" }
+  | { ok: false; reason: "too-far"; maxDays: number };
+
+/**
+ * 드래그로 예약을 옮기거나 길이를 바꿀 수 있는지.
+ *
+ * canExtend 와 달리 시작 시각도 움직인다 — 그래서 "지난 시간으로 끌어다 놓기",
+ * "선행 예약 한도 넘기기" 까지 막아야 한다. 격자에서 마우스로 하는 조작이라
+ * 사용자가 실수로 이상한 시간에 놓기 쉽고, 그걸 그대로 저장하면 조용히 깨진다.
+ *
+ * 겹침 판정에서 자기 자신은 제외한다(옮기는 중인 그 예약이 자기 원래 자리와
+ * 겹친다고 막으면 아무 데도 못 옮긴다).
+ */
+export function canReschedule(
+  booking: Booking,
+  sameRoomBookings: readonly Booking[],
+  newStart: Date,
+  newEnd: Date,
+  policy: Policy,
+  now: Date,
+): RescheduleResult {
+  const durationMin = (newEnd.getTime() - newStart.getTime()) / MINUTE;
+
+  if (durationMin < policy.slotMinutes) {
+    return { ok: false, reason: "too-short", minMinutes: policy.slotMinutes };
+  }
+  if (durationMin > policy.maxDurationMinutes) {
+    return { ok: false, reason: "too-long", maxMinutes: policy.maxDurationMinutes };
+  }
+  if (newStart.getTime() < now.getTime()) {
+    return { ok: false, reason: "in-past" };
+  }
+  const maxAdvance = new Date(now.getTime() + policy.maxAdvanceDays * 24 * 60 * MINUTE);
+  if (newStart.getTime() > maxAdvance.getTime()) {
+    return { ok: false, reason: "too-far", maxDays: policy.maxAdvanceDays };
+  }
+
+  for (const other of sameRoomBookings) {
+    if (other.id === booking.id) continue;
+    if (overlaps(newStart, newEnd, other.start, other.end)) {
+      return { ok: false, reason: "blocked", blockedBy: other };
+    }
+  }
+
+  return { ok: true, start: newStart, end: newEnd };
+}
+
 /** 단축 가능 여부. 슬롯 하나 아래로는 줄이지 않는다. */
 export function canShorten(booking: Booking, stepMinutes: number, slotMinutes: number): boolean {
   const newDuration = (booking.end.getTime() - booking.start.getTime()) / MINUTE - stepMinutes;

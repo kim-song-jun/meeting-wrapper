@@ -142,10 +142,10 @@
    * 모든 유리 표면은 @supports 로 불투명 폴백을 갖는다. 유리는 장식이지
    * 기능이 아니므로, 안 되는 브라우저에서 깨지면 안 된다.
    */
-  --glass-bg: rgba(255, 255, 255, 0.72);        /* [local] 기본 크롬 */
+  --glass-bg: rgba(255, 255, 255, 0.6);         /* [local] 기본 크롬. 0.72 는 뒤가 거의 안 비쳐 유리로 안 읽혔다 */
   --glass-bg-strong: rgba(255, 255, 255, 0.86); /* [local] 다이얼로그 — 본문이 얹히므로 더 불투명 */
   --glass-bg-tint: rgba(232, 241, 252, 0.78);   /* [local] 내 예약 카드. action tint 기반 */
-  --glass-blur: saturate(180%) blur(20px);      /* [local] */
+  --glass-blur: saturate(180%) blur(24px);      /* [local] 조사한 프로스티 기준값(16~20px)보다 한 단 위 — 반투명도를 낮춘 만큼 흐림을 올린다 */
   --glass-blur-strong: saturate(180%) blur(32px);
   /*
    * rim — 굴절을 포기한 대신(docs/liquid-glass-reference.md) 유리로 읽히게 하는 것은
@@ -162,8 +162,14 @@
    * 로고 색(민트·앰버)은 여기에 풀지 않는다 — 로고는 워드마크 자리에만 둔다.
    * 두 값 모두 Apple 블루에서 왔다: 밝은 쪽은 액션(#0071e3), 깊은 쪽은 링크(#0066cc).
    * 알파를 올리지 말 것 — 올리면 유리 위 텍스트 대비가 떨어진다. */
-  --ambient-blue: rgba(0, 113, 227, 0.10);
-  --ambient-blue-deep: rgba(0, 102, 204, 0.08);
+  /*
+   * 알파를 0.10/0.08 에서 올렸다. 유리가 유리로 보이려면 뒤에 blur 할 것이
+   * 있어야 하는데, 너무 옅으면 흐릴 것이 없어서 크롬이 그냥 흰 판으로 보인다.
+   * 유리 위 텍스트는 --c-secondary 로 올려 두었고(components.css) 여기서 더
+   * 올리면 그 대비가 위험해진다 — 이 값이 상한이다.
+   */
+  --ambient-blue: rgba(0, 113, 227, 0.16);
+  --ambient-blue-deep: rgba(0, 102, 204, 0.13);
 
   /* ================= 예약 격자 (local) ================= */
   --grid-slot-min: 30;

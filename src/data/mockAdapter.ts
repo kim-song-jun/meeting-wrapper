@@ -386,6 +386,23 @@ export const mockAdapter: BookingRepository = {
     return { ok: true, booking: clone(updated) };
   },
 
+  async reschedule(bookingId, newStart, newEnd): Promise<ChangeResult> {
+    await sleep(180);
+    const target = store.find((b) => b.id === bookingId);
+    if (!target) return { ok: false, reason: "error", message: "예약을 찾을 수 없습니다" };
+
+    // 저장 직전 재조회 — 드래그하는 동안 남이 그 자리를 잡았을 수 있다.
+    // 화면이 들고 있던 목록으로 판단하면 조용히 이중 예약이 된다.
+    const blocker = store.find(
+      (b) => b.id !== bookingId && b.roomId === target.roomId && overlaps(newStart, newEnd, b.start, b.end),
+    );
+    if (blocker) return { ok: false, reason: "blocked", by: blocker.organizerName };
+
+    const updated: Booking = { ...target, start: newStart, end: newEnd };
+    store = store.map((b) => (b.id === bookingId ? updated : b));
+    return { ok: true, booking: clone(updated) };
+  },
+
   async cancel(bookingId) {
     await sleep(180);
     store = store.filter((b) => b.id !== bookingId);

@@ -121,7 +121,6 @@
   .grid-controlbar .mr-btn,
   .grid-controlbar .grid-deptchip,
   .grid-controlbar .grid-roomchip,
-  .grid-controlbar .grid-filter-reset,
   .grid-controlbar .mr-input {
     height: 30px;
     font-size: var(--t-small-size);
@@ -359,6 +358,17 @@
 .grid-roomchip:active {
   transform: scale(0.97);
 }
+/* 켜진 칩의 × — 이 칩을 다시 누르면 꺼진다는 것을 보여준다.
+ * 폭이 켜짐/꺼짐에 따라 변하면 칩들이 옆으로 밀리므로 자리는 항상 잡아 둔다. */
+.grid-deptchip__clear {
+  display: inline-block;
+  width: 12px;
+  margin-left: 4px;
+  text-align: center;
+  color: var(--c-action);
+  opacity: 0.6;
+}
+
 .grid-deptchip.is-active,
 .grid-roomchip.is-active {
   border-color: var(--c-action-border);
@@ -367,18 +377,6 @@
   font-weight: 600;
 }
 
-.grid-filter-reset {
-  display: inline-flex;
-  align-items: center;
-  height: var(--h-action);
-  background: none;
-  border: none;
-  padding: 0;
-  color: var(--c-link);
-  text-decoration: underline;
-  font: inherit;
-  cursor: pointer;
-}
 
 /* ---------- 데스크톱/태블릿 격자 (>=768px) ---------- */
 
@@ -405,6 +403,19 @@
   border-top: 1px solid var(--c-border);
   background: var(--c-surface);
 }
+
+/*
+ * 격자 판은 불투명하게 둔다.
+ *
+ * 반투명 + backdrop-filter 로도 만들어 봤지만 실화면에서 **차이가 0** 이었다:
+ * 이 화면은 잠긴 판이라 격자 뒤로 지나가는 것이 없고, 앰비언트는 뷰포트 구석에
+ * 깔려 격자가 덮는 중앙에는 흐릴 것이 거의 없다. 보이지도 않는 합성 레이어를
+ * 하나 더 만들 이유가 없다.
+ *
+ * 이 앱에서 유리가 실제로 보이는 자리는 (1) 콘텐츠 위에 뜨는 다이얼로그·하단 시트,
+ * (2) 격자가 스크롤될 때(작은 창·모바일) 이벤트가 지나가는 sticky 헤더·시간축,
+ * (3) 페이지가 스크롤되는 /me 의 앱바 — 셋 다 "뒤에서 무언가 움직이는" 자리다.
+ */
 
 .grid-table {
   display: grid;
@@ -456,12 +467,17 @@
   }
 
   /*
-   * blur 는 코너에만 건다. 회의실 헤더는 방 수만큼 반복되는 셀이라
-   * 각각에 blur 를 걸면 레이어가 방 수에 비례해 늘어난다
-   * (방 3개 + 앱바 + 시간축 = 6개, 다이얼로그가 열리면 8개).
-   * 헤더는 반투명 배경만으로도 층으로 읽힌다.
+   * 회의실 헤더에도 blur 를 건다.
+   *
+   * 원래는 코너에만 걸었다 — 헤더가 방 수만큼 반복되는 셀이라 레이어가 방 수에
+   * 비례해 늘어난다는 이유였다(그때는 방이 3개). 방이 2개로 줄어 총 레이어가
+   * 코너 + 헤더 2 + 시간축 = 4개이므로 감당할 수 있고, **이 화면에서 유리가 실제로
+   * 보이는 자리는 여기뿐이다** — pane 모드라 페이지가 안 움직이니 앱바 뒤로는
+   * 아무것도 지나가지 않지만, 격자를 스크롤하면 이벤트 블록이 이 헤더 밑을 지난다.
+   * 방을 다시 늘리면 이 결정을 재검토할 것.
    */
-  .grid-corner {
+  .grid-corner,
+  .grid-room-header {
     backdrop-filter: var(--glass-blur);
     -webkit-backdrop-filter: var(--glass-blur);
   }
@@ -586,6 +602,43 @@
   cursor: pointer;
   transition: background-color var(--dur-cell) var(--ease-out), transform var(--dur-hover) var(--ease-out);
 }
+/*
+ * 내 예약은 격자에서 직접 옮길 수 있다 — 잡을 수 있다는 것이 커서로 보여야 한다.
+ * grab/grabbing 은 omd:feel 의 cursor 규칙(드래그 가능 = grab)에 해당한다.
+ */
+.grid-event--editable {
+  cursor: grab;
+}
+.grid-event--editable.is-editing {
+  cursor: grabbing;
+  /* 들려 있는 동안만 그림자를 준다. 격자 셀에 상시 그림자를 깔면 밀도가 무너진다(DESIGN.md §6). */
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.16);
+  z-index: 2;
+}
+
+/* 아래 끝 길이 조절 손잡이. 8px 는 마우스로 조준 가능한 최소치이고,
+ * 블록이 28px 짜리 한 슬롯일 때도 본문(옮기기)을 다 덮지 않는다. */
+.grid-event__resize {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 8px;
+  cursor: ns-resize;
+}
+.grid-event--editable:hover .grid-event__resize::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  bottom: 3px;
+  width: 24px;
+  height: 2px;
+  margin-left: -12px;
+  border-radius: 2px;
+  background: var(--c-action);
+  opacity: 0.5;
+}
+
 /* 누를 때 반응 — 이 앱에서 가장 자주 눌리는 요소인데 지금까지 아무 반응이 없었다.
  * 블록이 이미 좁아 0.97 은 흔들려 보인다. transform 은 absolute 배치에 영향을 주지 않는다. */
 .grid-event:active {

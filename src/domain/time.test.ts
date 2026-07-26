@@ -5,6 +5,7 @@ import {
   gridDayStart,
   gridSlotCount,
   canExtend,
+  canReschedule,
   canShorten,
   isNoShow,
   nextGap,
@@ -143,6 +144,73 @@ describe("canExtend", () => {
   it("자기 자신과는 겹침 판정하지 않는다", () => {
     const mine = booking(10, 0, 11, 0, { isMine: true });
     expect(canExtend(mine, [mine], 15, POLICY).ok).toBe(true);
+  });
+});
+
+describe("canReschedule", () => {
+  const now = at(9, 0);
+
+  it("빈 시간으로 옮길 수 있다", () => {
+    const mine = booking(10, 0, 11, 0, { isMine: true });
+    const r = canReschedule(mine, [mine], at(14, 0), at(15, 0), POLICY, now);
+    expect(r.ok).toBe(true);
+  });
+
+  it("자기 원래 자리와 겹치는 것은 겹침이 아니다", () => {
+    // 이게 틀리면 옮기려는 예약이 자기 자신에 막혀 아무 데도 못 간다.
+    const mine = booking(10, 0, 11, 0, { isMine: true });
+    const r = canReschedule(mine, [mine], at(10, 30), at(11, 30), POLICY, now);
+    expect(r.ok).toBe(true);
+  });
+
+  it("남의 예약과 겹치면 막고 누가 막는지 알려준다", () => {
+    const mine = booking(10, 0, 11, 0, { isMine: true });
+    const other = booking(14, 0, 15, 0, { organizerName: "이영희" });
+    const r = canReschedule(mine, [mine, other], at(14, 30), at(15, 30), POLICY, now);
+    expect(r.ok).toBe(false);
+    if (!r.ok && r.reason === "blocked") {
+      expect(r.blockedBy.organizerName).toBe("이영희");
+    } else {
+      throw new Error("blocked 로 막혀야 한다");
+    }
+  });
+
+  it("맞닿기만 하면 옮길 수 있다", () => {
+    const mine = booking(10, 0, 11, 0, { isMine: true });
+    const other = booking(14, 0, 15, 0);
+    const r = canReschedule(mine, [mine, other], at(13, 0), at(14, 0), POLICY, now);
+    expect(r.ok).toBe(true);
+  });
+
+  it("슬롯 하나보다 짧게 줄이지 못한다", () => {
+    const mine = booking(10, 0, 11, 0, { isMine: true });
+    const r = canReschedule(mine, [mine], at(10, 0), at(10, 15), POLICY, now);
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.reason).toBe("too-short");
+  });
+
+  it("최대 예약 시간을 넘기게 늘리지 못한다", () => {
+    const mine = booking(10, 0, 11, 0, { isMine: true });
+    const r = canReschedule(mine, [mine], at(10, 0), at(15, 0), POLICY, now);
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.reason).toBe("too-long");
+  });
+
+  it("지난 시간으로 끌어다 놓지 못한다", () => {
+    // 격자에서 마우스로 위로 끌면 쉽게 일어난다 — 그대로 저장되면 조용히 깨진다.
+    const mine = booking(10, 0, 11, 0, { isMine: true });
+    const r = canReschedule(mine, [mine], at(8, 0), at(9, 0), POLICY, now);
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.reason).toBe("in-past");
+  });
+
+  it("선행 예약 한도를 넘기게 옮기지 못한다", () => {
+    const mine = booking(10, 0, 11, 0, { isMine: true });
+    const far = new Date(now.getTime() + 40 * 24 * 60 * 60_000);
+    const farEnd = new Date(far.getTime() + 60 * 60_000);
+    const r = canReschedule(mine, [mine], far, farEnd, POLICY, now);
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.reason).toBe("too-far");
   });
 });
 

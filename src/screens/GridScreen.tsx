@@ -7,6 +7,7 @@ import { repo } from "../data";
 import { useAsync } from "../app/useAsync";
 import {
   canExtend,
+  canReschedule,
   canShorten,
   gridDayStart,
   gridSlotCount,
@@ -17,7 +18,7 @@ import {
   slotIndexOf,
   MINUTE,
 } from "../domain/time";
-import type { GridPlacement } from "../domain/time";
+import type { GridPlacement, RescheduleResult } from "../domain/time";
 import type { Booking, Room, UserPrefs } from "../domain/types";
 import "../styles/grid.css";
 
@@ -71,6 +72,22 @@ function sameYMD(a: Date, b: Date): boolean {
 }
 
 const WEEKDAY_LABELS = ["월", "화", "수", "목", "금", "토", "일"] as const;
+
+/** 드래그 수정이 막힌 이유를 원인 + 다음 행동으로 바꾼다 (DESIGN.md §10). */
+function rescheduleMessage(r: Extract<RescheduleResult, { ok: false }>): string {
+  switch (r.reason) {
+    case "blocked":
+      return r.blockedBy.organizerName + "님 예약과 겹쳐요. 빈 시간으로 옮겨주세요.";
+    case "too-long":
+      return "한 번에 " + humanDuration(r.maxMinutes) + "까지 예약할 수 있어요.";
+    case "too-short":
+      return humanDuration(r.minMinutes) + "보다 짧게 줄일 수 없어요.";
+    case "in-past":
+      return "이미 지난 시간으로는 옮길 수 없어요.";
+    case "too-far":
+      return String(r.maxDays) + "일 뒤까지만 예약할 수 있어요.";
+  }
+}
 
 /** 월간 칸 하나에 그리는 일정 칩 최대 개수. 96px 칸에 날짜 + 칩 3개가 들어간다. */
 const MONTH_CHIP_LIMIT = 3;
@@ -222,6 +239,34 @@ interface DragState {
   current: number;
 }
 
+/**
+ * 내 예약을 격자에서 직접 옮기거나(move) 아래 끝을 끌어 길이를 바꾸는(resize) 중의 상태.
+ *
+ * 슬롯 인덱스로만 들고 있는다 — 픽셀로 들고 있으면 placeInGrid 와 계산이 갈라진다.
+ * startSlot/endSlot 은 [시작, 끝) 반열림 구간이다(끝 슬롯은 포함하지 않는다).
+ */
+interface EditDragState {
+  bookingId: string;
+  roomId: string;
+  mode: "move" | "resize";
+  startSlot: number;
+  endSlot: number;
+  /** move 일 때 블록 안 어디를 잡았는지 (슬롯 단위) — 잡은 지점이 커서를 따라오게 한다 */
+  grabOffset: number;
+  /** 저장 실패 시 되돌릴 원래 구간 */
+  originStartSlot: number;
+  originEndSlot: number;
+  /**
+   * 이 예약이 놓인 열(.grid-col)의 화면상 top. 커서 y 를 슬롯으로 바꿀 때 쓴다.
+   *
+   * 슬롯 mouseenter 에 의존하지 않는 이유: 끌고 있는 블록이 커서 밑에 있어서
+   * 아래 슬롯의 mouseenter 가 발생하지 않는다. 블록에 pointer-events: none 을 주면
+   * 이번엔 mouseup 의 클릭 타깃이 슬롯으로 바뀌어 "클릭해서 상세 열기" 가 죽는다.
+   * 그래서 window mousemove + 열 좌표로 직접 계산한다.
+   */
+  colTop: number;
+}
+
 /* ================================================================== */
 
 export function GridScreen() {
@@ -352,12 +397,6 @@ export function GridScreen() {
     activeBookings.length > 0 &&
     !activeBookings.some((b) => b.organizerDepartment === deptFilter);
 
-  const activeFilterCount = deptFilter !== null ? 1 : 0;
-
-  function resetFilters() {
-    setDeptFilter(null);
-  }
-
   function slotToDate(slot: number): Date {
     return new Date(dayStart.getTime() + slot * POLICY.slotMinutes * MINUTE);
   }
@@ -373,11 +412,86 @@ export function GridScreen() {
     null,
   );
 
+  /* ---- 내 예약 드래그 수정 (일간 뷰 전용) ---- */
+  const [edit, setEdit] = useState<EditDragState | null>(null);
+  const editRef = useRef<EditDragState | null>(null);
+  useEffect(() => {
+    editRef.current = edit;
+  }, [edit]);
+  const [editBusy, setEditBusy] = useState(false);
+  /*
+   * 드래그로 옮기거나 늘린 직후의 click 을 한 번 삼킨다.
+   * mouseup 은 같은 요소에서 click 으로 이어지므로, 그냥 두면 옮기고 손을 뗄 때마다
+   * 상세 다이얼로그가 열린다(실제로 끌어보고 발견).
+   */
+  const swallowClickRef = useRef(false);
+  const [editError, setEditError] = useState<string | null>(null);
+
   function startDrag(roomId: string, slot: number) {
     setDrag({ roomId, anchor: slot, current: slot });
   }
   function continueDrag(roomId: string, slot: number) {
     setDrag((d) => (d && d.roomId === roomId ? { ...d, current: slot } : d));
+  }
+
+  function beginEdit(booking: Booking, mode: "move" | "resize", grabSlot: number, colTop: number) {
+    const startSlot = slotIndexOf(booking.start, dayStart, POLICY.slotMinutes);
+    const endSlot = slotIndexOf(booking.end, dayStart, POLICY.slotMinutes);
+    setEditError(null);
+    setEdit({
+      bookingId: booking.id,
+      roomId: booking.roomId,
+      mode,
+      startSlot,
+      endSlot,
+      grabOffset: Math.max(0, grabSlot - startSlot),
+      originStartSlot: startSlot,
+      originEndSlot: endSlot,
+      colTop,
+    });
+  }
+
+  async function commitEdit(e: EditDragState) {
+    // 움직이지 않았으면 저장하지 않는다 — 클릭 한 번이 왕복 요청이 되지 않게.
+    if (e.startSlot === e.originStartSlot && e.endSlot === e.originEndSlot) {
+      setEdit(null);
+      return;
+    }
+    const newStart = slotToDate(e.startSlot);
+    const newEnd = slotToDate(e.endSlot);
+    setEditBusy(true);
+    try {
+      // 저장 직전 재조회 후 도메인 규칙으로 먼저 판단한다(1·2차 방어).
+      const fresh = await repo.listByRoom(e.roomId, newStart);
+      const target = fresh.find((b) => b.id === e.bookingId);
+      const verdict = canReschedule(
+        target ?? { ...(fresh[0] as Booking), id: e.bookingId },
+        fresh,
+        newStart,
+        newEnd,
+        POLICY,
+        new Date(),
+      );
+      if (!verdict.ok) {
+        setEditError(rescheduleMessage(verdict));
+        setEdit(null);
+        return;
+      }
+      const result = await repo.reschedule(e.bookingId, newStart, newEnd);
+      if (!result.ok) {
+        setEditError(
+          result.reason === "blocked"
+            ? "방금 " + result.by + "님이 그 시간을 잡았어요. 다른 시간으로 옮겨주세요."
+            : result.message,
+        );
+      }
+    } catch (err: unknown) {
+      setEditError(err instanceof Error ? err.message : "옮기지 못했어요. 잠시 후 다시 시도해 주세요.");
+    } finally {
+      setEditBusy(false);
+      setEdit(null);
+      bookingsState.reload();
+    }
   }
 
   useEffect(() => {
@@ -390,16 +504,52 @@ export function GridScreen() {
       setDrag(null);
     }
     function onMouseUp() {
+      const e = editRef.current;
+      if (e) {
+        if (e.startSlot !== e.originStartSlot || e.endSlot !== e.originEndSlot) {
+          swallowClickRef.current = true;
+        }
+        void commitEdit(e);
+        return; // 편집 중이던 마우스업은 새 예약 선택으로 이어지지 않는다
+      }
       finalizeDrag();
     }
     function onKeyDown(e: KeyboardEvent) {
-      if (e.key === "Escape" && dragRef.current) {
+      if (e.key !== "Escape") return;
+      if (editRef.current) {
+        setEdit(null); // 되돌린다 — 저장하지 않는다
+        return;
+      }
+      if (dragRef.current) {
         setDrag(null);
       }
     }
+    /*
+     * 편집 중 프리뷰는 커서 y 를 슬롯으로 바꿔 계산한다. 열의 top 은 드래그를 시작할 때
+     * 재 두었다 — 드래그 도중 격자가 스크롤되면 어긋날 수 있지만, 판이 잠겨 있어
+     * (pane 모드) 드래그 중 스크롤이 일어나지 않는다.
+     */
+    function onMouseMove(ev: MouseEvent) {
+      const e = editRef.current;
+      if (!e) return;
+      const slot = Math.floor((ev.clientY - e.colTop) / slotPx);
+      setEdit((cur) => {
+        if (!cur) return cur;
+        if (cur.mode === "resize") {
+          const endSlot = Math.min(slotCount, Math.max(cur.startSlot + 1, slot + 1));
+          return endSlot === cur.endSlot ? cur : { ...cur, endSlot };
+        }
+        const length = cur.endSlot - cur.startSlot;
+        const startSlot = Math.min(Math.max(0, slot - cur.grabOffset), slotCount - length);
+        return startSlot === cur.startSlot ? cur : { ...cur, startSlot, endSlot: startSlot + length };
+      });
+    }
+
+    window.addEventListener("mousemove", onMouseMove);
     window.addEventListener("mouseup", onMouseUp);
     window.addEventListener("keydown", onKeyDown);
     return () => {
+      window.removeEventListener("mousemove", onMouseMove);
       window.removeEventListener("mouseup", onMouseUp);
       window.removeEventListener("keydown", onKeyDown);
     };
@@ -550,24 +700,27 @@ export function GridScreen() {
                 >
                   전체
                 </button>
-                {departments.map((d) => (
-                  <button
-                    key={d}
-                    type="button"
-                    className={cx("grid-deptchip", deptFilter === d && "is-active")}
-                    aria-pressed={deptFilter === d}
-                    onClick={() => setDeptFilter(d)}
-                  >
-                    {d}
-                  </button>
-                ))}
+                {departments.map((d) => {
+                  const on = deptFilter === d;
+                  return (
+                    <button
+                      key={d}
+                      type="button"
+                      className={cx("grid-deptchip", on && "is-active")}
+                      aria-pressed={on}
+                      /* 켜진 칩을 다시 누르면 꺼진다 — 해제하려고 "전체" 를 찾아가지
+                         않아도 되고, 별도 "필터 N개 · 해제" 링크도 필요 없어진다.
+                         해제 방법이 둘이면 어느 쪽이 무엇을 지우는지 헷갈린다. */
+                      onClick={() => setDeptFilter(on ? null : d)}
+                    >
+                      {d}
+                      <span className="grid-deptchip__clear" aria-hidden="true">
+                        {on ? "×" : ""}
+                      </span>
+                    </button>
+                  );
+                })}
               </div>
-            ) : null}
-  
-            {activeFilterCount > 0 ? (
-              <button type="button" className="grid-filter-reset" onClick={resetFilters}>
-                필터 {activeFilterCount}개 · 해제
-              </button>
             ) : null}
           </div>
           <GridViewSwitch active={view} onChange={setView} />
@@ -581,6 +734,21 @@ export function GridScreen() {
       ) : null}
 
       {/* 필터 때문에 비었을 때는 원인과 다음 행동을 말한다. 그냥 빈 격자로 두지 않는다. */}
+      {/* 드래그 수정이 막혔거나 실패했을 때. 조용히 원래 자리로 되돌리면
+          "왜 안 옮겨졌지" 로 남는다 — 사유와 다음 행동을 말한다. */}
+      {editError ? (
+        <div style={{ marginTop: 16 }}>
+          <Alert>
+            {editError}{" "}
+            <button type="button" className="grid-retry" onClick={() => setEditError(null)}>
+              닫기
+            </button>
+          </Alert>
+        </div>
+      ) : null}
+
+      {editBusy ? <p className="mr-state">옮기는 중…</p> : null}
+
       {deptFilterEmptied ? (
         <div style={{ marginTop: 16 }}>
           <Alert>
@@ -696,8 +864,23 @@ export function GridScreen() {
                       ) : null}
 
                       {roomBookings.map((b) => {
-                        const clippedStart = b.start.getTime() < dayStart.getTime() ? dayStart : b.start;
-                        const clippedEnd = b.end.getTime() > dayEnd.getTime() ? dayEnd : b.end;
+                        const beingEdited = edit !== null && edit.bookingId === b.id;
+                        /*
+                         * 드래그 중인 블록은 저장 전 위치(프리뷰)에 그린다. 서버 응답을
+                         * 기다려 그리면 손을 떼고 나서야 움직여 "안 먹었나?" 로 읽힌다.
+                         * 프리뷰 좌표도 placeInGrid 로 만든다 — 손으로 계산하면 실제
+                         * 저장될 시각과 화면이 갈라진다.
+                         */
+                        const clippedStart = beingEdited
+                          ? slotToDate(edit.startSlot)
+                          : b.start.getTime() < dayStart.getTime()
+                            ? dayStart
+                            : b.start;
+                        const clippedEnd = beingEdited
+                          ? slotToDate(edit.endSlot)
+                          : b.end.getTime() > dayEnd.getTime()
+                            ? dayEnd
+                            : b.end;
                         const placement = placeInGrid(
                           clippedStart,
                           clippedEnd,
@@ -708,10 +891,23 @@ export function GridScreen() {
                         return (
                           <GridEventBlock
                             key={b.id}
-                            booking={b}
+                            booking={
+                              beingEdited ? { ...b, start: clippedStart, end: clippedEnd } : b
+                            }
                             placement={placement}
                             now={now}
-                            onSelect={setDetailBooking}
+                            onSelect={(bk) => {
+                              if (swallowClickRef.current) {
+                                swallowClickRef.current = false;
+                                return;
+                              }
+                              setDetailBooking(bk);
+                            }}
+                            onBeginEdit={(bk, mode, grabOffsetSlots, colTop) => {
+                              const startSlot = slotIndexOf(bk.start, dayStart, POLICY.slotMinutes);
+                              beginEdit(bk, mode, startSlot + grabOffsetSlots, colTop);
+                            }}
+                            editing={beingEdited}
                           />
                         );
                       })}
@@ -865,21 +1061,59 @@ function GridEventBlock({
   placement,
   now,
   onSelect,
+  onBeginEdit,
+  editing = false,
 }: {
   booking: Booking;
   placement: GridPlacement;
   now: Date;
   onSelect: (booking: Booking) => void;
+  /**
+   * 내 예약을 드래그로 옮기거나 길이를 바꾸기 시작한다. 넘기지 않으면(주간 뷰 등)
+   * 드래그 수정이 꺼진다 — 주간 뷰는 하루 폭이 좁아 옮길 곳을 조준하기 어렵다.
+   */
+  onBeginEdit?: (
+    booking: Booking,
+    mode: "move" | "resize",
+    grabOffsetSlots: number,
+    colTop: number,
+  ) => void;
+  /** 지금 이 블록을 끌고 있는지 — 커서·그림자로 "들려 있음" 을 표시한다 */
+  editing?: boolean;
 }) {
   const noShow = isNoShow(booking, now, POLICY.checkInGraceMinutes);
   const compact = placement.slots <= 1;
+  const editable = booking.isMine && onBeginEdit !== undefined;
   return (
     <div
       role="button"
       tabIndex={0}
       aria-label={booking.organizerName + " " + hhmm(booking.start) + "~" + hhmm(booking.end)}
-      className={cx("grid-event", booking.isMine ? "grid-event--mine" : "grid-event--other")}
+      className={cx(
+        "grid-event",
+        booking.isMine ? "grid-event--mine" : "grid-event--other",
+        editable && "grid-event--editable",
+        editing && "is-editing",
+      )}
       style={{ top: placement.top, height: placement.height }}
+      onMouseDown={
+        editable
+          ? (e) => {
+              // 슬롯의 mousedown(새 예약 선택 시작)까지 올라가지 않게 막는다
+              e.stopPropagation();
+              e.preventDefault();
+              /*
+               * 블록 안에서 잡은 지점을 슬롯 단위로 넘긴다. 0 으로 고정하면 블록 머리가
+               * 커서 위치로 순간이동해, 가운데를 잡았는데 위로 튀어 오른다.
+               * placement 로 슬롯 높이를 역산한다(별도 prop 을 늘리지 않는다).
+               */
+              const slotH = placement.slots > 0 ? placement.height / placement.slots : 1;
+              const grabOffsetSlots = Math.max(0, Math.floor(e.nativeEvent.offsetY / slotH));
+              const col = e.currentTarget.parentElement;
+              onBeginEdit(booking, "move", grabOffsetSlots, col ? col.getBoundingClientRect().top : 0);
+            }
+          : undefined
+      }
       onClick={() => onSelect(booking)}
       onKeyDown={(e) => {
         if (e.key === "Enter" || e.key === " ") {
@@ -910,6 +1144,25 @@ function GridEventBlock({
           </span>
         </div>
       )}
+
+      {/*
+        아래 끝 손잡이. 블록 전체는 "옮기기" 라서 길이 조절에는 별도 잡을 곳이 필요하다.
+        키보드 사용자는 이 손잡이가 아니라 상세 다이얼로그의 ±15분 버튼을 쓴다 —
+        그래서 aria-hidden 이고 tabIndex 도 주지 않는다(같은 일을 하는 접근 가능한
+        경로가 이미 있다).
+      */}
+      {editable ? (
+        <span
+          className="grid-event__resize"
+          aria-hidden="true"
+          onMouseDown={(e) => {
+            e.stopPropagation();
+            e.preventDefault();
+            const col = e.currentTarget.parentElement?.parentElement;
+            onBeginEdit(booking, "resize", 0, col ? col.getBoundingClientRect().top : 0);
+          }}
+        />
+      ) : null}
     </div>
   );
 }

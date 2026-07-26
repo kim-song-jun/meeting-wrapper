@@ -42,6 +42,15 @@ export interface BookingRepository {
   /** 종료 시각 변경 (연장·단축) */
   changeEnd(bookingId: string, newEnd: Date): Promise<ChangeResult>;
 
+  /**
+   * 시작·종료를 함께 바꾼다 (격자에서 드래그로 옮기거나 길이를 조절할 때).
+   *
+   * changeEnd 와 나눠 둔 이유: 종료만 바꾸는 연장은 시작 시각을 신뢰할 수 있지만,
+   * 옮기기는 시작도 움직여서 "지난 시간으로 이동" 같은 새 실패 경로가 생긴다.
+   * 서버(캘린더) 쪽에서도 patch 필드가 달라진다.
+   */
+  reschedule(bookingId: string, newStart: Date, newEnd: Date): Promise<ChangeResult>;
+
   cancel(bookingId: string): Promise<void>;
 
   /** QR 체크인. extendedProperties.shared.checkedInAt 기록 */
