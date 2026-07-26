@@ -68,7 +68,7 @@
     backdrop-filter: var(--glass-blur);
     -webkit-backdrop-filter: var(--glass-blur);
     border-bottom-color: var(--glass-edge);
-    box-shadow: var(--glass-shadow), inset 0 1px 0 var(--glass-border);
+    box-shadow: var(--glass-shadow), var(--glass-rim);
   }
 }
 
@@ -89,7 +89,12 @@
   font-family: var(--font-sans);
   font-size: var(--t-body-size);
   font-weight: var(--t-title-w);
-  color: var(--c-brand);
+  /*
+   * 워드마크 글자는 중립색으로 둔다. 로고 파랑(#4279BC)은 액션 블루(#0071E3)와
+   * hue 가 210~213도로 거의 같고 채도만 달라서, 나란히 놓이면 "다른 색"이 아니라
+   * "잘못 맞춘 같은 색"으로 읽힌다. 색은 큐브 아이콘에만 남긴다.
+   */
+  color: var(--c-fg);
 }
 
 .mr-appbar__mark {

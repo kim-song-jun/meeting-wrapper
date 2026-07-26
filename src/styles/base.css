@@ -27,6 +27,7 @@ body {
   line-height: var(--t-body-lh);
   font-weight: var(--t-body-w);
   color: var(--c-fg);
+  letter-spacing: var(--ls-body);
   background: var(--c-canvas);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
@@ -110,18 +111,21 @@ a {
   font-size: var(--t-display-size);
   line-height: var(--t-display-lh);
   font-weight: var(--t-display-w);
+  letter-spacing: var(--ls-display);
 }
 .t-section {
   font-family: var(--font-sans);
   font-size: var(--t-section-size);
   line-height: var(--t-section-lh);
   font-weight: var(--t-section-w);
+  letter-spacing: var(--ls-section);
 }
 .t-title {
   font-family: var(--font-sans);
   font-size: var(--t-title-size);
   line-height: var(--t-title-lh);
   font-weight: var(--t-title-w);
+  letter-spacing: var(--ls-title);
 }
 .t-body {
   font-size: var(--t-body-size);
@@ -132,11 +136,13 @@ a {
   font-size: var(--t-small-size);
   line-height: var(--t-small-lh);
   font-weight: var(--t-small-w);
+  letter-spacing: var(--ls-small);
 }
 .t-cap {
   font-size: var(--t-cap-size);
   line-height: var(--t-cap-lh);
   font-weight: var(--t-cap-w);
+  letter-spacing: var(--ls-cap);
 }
 .t-muted {
   color: var(--c-muted);

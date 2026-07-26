@@ -23,29 +23,29 @@
   --c-brand-amber: #FFC006;  /* [logo] 로고 노란 면 */
 
   /* ================= 액션 =================
-   * apple.com 의 채움 CTA 는 #0071e3 + 흰 텍스트다. 실측 대비 4.72:1 로
+   * apple.com 의 채움 CTA 는 #0071e3 + 흰 텍스트다. 실측 대비 4.70:1 로
    * WCAG AA 본문 기준(4.5:1)을 넘는다 — MolCube 팔레트와 달리 그대로 쓸 수 있다.
-   * 링크는 #0066cc (흰 배경 5.56:1). Apple 은 이 둘을 구분해서 쓴다.
+   * 링크는 #0066cc (흰 배경 5.57:1). Apple 은 이 둘을 구분해서 쓴다.
    */
-  --c-action: #0071E3;        /* [apple] marketing primary. 흰 텍스트 4.72:1 */
-  --c-action-hover: #0062C4;  /* [local] Apple 은 hover 를 노출하지 않는다. 같은 색상환에서 어둡게 — 흰 텍스트 5.86:1 */
+  --c-action: #0071E3;        /* [apple] marketing primary. 흰 텍스트 4.70:1 */
+  --c-action-hover: #0062C4;  /* [local] Apple 은 hover 를 노출하지 않는다. 같은 색상환에서 어둡게 — 흰 텍스트 5.93:1 */
   --c-action-tint: #E8F1FC;   /* [local] #0071e3 를 캔버스에 아주 옅게 깐 값 */
   --c-action-border: #B0D2F5; /* [local] tint 와 같은 계열의 경계 */
   --c-on-action: #ffffff;     /* [apple] on-primary */
 
-  --c-link: #0066CC;          /* [apple] light-surface link. 흰 배경 5.56:1 */
+  --c-link: #0066CC;          /* [apple] light-surface link. 흰 배경 5.57:1 */
   --c-link-on-dark: #2997FF;  /* [apple] 다크 섹션 링크 */
 
   /* ================= 중립 ================= */
   --c-canvas: #F5F5F7;        /* [apple] fog canvas. 섹션·푸터 배경 */
   --c-surface: #ffffff;       /* [apple] surface */
-  --c-surface-muted: #E8E8ED; /* [local] canvas 와 surface 사이 한 단 */
+  --c-surface-muted: #E8E8ED; /* [local] canvas(#F5F5F7)보다 한 단 어두운 면. 밝기 순서는 흰 표면 > 캔버스 > 이 값 */
   --c-border: #D2D2D7;        /* [apple] 헤어라인 구분선 */
   --c-border-strong: #C7C7CC; /* [local] 정시선처럼 한 단 진한 구분선 */
 
-  --c-fg: #1D1D1F;            /* [apple] foreground. canvas 위 16.24:1 */
-  --c-secondary: #515154;     /* [apple] HIG 보조 중립. canvas 위 7.86:1 */
-  --c-muted: #6E6E73;         /* [apple] HIG muted. canvas 위 4.58:1 */
+  --c-fg: #1D1D1F;            /* [apple] foreground. canvas 위 15.46:1 */
+  --c-secondary: #515154;     /* [apple] HIG 보조 중립. canvas 위 7.27:1 */
+  --c-muted: #6E6E73;         /* [apple] HIG muted. canvas 위 4.66:1 */
 
   --c-stage: #000000;         /* [apple] brand / dark canvas */
   --c-backdrop: rgba(0, 0, 0, 0.48); /* [local] Apple 오버레이 스크림 관행(#000 ~32-48%) */
@@ -54,13 +54,13 @@
    * 비어있음: 색을 주지 않는다(--c-canvas 그대로). 부재는 강조가 아니다.
    * 남의 예약: 색을 주지 않는다(--c-surface). 정상 상태다.
    */
-  --c-mine-bg: #E8F1FC;      /* [local] action tint. fg 대비 14.86:1 */
-  --c-mine-fg: #0066CC;      /* [apple] link blue. tint 위 4.87:1 */
+  --c-mine-bg: #E8F1FC;      /* [local] action tint */
+  --c-mine-fg: #0066CC;      /* [apple] link blue. tint 위 4.88:1 */
   --c-mine-border: #B0D2F5;  /* [local] */
 
   /* Apple 레퍼런스에는 경고색이 없다 — 시스템 오렌지를 AA 까지 어둡게 잡아 만든다 */
   --c-attn-bg: #FFF3E5;      /* [local] */
-  --c-attn-fg: #8F4B00;      /* [local] tint 위 6.11:1 */
+  --c-attn-fg: #8F4B00;      /* [local] tint 위 6.05:1 */
 
   /* 빨강은 정의하지 않는다. 예약된 방은 오류가 아니다. */
 
@@ -79,12 +79,25 @@
    * 자동 확대(16px 미만) 문제는 없다.
    */
   --t-display-size: 40px; --t-display-lh: 44px; --t-display-w: 600; /* [apple] 섹션 헤드라인 */
-  --t-title-size: 28px;   --t-title-lh: 34px;   --t-title-w: 600;   /* [apple] 서브헤드 */
-  --t-section-size: 21px; --t-section-lh: 28px; --t-section-w: 600; /* [apple] intro */
+  --t-title-size: 28px;   --t-title-lh: 32px;   --t-title-w: 600;   /* [apple] 서브헤드. 헤딩은 tight leading(1.14) */
+  --t-section-size: 21px; --t-section-lh: 26px; --t-section-w: 600; /* [apple] 섹션 헤딩. 1.33 은 본문 leading 이라 헤딩엔 느슨하다 */
   --t-body-size: 17px;    --t-body-lh: 25px;    --t-body-w: 400;    /* [apple] body */
   --t-small-size: 14px;   --t-small-lh: 20px;   --t-small-w: 400;   /* [apple] caption */
   --t-cap-size: 12px;     --t-cap-lh: 16px;     --t-cap-w: 400;     /* [apple] legal */
   --t-label-w: 500;                                                  /* [local] */
+
+  /*
+   * 자간 — apple.com 의 타이포그래피 클래스는 크기별로 음의 트래킹을 준다.
+   * "자간을 조정하지 않는다"(MolCube 판본에서 물려받은 규칙)를 그대로 두면
+   * Apple 특유의 조밀함이 나오지 않는다. 큰 글자일수록 덜 조인다.
+   * 한글(Pretendard)에서도 같은 값을 적용하고 실화면에서 확인했다.
+   */
+  --ls-display: -0.015em;  /* [apple] 40px */
+  --ls-title: -0.01em;     /* [apple] 28px */
+  --ls-section: -0.01em;   /* [apple] 21px */
+  --ls-body: -0.022em;     /* [apple] 17px — apple.com body 트래킹 */
+  --ls-small: -0.016em;    /* [apple] 14px */
+  --ls-cap: -0.01em;       /* [apple] 12px */
 
   /* ================= 지오메트리 =================
    * Apple 의 버튼은 pill 이다 (radius 980px, apple.com 마케팅 CTA 실측).
@@ -129,8 +142,15 @@
   --glass-bg-tint: rgba(232, 241, 252, 0.78);   /* [local] 내 예약 카드. action tint 기반 */
   --glass-blur: saturate(180%) blur(20px);      /* [local] */
   --glass-blur-strong: saturate(180%) blur(32px);
-  --glass-border: rgba(255, 255, 255, 0.65);    /* [local] 위쪽 하이라이트 */
+  /*
+   * rim — 굴절을 포기한 대신(docs/liquid-glass-reference.md) 유리로 읽히게 하는 것은
+   * 이 가장자리다. 광원이 위에 하나이므로 위는 밝고 아래는 어둡다 — 대칭으로 두면
+   * 그냥 반투명 판으로 보인다.
+   */
+  --glass-border: rgba(255, 255, 255, 0.8);     /* [local] 위쪽 하이라이트 */
+  --glass-border-bottom: rgba(0, 0, 0, 0.05);   /* [local] 아래쪽 그늘 — 위와 비대칭 */
   --glass-edge: rgba(23, 23, 23, 0.06);         /* [local] 바깥 경계 */
+  --glass-rim: inset 0 1px 0 var(--glass-border), inset 0 -1px 0 var(--glass-border-bottom);
   --glass-shadow: 0 4px 24px rgba(7, 27, 51, 0.06);
 
   /* 유리가 유리로 보이려면 뒤에 blur 할 것이 있어야 한다.

@@ -59,17 +59,19 @@ MolRoom 에서 **주인공은 일정이다.** 예약 격자가 곧 콘텐츠이�
 
 **로고 안에서만** 쓴다. 앰비언트 배경에도 풀지 않는다.
 
+**워드마크 글자는 중립색(`#1D1D1F`)이다.** 로고 파랑(`#4279BC`)은 액션 블루(`#0071E3`)와 hue 가 210~213도로 거의 같고 채도만 다르다 — 나란히 놓이면 "다른 색"이 아니라 "잘못 맞춘 같은 색"으로 읽힌다. 색은 큐브 아이콘에만 남긴다.
+
 ### 액션
 
-apple.com 의 채움 CTA 는 `#0071e3` + 흰 텍스트다. 실측 대비 **4.72:1** 로 WCAG AA 본문 기준(4.5:1)을 넘는다 — 레퍼런스 값을 그대로 쓸 수 있다. (이전 MolCube 판본은 브랜드 `primary` 가 3.61:1 이라 `a11y` 사유로 벗어나야 했다. 그 제약이 사라졌다.)
+apple.com 의 채움 CTA 는 `#0071e3` + 흰 텍스트다. 실측 대비 **4.70:1** 로 WCAG AA 본문 기준(4.5:1)을 넘는다 — 레퍼런스 값을 그대로 쓸 수 있다. (이전 MolCube 판본은 브랜드 `primary` 가 3.61:1 이라 `a11y` 사유로 벗어나야 했다. 그 제약이 사라졌다.)
 
 | 역할 | 값 | 출처 | 대비 |
 |---|---|---|---|
-| **Action** | `#0071E3` | marketing primary `apple` | 흰 텍스트 4.72:1 |
-| **Action Hover** | `#0062C4` | `local` (Apple 은 hover 를 노출하지 않는다) | 흰 텍스트 5.86:1 |
+| **Action** | `#0071E3` | marketing primary `apple` | 흰 텍스트 4.70:1 |
+| **Action Hover** | `#0062C4` | `local` (Apple 은 hover 를 노출하지 않는다) | 흰 텍스트 5.93:1 |
 | **Action Tint** | `#E8F1FC` | `local` | — |
 | **Action Border** | `#B0D2F5` | `local` | — |
-| **Link** | `#0066CC` | light-surface link `apple` | 흰 배경 5.56:1 |
+| **Link** | `#0066CC` | light-surface link `apple` | 흰 배경 5.57:1 |
 | **Link on Dark** | `#2997FF` | dark-section link `apple` | — |
 
 Apple 은 채움 배경(`#0071e3`)과 링크(`#0066cc`)를 구분해서 쓴다. 섞지 말 것.
@@ -83,9 +85,9 @@ Apple 은 채움 배경(`#0071e3`)과 링크(`#0066cc`)를 구분해서 쓴다. 
 | Surface Muted | `#E8E8ED` `local` | — |
 | Border | `#D2D2D7` | — |
 | Border Strong | `#C7C7CC` `local` | — |
-| Foreground | `#1D1D1F` | 16.24:1 |
-| Secondary | `#515154` | 7.86:1 |
-| Muted | `#6E6E73` | 4.58:1 |
+| Foreground | `#1D1D1F` | 15.46:1 |
+| Secondary | `#515154` | 7.27:1 |
+| Muted | `#6E6E73` | 4.66:1 |
 | Stage (다크) | `#000000` | — |
 
 ### 예약 상태
@@ -94,8 +96,8 @@ Apple 은 채움 배경(`#0071e3`)과 링크(`#0066cc`)를 구분해서 쓴다. 
 |---|---|---|---|
 | **비어있음** | 전용 색 없음. Canvas 그대로 | — | 부재는 색을 요구하지 않는다. 빈 시간에 색을 주면 격자의 80%가 시끄러워진다 |
 | **남의 예약** | Surface + Foreground | — | 정상 상태다. 경고색을 쓰지 않는다 |
-| **내 예약** | 배경 `#E8F1FC` · 강조 `#0066CC` · 보더 `#B0D2F5` | `local` (action tint 계열) | 화면당 하나의 유채색 액센트를 "내 것" 에 배정. 배경 대비 14.86:1 |
-| **주의 (미체크인)** | 배경 `#FFF3E5` · 텍스트 `#8F4B00` | `local` | Apple 레퍼런스에 경고색이 없어 시스템 오렌지를 AA 까지 어둡게 잡았다. tint 위 6.11:1 |
+| **내 예약** | 배경 `#E8F1FC` · 강조 `#0066CC` · 보더 `#B0D2F5` | `local` (action tint 계열) | 화면당 하나의 유채색 액센트를 "내 것" 에 배정. tint 위 강조색 4.88:1 |
+| **주의 (미체크인)** | 배경 `#FFF3E5` · 텍스트 `#8F4B00` | `local` | Apple 레퍼런스에 경고색이 없어 시스템 오렌지를 AA 까지 어둡게 잡았다. tint 위 6.05:1 |
 
 빨강은 정의하지 않는다 — 예약된 방은 오류가 아니다.
 
@@ -106,7 +108,22 @@ Apple 은 채움 배경(`#0071e3`)과 링크(`#0066cc`)를 구분해서 쓴다. 
 - **Sans**: `-apple-system` → `SF Pro Text/Display` → `Pretendard Variable` → system
 - **Mono**: `ui-monospace` → `SF Mono` → `IBM Plex Mono` — 시간 눈금처럼 자릿수가 맞아야 하는 곳
 
-**SF Pro 는 웹에 배포되는 폰트가 아니다.** Apple 기기에서는 `-apple-system` 이 SF Pro 를 그대로 집고, 그 밖의 환경에서는 한글 대응을 위해 Pretendard 로 떨어진다 — 광학적으로 SF 에 가장 가까운 국문 폰트다. 자간은 조정하지 않는다.
+**SF Pro 는 웹에 배포되는 폰트가 아니다.** Apple 기기에서는 `-apple-system` 이 SF Pro 를 그대로 집고, 그 밖의 환경에서는 한글 대응을 위해 Pretendard 로 떨어진다 — 광학적으로 SF 에 가장 가까운 국문 폰트다.
+
+### 자간 `apple`
+
+**크기별로 음의 트래킹을 준다.** apple.com 의 타이포그래피 클래스가 실제로 하는 일이고, 이게 없으면 Apple 특유의 조밀함이 나오지 않는다. 큰 글자일수록 덜 조인다.
+
+| Role | letter-spacing |
+|---|---|
+| Display 40px | `-0.015em` |
+| Title 28px | `-0.01em` |
+| Section 21px | `-0.01em` |
+| Body 17px | `-0.022em` |
+| Body Small 14px | `-0.016em` |
+| Caption 12px | `-0.01em` |
+
+(MolCube 판본에는 "자간을 조정하지 않는다" 규칙이 있었다 — Pretendard 기본값이 한글에 맞춰져 있다는 근거였다. Apple 로 옮기면서 뒤집었고, 한글 화면에서 실제로 확인했다.)
 
 ### 스케일 `apple`
 
@@ -115,8 +132,8 @@ apple.com 의 타입 스케일. 본문이 **17px** 로 일반적인 업무 도�
 | Role | Size | Line | Weight | 쓰는 곳 |
 |---|---:|---:|---:|---|
 | Display | 40px | 44px | 600 | QR 랜딩의 회의실 이름 **한 자리뿐** |
-| Title | 28px | 34px | 600 | 다이얼로그 제목 |
-| Section | 21px | 28px | 600 | 날짜 헤딩, 섹션 |
+| Title | 28px | 32px | 600 | 다이얼로그 제목. 헤딩은 tight leading(1.14) |
+| Section | 21px | 26px | 600 | 날짜 헤딩, 섹션 |
 | Body | 17px | 25px | 400 | 본문·컨트롤·입력 |
 | Body Small | 14px | 20px | 400 | 격자 셀, 보조 정보 |
 | Caption | 12px | 16px | 400 | 시간 눈금, 힌트 |
@@ -134,7 +151,7 @@ apple.com 의 실제 CTA 가 기준이다: pill radius 980px, 높이 44px, 패�
 - Background `#0071E3` `apple` / Text `#FFFFFF` / 보더 없음
 - Radius **980px (pill)** `apple`
 - Padding `11px 21px` `apple` / Height 44px `apple`
-- Font 17px / 400 `apple`
+- Font 17px / **500** `a11y` — Apple 은 400 을 쓰지만 그건 SF Pro 가 깔린 Apple 기기 기준이다. Pretendard 로 떨어지는 환경에서 4.70:1 배경 위 400 흰 글자는 얇게 뭉갠다
 - Hover `#0062C4` `local` / Focus `0 0 0 4px rgba(0,113,227,0.35)` `local`
 - Use: 예약 확정, QR 랜딩의 첫 예약 버튼. **화면당 하나**
 
@@ -210,6 +227,15 @@ opacity 로 흐리지 않는다 — 왜 못 누르는지 알 수 없다.
 
 격자 셀에 그림자를 넣지 말 것 — 24슬롯 × N방에 그림자가 깔리면 밀도가 무너진다.
 
+유리를 유리로 보이게 하는 것은 blur 가 아니라 **rim** 이다. 광원이 위에 하나이므로 위와 아래가 비대칭이어야 한다 — 대칭으로 두면 그냥 반투명 판으로 보인다.
+
+```
+--glass-rim: inset 0 1px 0 rgba(255,255,255,0.8),
+             inset 0 -1px 0 rgba(0,0,0,0.05);
+```
+
+굴절(SVG displacement)은 도입하지 않는다. `backdrop-filter: url(#filter)` 가 Chromium 전용이라 주 사용자인 Safari/iOS 에서 실행되지 않기 때문이다 — 근거와 번복 조건은 `docs/liquid-glass-reference.md`.
+
 유리(Liquid Glass)는 **크롬에만** 쓴다 — 앱바, 다이얼로그, 하단 시트, 격자의 sticky 헤더/시간축. Apple HIG 가 명시하듯 반투명 층은 콘텐츠 위의 기능 층이지 콘텐츠 자체를 덮는 장식이 아니다. 격자 셀과 이벤트 블록은 불투명하게 둔다.
 
 ## 7. Do's and Don'ts
@@ -226,7 +252,6 @@ opacity 로 흐리지 않는다 — 왜 못 누르는지 알 수 없다.
 - `#0066CC` 를 채움 버튼 배경으로 쓰지 않는다 (Apple 은 링크색으로만 쓴다)
 - **로고의 네 색(인디고·파랑·민트·앰버)을 UI 에 풀지 않는다.** 워드마크·파비콘 전용
 - 버튼에 사각형 radius 를 쓰지 않는다
-- 자간을 조정하지 않는다
 - **빈 시간 슬롯에 색을 부여하지 않는다**
 - **예약된 방을 빨강으로 칠하지 않는다.** 정상 상태다
 - **격자 셀에 회의 제목을 노출하지 않는다**

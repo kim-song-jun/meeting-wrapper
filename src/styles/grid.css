@@ -336,7 +336,7 @@
   .grid-room-header {
     background: var(--glass-bg);
     border-bottom: 1px solid var(--glass-edge);
-    box-shadow: inset 0 1px 0 var(--glass-border);
+    box-shadow: var(--glass-rim);
   }
 
   /*

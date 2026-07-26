@@ -4,6 +4,12 @@
 /* ---------- Button ---------- */
 .mr-btn {
   display: inline-flex;
+  /*
+   * [a11y] Apple 의 CTA 는 17px/400 이지만 그건 SF Pro 가 있는 Apple 기기 기준이다.
+   * 우리는 Pretendard 로 떨어지는 환경(Windows·ClearType 포함)이 있고 배경 대비가
+   * 4.70:1 로 AA 하한에 가까워, 400 이면 흰 글자가 얇게 뭉갠다. 500 으로 올린다.
+   */
+  font-weight: var(--t-label-w);
   align-items: center;
   justify-content: center;
   gap: 6px;
@@ -257,7 +263,7 @@
     background: var(--glass-bg-strong);
     backdrop-filter: var(--glass-blur-strong);
     -webkit-backdrop-filter: var(--glass-blur-strong);
-    box-shadow: inset 0 1px 0 var(--glass-border), var(--glass-shadow);
+    box-shadow: var(--glass-rim), var(--glass-shadow);
   }
 }
 
@@ -405,7 +411,7 @@
     background: var(--glass-bg-strong);
     backdrop-filter: var(--glass-blur-strong);
     -webkit-backdrop-filter: var(--glass-blur-strong);
-    box-shadow: inset 0 1px 0 var(--glass-border), var(--glass-shadow), var(--shadow-modal);
+    box-shadow: var(--glass-rim), var(--glass-shadow), var(--shadow-modal);
     border: 1px solid var(--glass-edge);
   }
 }
