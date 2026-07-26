@@ -26,6 +26,15 @@ export interface Booking {
   organizerEmail: string;
   start: Date;
   end: Date;
+  /**
+   * 실제로 모이는 사람 수. 정원 검사의 기준.
+   *
+   * 초대받은 사람 수와 다르다 — 10명이 모이는데 팀장 2명만 초대하는 경우가 흔하다.
+   * 초대 수로 정원을 판단하면 4인실에 10명이 들어간다.
+   * extendedProperties.shared.headcount 에 저장한다.
+   */
+  headcount: number;
+  /** 캘린더 초대를 받은 사람 수 */
   attendeeCount: number;
   conference: Conference | null;
   /** QR 체크인 시각. extendedProperties.shared.checkedInAt */
@@ -39,8 +48,25 @@ export interface BookingDraft {
   title: string;
   start: Date;
   end: Date;
+  /** 모이는 사람 수 (정원 검사용). 초대와 무관하게 항상 받는다. */
+  headcount: number;
   attendeeEmails: string[];
   conference: Conference | null;
+}
+
+/** 사내 구성원. People API 디렉터리 검색 결과 또는 프리셋 팀 구성원. */
+export interface DirectoryPerson {
+  email: string;
+  name: string;
+  /** 부서·직함. 동명이인 구분용. 없을 수 있다. */
+  detail: string | null;
+}
+
+/** 자주 부르는 사람 묶음. teams.json 에서 로드 — API 의존이 없어 항상 동작한다. */
+export interface Team {
+  id: string;
+  name: string;
+  members: DirectoryPerson[];
 }
 
 export interface Policy {

@@ -39,6 +39,7 @@ function booking(startH: number, startM: number, endH: number, endM: number, ove
     organizerEmail: "chulsoo@molcube.com",
     start: at(startH, startM),
     end: at(endH, endM),
+    headcount: 2,
     attendeeCount: 2,
     conference: null,
     checkedInAt: null,

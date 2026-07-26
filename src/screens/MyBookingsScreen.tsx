@@ -171,8 +171,9 @@ function BookingItem({ booking, onCancel }: { booking: Booking; onCancel: () => 
         <div className="mine-item__main">
           <span className="mine-item__room">{room?.name ?? booking.roomId}</span>
           <span className="mine-item__meta t-num">
-            {hhmm(booking.start)}–{hhmm(booking.end)} ({humanDuration(durationMin)}) · 참석자{" "}
-            {booking.attendeeCount}명
+            {hhmm(booking.start)}–{hhmm(booking.end)} ({humanDuration(durationMin)}) · 인원{" "}
+            {booking.headcount}명
+            {booking.attendeeCount > 0 ? " · 초대 " + String(booking.attendeeCount) + "명" : null}
           </span>
           {link ? (
             <a className="mine-item__link" href={link} target="_blank" rel="noreferrer">

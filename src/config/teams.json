@@ -1,0 +1,26 @@
+[
+  {
+    "id": "product",
+    "name": "기획팀",
+    "members": [
+      { "email": "jihyun@molcube.com", "name": "박지현", "detail": "기획팀" },
+      { "email": "younghee@molcube.com", "name": "이영희", "detail": "기획팀 리드" }
+    ]
+  },
+  {
+    "id": "dev",
+    "name": "개발팀",
+    "members": [
+      { "email": "sungjun@molcube.com", "name": "성준", "detail": "개발팀" },
+      { "email": "chulsoo@molcube.com", "name": "김철수", "detail": "개발팀" },
+      { "email": "minji@molcube.com", "name": "최민지", "detail": "개발팀" }
+    ]
+  },
+  {
+    "id": "design",
+    "name": "디자인팀",
+    "members": [
+      { "email": "haeun@molcube.com", "name": "정하은", "detail": "디자인팀" }
+    ]
+  }
+]

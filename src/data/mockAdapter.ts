@@ -1,5 +1,5 @@
 import type { BookingRepository, CreateResult, ChangeResult } from "./BookingRepository";
-import type { Booking, BookingDraft, CurrentUser, UserPrefs } from "../domain/types";
+import type { Booking, BookingDraft, CurrentUser, DirectoryPerson, UserPrefs } from "../domain/types";
 import { overlaps } from "../domain/time";
 import rooms from "../config/rooms.json";
 
@@ -54,6 +54,7 @@ function seed(): Booking[] {
       organizerEmail: "chulsoo@molcube.com",
       start: atOffset(0, 9, 0),
       end: atOffset(0, 10, 0),
+      headcount: 3,
       attendeeCount: 3,
       conference: { kind: "meet", url: "https://meet.google.com/abc-defg-hij" },
       checkedInAt: atOffset(0, 9, 2),
@@ -67,6 +68,8 @@ function seed(): Booking[] {
       organizerEmail: ME.email,
       start: atOffset(0, 11, 0),
       end: atOffset(0, 12, 30),
+      // 8명이 모이지만 초대는 5명만 — 정원 검사가 초대 수와 다른 이유
+      headcount: 8,
       attendeeCount: 5,
       conference: { kind: "zoom", url: "https://zoom.us/j/1234567890" },
       checkedInAt: null,
@@ -80,6 +83,7 @@ function seed(): Booking[] {
       organizerEmail: "jihyun@molcube.com",
       start: atOffset(0, 10, 0),
       end: atOffset(0, 10, 30),
+      headcount: 2,
       attendeeCount: 2,
       conference: null,
       checkedInAt: null,
@@ -94,6 +98,7 @@ function seed(): Booking[] {
       organizerEmail: "younghee@molcube.com",
       start: atOffset(0, 9, 0),
       end: atOffset(0, 10, 30),
+      headcount: 4,
       attendeeCount: 4,
       conference: null,
       checkedInAt: null,
@@ -107,6 +112,7 @@ function seed(): Booking[] {
       organizerEmail: "younghee@molcube.com",
       start: atOffset(0, 13, 0),
       end: atOffset(0, 15, 0),
+      headcount: 18,
       attendeeCount: 18,
       conference: { kind: "meet", url: "https://meet.google.com/xyz-uvwx-yz" },
       checkedInAt: null,
@@ -120,6 +126,7 @@ function seed(): Booking[] {
       organizerEmail: ME.email,
       start: atOffset(1, 14, 0),
       end: atOffset(1, 15, 0),
+      headcount: 6,
       attendeeCount: 6,
       conference: null,
       checkedInAt: null,
@@ -127,6 +134,18 @@ function seed(): Booking[] {
     },
   ];
 }
+
+/** People API 디렉터리 검색을 흉내내는 사내 구성원 목록 */
+const DIRECTORY: DirectoryPerson[] = [
+  { email: "sungjun@molcube.com", name: "성준", detail: "개발팀" },
+  { email: "chulsoo@molcube.com", name: "김철수", detail: "개발팀" },
+  { email: "minji@molcube.com", name: "최민지", detail: "개발팀" },
+  { email: "jihyun@molcube.com", name: "박지현", detail: "기획팀" },
+  { email: "younghee@molcube.com", name: "이영희", detail: "기획팀 리드" },
+  { email: "haeun@molcube.com", name: "정하은", detail: "디자인팀" },
+  { email: "dongwook@molcube.com", name: "한동욱", detail: "영업팀" },
+  { email: "seoyeon@molcube.com", name: "임서연", detail: "인사팀" },
+];
 
 let store: Booking[] = seed();
 let prefs: UserPrefs = { defaultZoomUrl: "https://zoom.us/j/1234567890" };
@@ -182,6 +201,7 @@ export const mockAdapter: BookingRepository = {
       organizerEmail: ME.email,
       start: draft.start,
       end: draft.end,
+      headcount: draft.headcount,
       attendeeCount: draft.attendeeEmails.length,
       conference: draft.conference,
       checkedInAt: null,
@@ -225,5 +245,14 @@ export const mockAdapter: BookingRepository = {
   async savePrefs(next) {
     await sleep(100);
     prefs = { ...next };
+  },
+
+  async searchDirectory(query) {
+    await sleep(120);
+    const q = query.trim().toLowerCase();
+    if (q.length < 1) return [];
+    return DIRECTORY.filter(
+      (p) => p.name.toLowerCase().includes(q) || p.email.toLowerCase().includes(q),
+    ).slice(0, 8);
   },
 };

@@ -1,4 +1,4 @@
-import type { Booking, BookingDraft, CurrentUser, UserPrefs } from "../domain/types";
+import type { Booking, BookingDraft, CurrentUser, DirectoryPerson, UserPrefs } from "../domain/types";
 
 /**
  * 화면과 데이터 계층 사이의 유일한 경계.
@@ -34,6 +34,18 @@ export interface BookingRepository {
 
   getPrefs(): Promise<UserPrefs>;
   savePrefs(prefs: UserPrefs): Promise<void>;
+
+  /**
+   * 사내 구성원 이름/이메일 부분 검색 (참석자 자동완성).
+   *
+   * 구현: People API people.searchDirectoryPeople 을 사용자 본인 토큰으로 호출한다
+   * (scope: directory.readonly, 브라우저에서 직접 호출 가능, 관리자 권한 불필요).
+   *
+   * 관리자가 Admin console > Directory > Directory settings 에서 디렉터리 공개를
+   * 꺼두면 에러가 아니라 **빈 배열**이 온다. 호출부는 이 경우를 실패가 아니라
+   * "자동완성 없음"으로 다루고 자유 입력으로 넘어가야 한다.
+   */
+  searchDirectory(query: string): Promise<DirectoryPerson[]>;
 }
 
 export type CreateResult =

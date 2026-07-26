@@ -3,7 +3,8 @@ import { Alert, Button, Dialog, Field } from "../components/ui";
 import { POLICY, roomById } from "../app/config";
 import { repo } from "../data";
 import { hhmm, humanDuration, validateDraft, MINUTE } from "../domain/time";
-import type { Booking, Conference, UserPrefs } from "../domain/types";
+import type { Booking, Conference, DirectoryPerson, UserPrefs } from "../domain/types";
+import { AttendeePicker } from "./AttendeePicker";
 
 const PROBLEM_TEXT: Record<string, string> = {
   "too-long": "한 번에 " + humanDuration(POLICY.maxDurationMinutes) + "까지 예약할 수 있어요",
@@ -26,7 +27,9 @@ export interface BookingDialogProps {
 export function BookingDialog({ roomId, start, end, prefs, onClose, onCreated }: BookingDialogProps) {
   const room = roomById(roomId);
   const [title, setTitle] = useState("");
-  const [attendees, setAttendees] = useState("");
+  const [headcount, setHeadcount] = useState(2);
+  const [invitees, setInvitees] = useState<DirectoryPerson[]>([]);
+  const [invitesOpen, setInvitesOpen] = useState(false);
   const [vc, setVc] = useState<VcKind>("meet");
   const [zoomUrl, setZoomUrl] = useState(prefs.defaultZoomUrl ?? "");
   const [saveZoom, setSaveZoom] = useState(true);
@@ -35,6 +38,8 @@ export function BookingDialog({ roomId, start, end, prefs, onClose, onCreated }:
 
   const problems = validateDraft({ start, end }, POLICY, new Date());
   const durationMin = (end.getTime() - start.getTime()) / MINUTE;
+  // 정원 초과는 예약을 막지 않고 경고만 한다 — 옆방이 없어 그냥 껴 앉는 경우가 있다
+  const capacityOver = room !== null && headcount > room.capacity;
   const zoomMissing = vc === "zoom" && zoomUrl.trim().length === 0;
   const blocked = problems.length > 0 || zoomMissing;
 
@@ -53,10 +58,8 @@ export function BookingDialog({ roomId, start, end, prefs, onClose, onCreated }:
         title: title.trim().length > 0 ? title.trim() : "회의",
         start,
         end,
-        attendeeEmails: attendees
-          .split(/[,\s]+/)
-          .map((s) => s.trim())
-          .filter((s) => s.length > 0),
+        headcount,
+        attendeeEmails: invitees.map((p) => p.email),
         conference,
       });
 
@@ -133,14 +136,50 @@ export function BookingDialog({ roomId, start, end, prefs, onClose, onCreated }:
         />
       </div>
 
+      {/* 인원은 항상 받는다 — 정원 검사의 기준이고, 초대와는 다른 값이다.
+          ± 스테퍼라 QR 모바일에서 타이핑 없이 정할 수 있다. */}
       <div style={{ marginTop: 16 }}>
-        <Field
-          label="참석자"
-          placeholder="name@molcube.com, name2@molcube.com"
-          value={attendees}
-          onChange={(e) => setAttendees(e.target.value)}
-          hint="쉼표로 구분. 초대장과 캘린더 알림이 자동으로 갑니다"
-        />
+        <span className="mr-field__label">인원</span>
+        <div className="mr-stepper">
+          {/* 함수형 업데이터를 쓴다. setHeadcount(headcount + 1) 로 하면 연타할 때
+              같은 렌더의 옛 값을 읽어 증가분이 유실된다 (실제로 4번 눌러 +1만 됨). */}
+          <Button
+            variant="compact-quiet"
+            onClick={() => setHeadcount((n) => Math.max(1, n - 1))}
+            disabled={headcount <= 1}
+            aria-label="인원 줄이기"
+          >
+            −
+          </Button>
+          <span className="mr-stepper__value">{headcount}명</span>
+          <Button
+            variant="compact-quiet"
+            onClick={() => setHeadcount((n) => n + 1)}
+            aria-label="인원 늘리기"
+          >
+            +
+          </Button>
+          <span className={capacityOver ? "mr-stepper__note--warn" : "mr-stepper__note"}>
+            {capacityOver
+              ? String(room?.capacity ?? 0) + "인실이라 자리가 부족해요"
+              : String(room?.capacity ?? 0) + "인실 · 여유 있음"}
+          </span>
+        </div>
+      </div>
+
+      {/* 초대는 선택. 접어두면 QR 예약이 두 번 탭으로 끝난다. */}
+      <div style={{ marginTop: 16 }}>
+        {invitesOpen ? (
+          <>
+            <span className="mr-field__label">참석자 초대 (선택)</span>
+            <AttendeePicker selected={invitees} onChange={setInvitees} />
+            <p className="mr-field__hint">초대장과 캘린더 알림이 자동으로 갑니다</p>
+          </>
+        ) : (
+          <button type="button" className="mr-disclosure" onClick={() => setInvitesOpen(true)}>
+            참석자 초대하기 (선택)
+          </button>
+        )}
       </div>
 
       <fieldset style={{ marginTop: 16, border: "none", padding: 0, margin: "16px 0 0" }}>

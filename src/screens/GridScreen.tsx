@@ -571,7 +571,11 @@ function EventDetail({
           ) : null}
         </div>
 
-        <p className="t-small t-muted">참석자 {booking.attendeeCount}명</p>
+        {/* 인원(모이는 사람)과 초대(알림 받는 사람)는 다른 값이다 */}
+        <p className="t-small t-muted">
+          인원 {booking.headcount}명
+          {booking.attendeeCount > 0 ? " · 초대 " + String(booking.attendeeCount) + "명" : null}
+        </p>
 
         {booking.conference ? (
           booking.conference.url ? (
