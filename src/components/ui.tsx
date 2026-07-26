@@ -70,6 +70,53 @@ export function Field({ label, hint, hintTone = "muted", id, ...rest }: FieldPro
   );
 }
 
+/* ---------------- RadioGroup ---------------- */
+
+export interface RadioOption<T extends string> {
+  value: T;
+  label: string;
+}
+
+/**
+ * 네이티브 라디오 위에 커스텀 도트를 얹는다 — 브라우저 기본 동그라미 대신
+ * Apple 지오메트리(pill)와 액션 색을 쓴다. input 은 시각적으로 숨기되
+ * DOM 에 남겨 스크린리더·키보드 포커스·클릭 위임(label 이 감싼다)이 그대로 동작한다.
+ */
+export function RadioGroup<T extends string>({
+  name,
+  legend,
+  options,
+  value,
+  onChange,
+}: {
+  name: string;
+  legend: string;
+  options: readonly RadioOption<T>[];
+  value: T;
+  onChange: (value: T) => void;
+}) {
+  return (
+    <fieldset className="mr-radiogroup">
+      <legend className="mr-field__label">{legend}</legend>
+      <div className="mr-radiogroup__options">
+        {options.map((opt) => (
+          <label key={opt.value} className="mr-radio">
+            <input
+              type="radio"
+              name={name}
+              className="mr-radio__input"
+              checked={value === opt.value}
+              onChange={() => onChange(opt.value)}
+            />
+            <span className="mr-radio__dot" aria-hidden="true" />
+            <span className="mr-radio__label">{opt.label}</span>
+          </label>
+        ))}
+      </div>
+    </fieldset>
+  );
+}
+
 /* ---------------- Card ---------------- */
 
 export function Card({
@@ -336,8 +383,16 @@ export function Dialog({
 /* ---------------- Alert ---------------- */
 
 export function Alert({ tone = "warn", children }: { tone?: "warn" | "info"; children: ReactNode }) {
+  /*
+   * warn 은 사용자의 행동을 막은 결과(예약 실패·로그인 실패)라 즉시 읽혀야 하므로
+   * role="alert"(assertive). info 는 맥락 안내일 뿐이라 polite 로 둔다 —
+   * 안내까지 assertive 로 하면 스크린리더가 읽던 문장을 계속 끊는다.
+   */
   return (
-    <div className={cx("mr-alert", tone === "info" && "mr-alert--info")} role="status">
+    <div
+      className={cx("mr-alert", tone === "info" && "mr-alert--info")}
+      role={tone === "warn" ? "alert" : "status"}
+    >
       {children}
     </div>
   );

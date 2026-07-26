@@ -43,24 +43,24 @@ export function RecurrenceResult({ totalRequested, booked, rejected, onConfirm }
 
   return (
     <Dialog title="반복 예약 결과" onClose={onConfirm} actions={<Button onClick={onConfirm}>확인</Button>}>
-      <div style={{ marginTop: 16 }}>
+      <div className="mr-form">
         <Alert>{summary}</Alert>
-      </div>
 
-      {rejected.length > 0 ? (
-        <div style={{ marginTop: 16 }}>
-          <span className="mr-field__label">예약하지 못한 회차</span>
-          <ul className="mr-recur-fail__list">
-            {rejected.map((r) => (
-              <li key={r.start.toISOString()} className="mr-recur-fail__item">
-                <span className="t-num">{formatOccurrenceDate(r.start) + " " + hhmm(r.start)}</span>
-                <span className="mr-recur-fail__reason">{" — " + r.reason}</span>
-              </li>
-            ))}
-          </ul>
-          <p className="mr-field__hint">실패한 회차는 개별로 다시 잡아주세요</p>
-        </div>
-      ) : null}
+        {rejected.length > 0 ? (
+          <div>
+            <span className="mr-field__label">예약하지 못한 회차</span>
+            <ul className="mr-recur-fail__list">
+              {rejected.map((r) => (
+                <li key={r.start.toISOString()} className="mr-recur-fail__item">
+                  <span className="t-num">{formatOccurrenceDate(r.start) + " " + hhmm(r.start)}</span>
+                  <span className="mr-recur-fail__reason">{" — " + r.reason}</span>
+                </li>
+              ))}
+            </ul>
+            <p className="mr-field__hint">실패한 회차는 개별로 다시 잡아주세요</p>
+          </div>
+        ) : null}
+      </div>
     </Dialog>
   );
 }

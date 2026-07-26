@@ -101,14 +101,54 @@
 .mr-appbar__nav {
   display: flex;
   gap: 20px;
+  flex: 1;
+}
+
+/* 계정 클러스터 — .mr-appbar__nav 가 flex:1 로 밀어내 우측 끝에 붙는다 */
+.mr-appbar__account {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.mr-appbar__email {
+  color: var(--c-muted);
+  white-space: nowrap;
+}
+
+/*
+ * 로그아웃은 앱바가 모바일에서도 그대로 보이므로 44px 터치 타깃을 지켜야 한다.
+ * .mr-navlink 는 padding: 6px 0 뿐이라 실측 ~32px 로 하한을 밑돈다.
+ * 앱바 높이(56px) 안에 들어가야 하므로 높이를 키우는 대신 min-height 로 히트
+ * 영역만 확보하고 좌우 패딩을 준다 — 시각 크기는 그대로 둔다.
+ */
+.mr-appbar__signout {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--h-action);
+  padding: 0 4px;
+  background: none;
+  border: none;
+  cursor: pointer;
+}
+
+@media (max-width: 767px) {
+  .mr-appbar__email {
+    display: none;
+  }
 }
 
 .mr-navlink {
   color: var(--c-muted);
   text-decoration: none;
+  font-family: var(--font-sans);
   font-size: var(--t-small-size);
   line-height: var(--t-small-lh);
   padding: 6px 0;
+  /* <button class="mr-navlink"> (로그아웃)도 재사용하므로 버튼 기본 크롬을 지운다 */
+  background: none;
+  border: none;
+  cursor: pointer;
 }
 .mr-navlink.active {
   color: var(--c-action);

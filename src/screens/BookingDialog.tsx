@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Alert, Button, Dialog, Field } from "../components/ui";
+import { Alert, Button, Dialog, Field, RadioGroup } from "../components/ui";
 import { POLICY, roomById } from "../app/config";
 import { repo } from "../data";
 import { hhmm, humanDuration, validateDraft, MINUTE } from "../domain/time";
@@ -188,19 +188,11 @@ export function BookingDialog({ roomId, start, end, prefs, onClose, onCreated }:
         </>
       }
     >
-      {problems.length > 0 ? (
-        <div style={{ marginTop: 16 }}>
-          <Alert>{problems.map((p) => PROBLEM_TEXT[p.code]).join(" · ")}</Alert>
-        </div>
-      ) : null}
+      <div className="mr-form">
+        {problems.length > 0 ? <Alert>{problems.map((p) => PROBLEM_TEXT[p.code]).join(" · ")}</Alert> : null}
 
-      {failure ? (
-        <div style={{ marginTop: 16 }}>
-          <Alert>{failure}</Alert>
-        </div>
-      ) : null}
+        {failure ? <Alert>{failure}</Alert> : null}
 
-      <div style={{ marginTop: 16 }}>
         <Field
           label="회의 제목"
           placeholder="주간 기획회의"
@@ -208,144 +200,124 @@ export function BookingDialog({ roomId, start, end, prefs, onClose, onCreated }:
           onChange={(e) => setTitle(e.target.value)}
           hint="격자에는 주최자만 보이고 제목은 표시되지 않아요"
         />
-      </div>
 
-      {/* 인원은 항상 받는다 — 정원 검사의 기준이고, 초대와는 다른 값이다.
-          ± 스테퍼라 QR 모바일에서 타이핑 없이 정할 수 있다. */}
-      <div style={{ marginTop: 16 }}>
-        <span className="mr-field__label">인원</span>
-        <div className="mr-stepper">
-          {/* 함수형 업데이터를 쓴다. setHeadcount(headcount + 1) 로 하면 연타할 때
-              같은 렌더의 옛 값을 읽어 증가분이 유실된다 (실제로 4번 눌러 +1만 됨).
-              secondary(44px)를 쓰는 이유: 이 다이얼로그는 모바일 QR 랜딩에서도 열린다.
-              compact(36px)는 DESIGN.md §4 가 "데스크톱 격자 인접 컨텍스트에서만" 으로
-              못박은 값이고, 모바일 터치 타깃 하한(44px)을 밑돈다. */}
-          <Button
-            variant="secondary"
-            onClick={() => setHeadcount((n) => Math.max(1, n - 1))}
-            disabled={headcount <= 1}
-            aria-label="인원 줄이기"
-          >
-            −
-          </Button>
-          <span className="mr-stepper__value">{headcount}명</span>
-          <Button
-            variant="secondary"
-            onClick={() => setHeadcount((n) => n + 1)}
-            aria-label="인원 늘리기"
-          >
-            +
-          </Button>
-          <span className={capacityOver ? "mr-stepper__note--warn" : "mr-stepper__note"}>
-            {capacityOver
-              ? String(room?.capacity ?? 0) + "인실이라 자리가 부족해요"
-              : String(room?.capacity ?? 0) + "인실 · 여유 있음"}
-          </span>
+        {/* 인원은 항상 받는다 — 정원 검사의 기준이고, 초대와는 다른 값이다.
+            ± 스테퍼라 QR 모바일에서 타이핑 없이 정할 수 있다. */}
+        <div>
+          <span className="mr-field__label">인원</span>
+          <div className="mr-stepper">
+            {/* 함수형 업데이터를 쓴다. setHeadcount(headcount + 1) 로 하면 연타할 때
+                같은 렌더의 옛 값을 읽어 증가분이 유실된다 (실제로 4번 눌러 +1만 됨).
+                secondary(44px)를 쓰는 이유: 이 다이얼로그는 모바일 QR 랜딩에서도 열린다.
+                compact(36px)는 DESIGN.md §4 가 "데스크톱 격자 인접 컨텍스트에서만" 으로
+                못박은 값이고, 모바일 터치 타깃 하한(44px)을 밑돈다. */}
+            <Button
+              variant="secondary"
+              onClick={() => setHeadcount((n) => Math.max(1, n - 1))}
+              disabled={headcount <= 1}
+              aria-label="인원 줄이기"
+            >
+              −
+            </Button>
+            <span className="mr-stepper__value">{headcount}명</span>
+            <Button
+              variant="secondary"
+              onClick={() => setHeadcount((n) => n + 1)}
+              aria-label="인원 늘리기"
+            >
+              +
+            </Button>
+            <span className={capacityOver ? "mr-stepper__note--warn" : "mr-stepper__note"}>
+              {capacityOver
+                ? String(room?.capacity ?? 0) + "인실이라 자리가 부족해요"
+                : String(room?.capacity ?? 0) + "인실 · 여유 있음"}
+            </span>
+          </div>
         </div>
-      </div>
 
-      {/* 초대는 선택. 접어두면 QR 예약이 두 번 탭으로 끝난다. */}
-      <div style={{ marginTop: 16 }}>
-        {invitesOpen ? (
-          <>
-            <span className="mr-field__label">참석자 초대 (선택)</span>
-            <AttendeePicker selected={invitees} onChange={setInvitees} />
-            <p className="mr-field__hint">초대장과 캘린더 알림이 자동으로 갑니다</p>
-          </>
-        ) : (
-          <button type="button" className="mr-disclosure" onClick={() => setInvitesOpen(true)}>
-            참석자 초대하기 (선택)
-          </button>
-        )}
-      </div>
+        {/* 초대는 선택. 접어두면 QR 예약이 두 번 탭으로 끝난다. */}
+        <div>
+          {invitesOpen ? (
+            <>
+              <span className="mr-field__label">참석자 초대 (선택)</span>
+              <AttendeePicker selected={invitees} onChange={setInvitees} />
+              <p className="mr-field__hint">초대장과 캘린더 알림이 자동으로 갑니다</p>
+            </>
+          ) : (
+            <button type="button" className="mr-disclosure" onClick={() => setInvitesOpen(true)}>
+              참석자 초대하기 (선택)
+            </button>
+          )}
+        </div>
 
-      {/* 반복도 선택. 접어두면 단발 예약 흐름이 그대로 유지된다. */}
-      <div style={{ marginTop: 16 }}>
-        {recurrenceOpen ? (
-          <fieldset style={{ border: "none", padding: 0, margin: 0 }}>
-            <legend className="mr-field__label" style={{ padding: 0 }}>
-              반복 (선택)
-            </legend>
-            {(
-              [
-                ["none", "없음"],
-                ["weekly", FREQ_LABEL.weekly],
-                ["biweekly", FREQ_LABEL.biweekly],
-                ["monthly-nth-weekday", FREQ_LABEL["monthly-nth-weekday"]],
-              ] as const
-            ).map(([value, label]) => (
-              <label key={value} className="mr-row" style={{ gap: 8, padding: "4px 0" }}>
-                <input
-                  type="radio"
-                  name="molroom-recurrence-freq"
-                  checked={freq === value}
-                  onChange={() => setFreq(value)}
-                />
-                <span>{label}</span>
-              </label>
-            ))}
+        {/* 반복도 선택. 접어두면 단발 예약 흐름이 그대로 유지된다. */}
+        <div>
+          {recurrenceOpen ? (
+            <>
+              <RadioGroup
+                name="molroom-recurrence-freq"
+                legend="반복 (선택)"
+                value={freq}
+                onChange={setFreq}
+                options={[
+                  { value: "none", label: "없음" },
+                  { value: "weekly", label: FREQ_LABEL.weekly },
+                  { value: "biweekly", label: FREQ_LABEL.biweekly },
+                  { value: "monthly-nth-weekday", label: FREQ_LABEL["monthly-nth-weekday"] },
+                ]}
+              />
 
-            {recurrence !== null ? (
-              <div style={{ marginTop: 8 }}>
-                <label className="mr-field" htmlFor="molroom-recurrence-count">
-                  <span className="mr-field__label">횟수</span>
-                  <select
-                    id="molroom-recurrence-count"
-                    className="mr-input"
-                    value={count}
-                    onChange={(e) => setCount(Number(e.target.value))}
-                  >
-                    {Array.from({ length: MAX_OCCURRENCES }, (_, i) => i + 1).map((n) => (
-                      <option key={n} value={n}>
-                        {n}회
-                      </option>
-                    ))}
-                  </select>
-                </label>
+              {recurrence !== null ? (
+                <div className="mr-subsection">
+                  <label className="mr-field" htmlFor="molroom-recurrence-count">
+                    <span className="mr-field__label">횟수</span>
+                    <select
+                      id="molroom-recurrence-count"
+                      className="mr-input"
+                      value={count}
+                      onChange={(e) => setCount(Number(e.target.value))}
+                    >
+                      {Array.from({ length: MAX_OCCURRENCES }, (_, i) => i + 1).map((n) => (
+                        <option key={n} value={n}>
+                          {n}회
+                        </option>
+                      ))}
+                    </select>
+                  </label>
 
-                <p className="mr-field__hint">{describeRecurrence(start, recurrence)}</p>
+                  <p className="mr-field__hint">{describeRecurrence(start, recurrence)}</p>
 
-                {advanceExceeded ? (
-                  <div style={{ marginTop: 8 }}>
-                    <Alert>
-                      {"마지막 회차가 " + String(POLICY.maxAdvanceDays) + "일 선행 예약 한도를 넘어요. 횟수를 줄이거나 반복 주기를 바꿔 주세요."}
-                    </Alert>
-                  </div>
-                ) : null}
-              </div>
-            ) : null}
-          </fieldset>
-        ) : (
-          <button type="button" className="mr-disclosure" onClick={() => setRecurrenceOpen(true)}>
-            반복 설정하기 (선택)
-          </button>
-        )}
-      </div>
+                  {advanceExceeded ? (
+                    <div className="mr-subsection">
+                      <Alert>
+                        {"마지막 회차가 " + String(POLICY.maxAdvanceDays) + "일 선행 예약 한도를 넘어요. 횟수를 줄이거나 반복 주기를 바꿔 주세요."}
+                      </Alert>
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
+            </>
+          ) : (
+            <button type="button" className="mr-disclosure" onClick={() => setRecurrenceOpen(true)}>
+              반복 설정하기 (선택)
+            </button>
+          )}
+        </div>
 
-      <fieldset style={{ marginTop: 16, border: "none", padding: 0, margin: "16px 0 0" }}>
-        <legend className="mr-field__label" style={{ padding: 0 }}>
-          화상회의
-        </legend>
-        {(
-          [
-            ["none", "없음"],
-            ["meet", "Google Meet 자동 생성"],
-            ["zoom", "Zoom"],
-          ] as const
-        ).map(([value, label]) => (
-          <label key={value} className="mr-row" style={{ gap: 8, padding: "4px 0" }}>
-            <input
-              type="radio"
-              name="molroom-vc"
-              checked={vc === value}
-              onChange={() => setVc(value)}
-            />
-            <span>{label}</span>
-          </label>
-        ))}
+        <RadioGroup
+          name="molroom-vc"
+          legend="화상회의"
+          value={vc}
+          onChange={setVc}
+          options={[
+            { value: "none", label: "없음" },
+            { value: "meet", label: "Google Meet 자동 생성" },
+            { value: "zoom", label: "Zoom" },
+          ]}
+        />
 
         {vc === "zoom" ? (
-          <div style={{ marginTop: 6 }}>
+          <div className="mr-subsection">
             <input
               className="mr-input"
               placeholder="https://zoom.us/j/..."
@@ -367,7 +339,7 @@ export function BookingDialog({ roomId, start, end, prefs, onClose, onCreated }:
             {zoomMissing ? <p className="mr-field__hint mr-field__hint--warn">Zoom 링크를 입력해 주세요</p> : null}
           </div>
         ) : null}
-      </fieldset>
+      </div>
     </Dialog>
   );
 }

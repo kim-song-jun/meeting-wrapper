@@ -2,21 +2,29 @@ import { NavLink, Route, Routes } from "react-router-dom";
 import { GridScreen } from "./screens/GridScreen";
 import { RoomLandingScreen } from "./screens/RoomLandingScreen";
 import { MyBookingsScreen } from "./screens/MyBookingsScreen";
+import { LoginScreen } from "./screens/LoginScreen";
+import { AuthProvider, useAuth } from "./auth/AuthProvider";
+import { RequireAuth } from "./auth/RequireAuth";
+import { BrandMark } from "./auth/BrandMark";
 
-/** MolCube 로고 마크. index.html 파비콘과 같은 아이소메트릭 큐브를 JSX 로 재작성. */
-function BrandMark() {
+/**
+ * 앱바 우측 계정 클러스터. 이메일은 정보 표시 전용(클릭 불가), 로그아웃은
+ * 기존 .mr-navlink 스타일을 재사용한다(새 클래스 불필요).
+ * /r/:roomId(QR 랜딩)는 이 Shell 을 쓰지 않으므로 여기 나타나지 않는다 —
+ * 그 화면은 의도적으로 최소 크롬을 유지한다(DESIGN.md §13).
+ */
+function AccountCluster() {
+  const auth = useAuth();
+  if (auth.status !== "signed-in" || !auth.user) return null;
   return (
-    <svg
-      className="mr-appbar__mark"
-      width="20"
-      height="20"
-      viewBox="0 0 100 100"
-      aria-hidden="true"
-    >
-      <polygon points="50,6 90,28 50,50 10,28" fill="#73FEDD" stroke="#202362" strokeWidth="5" strokeLinejoin="round" />
-      <polygon points="10,28 50,50 50,94 10,72" fill="#4279BC" stroke="#202362" strokeWidth="5" strokeLinejoin="round" />
-      <polygon points="90,28 50,50 50,94 90,72" fill="#FFC006" stroke="#202362" strokeWidth="5" strokeLinejoin="round" />
-    </svg>
+    <span className="mr-appbar__account">
+      <span className="t-cap mr-appbar__email">
+        {auth.user.name} · {auth.user.email}
+      </span>
+      <button type="button" className="mr-navlink mr-appbar__signout" onClick={() => void auth.signOut()}>
+        로그아웃
+      </button>
+    </span>
   );
 }
 
@@ -31,7 +39,7 @@ function Shell({ children, pane = false }: { children: React.ReactNode; pane?: b
     <div className={pane ? "mr-shell mr-shell--pane" : "mr-shell"}>
       <header className="mr-appbar">
         <span className="mr-appbar__brand">
-          <BrandMark />
+          <BrandMark className="mr-appbar__mark" />
           MolRoom
         </span>
         <nav className="mr-appbar__nav">
@@ -42,6 +50,7 @@ function Shell({ children, pane = false }: { children: React.ReactNode; pane?: b
             내 예약
           </NavLink>
         </nav>
+        <AccountCluster />
       </header>
       <main className="mr-main">{children}</main>
     </div>
@@ -50,33 +59,53 @@ function Shell({ children, pane = false }: { children: React.ReactNode; pane?: b
 
 export function App() {
   return (
-    <Routes>
-      {/* QR 랜딩은 셸 없이 단독 화면 — 복도에서 단일 결정에 최적화한다 */}
-      <Route path="/r/:roomId" element={<RoomLandingScreen />} />
-      <Route
-        path="/"
-        element={
-          <Shell pane>
-            <GridScreen />
-          </Shell>
-        }
-      />
-      <Route
-        path="/me"
-        element={
-          <Shell>
-            <MyBookingsScreen />
-          </Shell>
-        }
-      />
-      <Route
-        path="*"
-        element={
-          <Shell>
-            <p className="t-body">페이지를 찾을 수 없어요.</p>
-          </Shell>
-        }
-      />
-    </Routes>
+    <AuthProvider>
+      <Routes>
+        {/* 로그인은 셸도 가드도 없는 유일한 공개 라우트 */}
+        <Route path="/login" element={<LoginScreen />} />
+
+        {/* QR 랜딩도 셸 없는 단독 화면이지만 인증은 필요하다 — 이 프로젝트엔
+         * 서버가 없고 Calendar 호출도 사용자 본인 토큰으로 하므로 "보기만"
+         * 하는 것도 로그인이 있어야 한다(loginSpec 참고). */}
+        <Route
+          path="/r/:roomId"
+          element={
+            <RequireAuth>
+              <RoomLandingScreen />
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/"
+          element={
+            <RequireAuth>
+              <Shell pane>
+                <GridScreen />
+              </Shell>
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/me"
+          element={
+            <RequireAuth>
+              <Shell>
+                <MyBookingsScreen />
+              </Shell>
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="*"
+          element={
+            <RequireAuth>
+              <Shell>
+                <p className="t-body">페이지를 찾을 수 없어요.</p>
+              </Shell>
+            </RequireAuth>
+          }
+        />
+      </Routes>
+    </AuthProvider>
   );
 }

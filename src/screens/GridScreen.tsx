@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties } from "react";
-import { Alert, Badge, Button, ButtonWithReason, Card, Dialog, Tabs } from "../components/ui";
-import type { TabItem } from "../components/ui";
+import { Alert, Badge, Button, ButtonWithReason, Card, Dialog } from "../components/ui";
 import { BookingDialog } from "./BookingDialog";
 import { ROOMS, POLICY, roomById } from "../app/config";
 import { repo } from "../data";
@@ -126,11 +125,85 @@ function useIsNarrow(): boolean {
 
 type ViewMode = "day" | "week" | "month";
 
-const VIEW_TABS: readonly TabItem[] = [
+const VIEW_TABS: readonly { id: ViewMode; label: string }[] = [
   { id: "day", label: "일간" },
   { id: "week", label: "주간" },
   { id: "month", label: "월간" },
 ];
+
+/**
+ * 일간·주간·월간은 상호 배타적인 3개 뷰다 — 언더라인 탭(공용 Tabs 컴포넌트,
+ * MyBookingsScreen 과 공유)보다 하나의 폐곡선 안에 묶인 segmented control 이
+ * "지금 무엇을 보고 있나"를 더 즉시 읽히게 한다. components.css 의 공유 Tabs
+ * 를 건드리지 않기 위해 이 화면 전용 마크업/스타일을 grid.css 안에서 새로 정의한다.
+ */
+function GridViewSwitch({
+  active,
+  onChange,
+}: {
+  active: ViewMode;
+  onChange: (id: ViewMode) => void;
+}) {
+  return (
+    <div className="grid-viewswitch" role="tablist" aria-label="보기 전환">
+      {VIEW_TABS.map((t) => (
+        <button
+          key={t.id}
+          type="button"
+          role="tab"
+          className={cx("grid-viewswitch__btn", t.id === active && "is-active")}
+          aria-selected={t.id === active}
+          onClick={() => onChange(t.id)}
+        >
+          {t.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+/**
+ * 이전/다음 은 하나의 결정(어느 방향으로 한 칸)을 반으로 나눈 것이므로
+ * 보더를 공유하는 2분할 pill 로 묶는다. "오늘"/"이번 주"/"이번 달"은 성격이
+ * 다른 별도 액션(현재로 점프)이라 분리해 둔다.
+ * 주간·월간 뷰가 이 컴포넌트를 공유하고, 필터바와 함께 하나의 .grid-controlbar
+ * 안에 렌더링된다(day 뷰의 오늘/내일/날짜 툴바도 같은 컨테이너를 쓴다).
+ */
+function DateStepper({
+  onPrev,
+  onNext,
+  onToday,
+  prevLabel,
+  nextLabel,
+  todayLabel,
+  rangeLabel,
+}: {
+  onPrev: () => void;
+  onNext: () => void;
+  onToday: () => void;
+  prevLabel: string;
+  nextLabel: string;
+  todayLabel: string;
+  rangeLabel: string;
+}) {
+  return (
+    <div className="grid-toolbar mr-row">
+      <div className="grid-datestepper" role="group" aria-label="날짜 이동">
+        <button type="button" className="grid-datestepper__btn" onClick={onPrev} aria-label={prevLabel}>
+          <span aria-hidden="true">‹</span>
+        </button>
+        <span className="grid-datestepper__divider" aria-hidden="true" />
+        <button type="button" className="grid-datestepper__btn" onClick={onNext} aria-label={nextLabel}>
+          <span aria-hidden="true">›</span>
+        </button>
+      </div>
+      <Button variant="secondary" onClick={onToday}>
+        {todayLabel}
+      </Button>
+      <span className="t-small t-muted">{rangeLabel}</span>
+    </div>
+  );
+}
 
 /* ---------------- drag selection ---------------- */
 
@@ -215,6 +288,13 @@ export function GridScreen() {
   // 마지막 날(일요일)이지 다음 주 월요일이 아니다. +7 로 넘기면 다음 주 첫날 예약까지
   // 잘못 섞여 들어온다.
   const weekEnd = useMemo(() => addDays(weekStart, 6), [weekStart]);
+  const weekRangeLabel = useMemo(
+    () =>
+      new Intl.DateTimeFormat("ko-KR", { month: "long", day: "numeric" }).format(weekStart) +
+      " – " +
+      new Intl.DateTimeFormat("ko-KR", { month: "long", day: "numeric" }).format(weekEnd),
+    [weekStart, weekEnd],
+  );
   const weekState = useAsync<Booking[]>(
     () =>
       view === "week" && weekRoomId
@@ -238,6 +318,10 @@ export function GridScreen() {
   // 마찬가지로 repo 의 범위 조회는 to 를 포함한다 — "한 달치"는 그 달의 마지막 날까지고
   // 다음 달 1일이 아니다. 앞뒤 달로 채워지는 달력 여백 칸은 스펙대로 개요 이상을 보여주지 않는다.
   const monthRangeEnd = useMemo(() => addDays(addMonths(monthAnchor, 1), -1), [monthAnchor]);
+  const monthLabel = useMemo(
+    () => new Intl.DateTimeFormat("ko-KR", { year: "numeric", month: "long" }).format(monthAnchor),
+    [monthAnchor],
+  );
   const monthState = useAsync<Booking[]>(
     () => (view === "month" ? repo.listByRange(monthAnchor, monthRangeEnd) : Promise.resolve([])),
     [view, monthAnchor.getTime(), monthRangeEnd.getTime()],
@@ -359,64 +443,118 @@ export function GridScreen() {
 
   return (
     <div className="grid-screen">
-      <Tabs items={VIEW_TABS} active={view} onChange={(id) => setView(id as ViewMode)} />
+      <GridViewSwitch active={view} onChange={setView} />
 
-      <div className="grid-filterbar mr-row">
-        <div>
-          <span className="mr-field__label">인원</span>
-          <div className="mr-stepper">
-            {/* 함수형 업데이터를 쓴다 — 연타할 때 같은 렌더의 옛 값을 읽어 증가분이 유실되는 것을 막는다.
-                secondary(44px)를 쓰는 이유: 이 필터바는 모바일에서도 그대로 보인다.
-                compact(36px)는 DESIGN.md §4 가 "데스크톱 격자 인접 컨텍스트에서만" 으로 못박은 값이다. */}
-            <Button
-              variant="secondary"
-              onClick={() => setHeadcountFilter((n) => Math.max(0, n - 1))}
-              disabled={headcountFilter <= 0}
-              aria-label="인원 필터 줄이기"
-            >
-              −
-            </Button>
-            <span className="mr-stepper__value">
-              {headcountFilter === 0 ? "전체" : String(headcountFilter) + "명"}
-            </span>
-            <Button
-              variant="secondary"
-              onClick={() => setHeadcountFilter((n) => n + 1)}
-              aria-label="인원 필터 늘리기"
-            >
-              +
-            </Button>
+      {/*
+       * 필터(인원/부서)와 날짜 탐색(오늘·이전/다음)은 성격이 다르지만 둘 다
+       * "이 화면에 지금 뭐가 보이는지"를 조정하는 컨트롤이라 하나의 컨테이너
+       * (옅은 배경 + 보더)로 묶는다. 위 뷰 전환(성격이 다른 클러스터)과는
+       * 28px 로 크게 떼어 놓는다. 날짜 툴바는 뷰마다 구성이 달라 이 컨테이너
+       * 안에서 조건부로 이어 붙인다 — filteredRooms 가 0건일 때는 원래도
+       * 격자 자체를 보여주지 않았으므로 툴바도 같이 접는다.
+       */}
+      <div className="grid-controlbar">
+        <div className="grid-filterbar mr-row">
+          <div>
+            <span className="mr-field__label">인원</span>
+            <div className="mr-stepper">
+              {/* 함수형 업데이터를 쓴다 — 연타할 때 같은 렌더의 옛 값을 읽어 증가분이 유실되는 것을 막는다.
+                  secondary(44px)를 쓰는 이유: 이 필터바는 모바일에서도 그대로 보인다.
+                  compact(36px)는 DESIGN.md §4 가 "데스크톱 격자 인접 컨텍스트에서만" 으로 못박은 값이다. */}
+              <Button
+                variant="secondary"
+                onClick={() => setHeadcountFilter((n) => Math.max(0, n - 1))}
+                disabled={headcountFilter <= 0}
+                aria-label="인원 필터 줄이기"
+              >
+                −
+              </Button>
+              <span className="mr-stepper__value">
+                {headcountFilter === 0 ? "전체" : String(headcountFilter) + "명"}
+              </span>
+              <Button
+                variant="secondary"
+                onClick={() => setHeadcountFilter((n) => n + 1)}
+                aria-label="인원 필터 늘리기"
+              >
+                +
+              </Button>
+            </div>
           </div>
+
+          {departments.length > 0 ? (
+            <div className="grid-deptchips" role="group" aria-label="부서 필터">
+              <button
+                type="button"
+                className={cx("grid-deptchip", deptFilter === null && "is-active")}
+                aria-pressed={deptFilter === null}
+                onClick={() => setDeptFilter(null)}
+              >
+                전체
+              </button>
+              {departments.map((d) => (
+                <button
+                  key={d}
+                  type="button"
+                  className={cx("grid-deptchip", deptFilter === d && "is-active")}
+                  aria-pressed={deptFilter === d}
+                  onClick={() => setDeptFilter(d)}
+                >
+                  {d}
+                </button>
+              ))}
+            </div>
+          ) : null}
+
+          {activeFilterCount > 0 ? (
+            <button type="button" className="grid-filter-reset" onClick={resetFilters}>
+              필터 {activeFilterCount}개 · 해제
+            </button>
+          ) : null}
         </div>
 
-        {departments.length > 0 ? (
-          <div className="grid-deptchips" role="group" aria-label="부서 필터">
-            <button
-              type="button"
-              className={cx("grid-deptchip", deptFilter === null && "is-active")}
-              aria-pressed={deptFilter === null}
-              onClick={() => setDeptFilter(null)}
-            >
-              전체
-            </button>
-            {departments.map((d) => (
-              <button
-                key={d}
-                type="button"
-                className={cx("grid-deptchip", deptFilter === d && "is-active")}
-                aria-pressed={deptFilter === d}
-                onClick={() => setDeptFilter(d)}
+        {filteredRooms.length > 0 ? (
+          view === "day" ? (
+            <div className="grid-toolbar mr-row">
+              <Button variant="secondary" onClick={() => setSelectedDate(startOfDay(new Date()))}>
+                오늘
+              </Button>
+              <Button
+                variant="secondary"
+                onClick={() => setSelectedDate(addDays(startOfDay(new Date()), 1))}
               >
-                {d}
-              </button>
-            ))}
-          </div>
-        ) : null}
-
-        {activeFilterCount > 0 ? (
-          <button type="button" className="grid-filter-reset" onClick={resetFilters}>
-            필터 {activeFilterCount}개 · 해제
-          </button>
+                내일
+              </Button>
+              <input
+                type="date"
+                className="mr-input grid-date-input"
+                value={ymd(selectedDate)}
+                onChange={onDateInputChange}
+                aria-label="날짜 선택"
+              />
+              <span className="t-small t-muted">{dateLabel}</span>
+            </div>
+          ) : view === "week" ? (
+            <DateStepper
+              onPrev={() => setWeekAnchor((d) => addWeeks(d, -1))}
+              onNext={() => setWeekAnchor((d) => addWeeks(d, 1))}
+              onToday={() => setWeekAnchor(startOfDay(new Date()))}
+              prevLabel="이전 주"
+              nextLabel="다음 주"
+              todayLabel="이번 주"
+              rangeLabel={weekRangeLabel}
+            />
+          ) : (
+            <DateStepper
+              onPrev={() => setMonthAnchor((d) => addMonths(d, -1))}
+              onNext={() => setMonthAnchor((d) => addMonths(d, 1))}
+              onToday={() => setMonthAnchor(startOfMonth(new Date()))}
+              prevLabel="이전 달"
+              nextLabel="다음 달"
+              todayLabel="이번 달"
+              rangeLabel={monthLabel}
+            />
+          )
         ) : null}
       </div>
 
@@ -445,24 +583,7 @@ export function GridScreen() {
           </Alert>
         </div>
       ) : view === "day" ? (
-        <div style={{ marginTop: 16 }}>
-          <div className="grid-toolbar mr-row">
-            <Button variant="secondary" onClick={() => setSelectedDate(startOfDay(new Date()))}>
-              오늘
-            </Button>
-            <Button variant="secondary" onClick={() => setSelectedDate(addDays(startOfDay(new Date()), 1))}>
-              내일
-            </Button>
-            <input
-              type="date"
-              className="mr-input grid-date-input"
-              value={ymd(selectedDate)}
-              onChange={onDateInputChange}
-              aria-label="날짜 선택"
-            />
-            <span className="t-small t-muted">{dateLabel}</span>
-          </div>
-
+        <div>
           {bookingsState.error ? (
             <div style={{ marginTop: 16 }}>
               <Alert>
@@ -474,145 +595,165 @@ export function GridScreen() {
             </div>
           ) : null}
 
-          {bookingsState.loading ? (
-            <p className="mr-state">예약 현황을 불러오는 중…</p>
-          ) : (
-            <>
-              <div className="grid-desktop">
-                <div className="grid-scroll">
-                  <div className={cx("grid-table", drag && "is-dragging")} style={{ gridTemplateColumns }}>
-                    <div className="grid-corner" />
+          {/*
+           * 로딩 중에도 .grid-desktop/.grid-scroll/.grid-table 구조를 그대로 유지한다.
+           * 예전엔 로딩 중 이 구조 전체를 <p>텍스트로 바꿔치기해서 (a) pane 모드의
+           * flex:1 규칙이 .grid-scroll 부재를 보고 꺼져 페이지 높이가 주저앉았다가
+           * 데이터가 오면 다시 펴지며 점프했고 (b) 매 뷰 전환마다 격자가 사라졌다 나타났다.
+           * 시간축·슬롯 격자선은 원래 데이터와 무관하므로 항상 그리고, 방 이름/예약만
+           * 로딩 중엔 중립색 스켈레톤으로 채워 "이미 그 자리에 있던 것처럼" 만든다.
+           */}
+          <div className="grid-desktop" style={{ marginTop: 16 }}>
+            <div className="grid-scroll">
+              <div className={cx("grid-table", drag && "is-dragging")} style={{ gridTemplateColumns }}>
+                <div className="grid-corner" />
 
-                    {filteredRooms.map((room) => (
-                      <div key={room.id} className="grid-room-header">
+                {filteredRooms.map((room) => (
+                  <div key={room.id} className="grid-room-header">
+                    {bookingsState.loading ? (
+                      <>
+                        <span className="grid-skeleton-bar" aria-hidden="true" />
+                        <span className="grid-skeleton-bar grid-skeleton-bar--sm" aria-hidden="true" />
+                      </>
+                    ) : (
+                      <>
                         <span className="t-small grid-room-header__name">{room.name}</span>
                         <span className="t-cap t-muted">
                           {room.capacity}인 · {room.floor}
                         </span>
+                      </>
+                    )}
+                  </div>
+                ))}
+
+                <div className="grid-axis">
+                  {slotIndices.map((i) => {
+                    const label = slotHourLabel(dayStart, i, POLICY.slotMinutes);
+                    return (
+                      <div
+                        key={i}
+                        className={cx(
+                          "grid-slot",
+                          "grid-axis__cell",
+                          slotIsHourBoundary(i, POLICY.slotMinutes) ? "grid-slot--hour" : "grid-slot--half",
+                        )}
+                      >
+                        {label ? <span className="t-cap t-num grid-axis__label">{label}</span> : null}
                       </div>
-                    ))}
+                    );
+                  })}
+                </div>
 
-                    <div className="grid-axis">
-                      {slotIndices.map((i) => {
-                        const label = slotHourLabel(dayStart, i, POLICY.slotMinutes);
-                        return (
-                          <div
-                            key={i}
-                            className={cx(
-                              "grid-slot",
-                              "grid-axis__cell",
-                              slotIsHourBoundary(i, POLICY.slotMinutes) ? "grid-slot--hour" : "grid-slot--half",
-                            )}
-                          >
-                            {label ? <span className="t-cap t-num grid-axis__label">{label}</span> : null}
-                          </div>
-                        );
-                      })}
-                    </div>
-
-                    {filteredRooms.map((room) => {
-                      const roomBookings = (bookingsByRoom.get(room.id) ?? []).filter(
+                {filteredRooms.map((room) => {
+                  const roomBookings = bookingsState.loading
+                    ? []
+                    : (bookingsByRoom.get(room.id) ?? []).filter(
                         (b) =>
                           matchesDept(b) &&
                           b.end.getTime() > dayStart.getTime() &&
                           b.start.getTime() < dayEnd.getTime(),
                       );
-                      return (
-                        <div key={room.id} className="grid-col">
-                          {slotIndices.map((i) => (
-                            <div
-                              key={i}
-                              className={cx(
-                                "grid-slot",
-                                slotIsHourBoundary(i, POLICY.slotMinutes) ? "grid-slot--hour" : "grid-slot--half",
-                              )}
-                              onMouseDown={(e) => {
-                                e.preventDefault();
-                                startDrag(room.id, i);
-                              }}
-                              onMouseEnter={() => continueDrag(room.id, i)}
-                            />
-                          ))}
-
-                          {drag && drag.roomId === room.id ? (
-                            <div className="grid-selection" style={selectionStyle(drag)} />
-                          ) : null}
-
-                          {roomBookings.map((b) => {
-                            const clippedStart = b.start.getTime() < dayStart.getTime() ? dayStart : b.start;
-                            const clippedEnd = b.end.getTime() > dayEnd.getTime() ? dayEnd : b.end;
-                            const placement = placeInGrid(
-                              clippedStart,
-                              clippedEnd,
-                              dayStart,
-                              POLICY.slotMinutes,
-                              slotPx,
-                            );
-                            return (
-                              <GridEventBlock
-                                key={b.id}
-                                booking={b}
-                                placement={placement}
-                                now={now}
-                                onSelect={setDetailBooking}
-                              />
-                            );
-                          })}
-                        </div>
-                      );
-                    })}
-
-                    {showNowLine ? (
-                      <div className="grid-now" aria-hidden="true">
-                        <div className="grid-now__line" style={{ top: nowTop }} />
-                      </div>
-                    ) : null}
-                  </div>
-                </div>
-              </div>
-
-              <div className="grid-mobile">
-                <p className="t-cap t-muted grid-mobile__hint">
-                  모바일에서는 회의실 문에 붙은 QR 코드가 예약의 시작점이에요. QR을 스캔하면 그 자리에서 바로
-                  예약·체크인할 수 있어요.
-                </p>
-                {filteredRooms.map((room) => {
-                  const roomBookings = (bookingsByRoom.get(room.id) ?? []).filter(matchesDept);
                   return (
-                    <section key={room.id} className="grid-mobile__room">
-                      <header className="grid-mobile__room-head">
-                        <span className="t-body grid-mobile__room-name">{room.name}</span>
-                        <span className="t-cap t-muted">
-                          {room.capacity}인 · {room.floor}
-                        </span>
-                      </header>
-                      {roomBookings.length === 0 ? (
-                        <p className="t-small t-muted">오늘 예약이 없어요</p>
-                      ) : (
-                        <div className="mr-stack">
-                          {roomBookings.map((b) => (
-                            <Card key={b.id} mine={b.isMine}>
-                              <div className="mr-row" style={{ justifyContent: "space-between" }}>
-                                <span className="t-small grid-mobile__organizer">{b.organizerName}</span>
-                                <span className="t-small t-num t-muted">
-                                  {hhmm(b.start)}–{hhmm(b.end)}
-                                </span>
-                              </div>
-                              {isNoShow(b, now, POLICY.checkInGraceMinutes) ? (
-                                <div style={{ marginTop: 6 }}>
-                                  <Badge tone="attn">미체크인</Badge>
-                                </div>
-                              ) : null}
-                            </Card>
-                          ))}
-                        </div>
-                      )}
-                    </section>
+                    <div key={room.id} className="grid-col">
+                      {slotIndices.map((i) => (
+                        <div
+                          key={i}
+                          className={cx(
+                            "grid-slot",
+                            slotIsHourBoundary(i, POLICY.slotMinutes) ? "grid-slot--hour" : "grid-slot--half",
+                          )}
+                          onMouseDown={(e) => {
+                            if (bookingsState.loading) return;
+                            e.preventDefault();
+                            startDrag(room.id, i);
+                          }}
+                          onMouseEnter={() => {
+                            if (!bookingsState.loading) continueDrag(room.id, i);
+                          }}
+                        />
+                      ))}
+
+                      {!bookingsState.loading && drag && drag.roomId === room.id ? (
+                        <div className="grid-selection" style={selectionStyle(drag)} />
+                      ) : null}
+
+                      {roomBookings.map((b) => {
+                        const clippedStart = b.start.getTime() < dayStart.getTime() ? dayStart : b.start;
+                        const clippedEnd = b.end.getTime() > dayEnd.getTime() ? dayEnd : b.end;
+                        const placement = placeInGrid(
+                          clippedStart,
+                          clippedEnd,
+                          dayStart,
+                          POLICY.slotMinutes,
+                          slotPx,
+                        );
+                        return (
+                          <GridEventBlock
+                            key={b.id}
+                            booking={b}
+                            placement={placement}
+                            now={now}
+                            onSelect={setDetailBooking}
+                          />
+                        );
+                      })}
+                    </div>
                   );
                 })}
+
+                {showNowLine && !bookingsState.loading ? (
+                  <div className="grid-now" aria-hidden="true">
+                    <div className="grid-now__line" style={{ top: nowTop }} />
+                  </div>
+                ) : null}
               </div>
-            </>
-          )}
+            </div>
+          </div>
+
+          <div className="grid-mobile">
+            <p className="t-cap t-muted grid-mobile__hint">
+              모바일에서는 회의실 문에 붙은 QR 코드가 예약의 시작점이에요. QR을 스캔하면 그 자리에서 바로
+              예약·체크인할 수 있어요.
+            </p>
+            {filteredRooms.map((room) => {
+              const roomBookings = bookingsState.loading
+                ? []
+                : (bookingsByRoom.get(room.id) ?? []).filter(matchesDept);
+              return (
+                <section key={room.id} className="grid-mobile__room">
+                  <header className="grid-mobile__room-head">
+                    <span className="t-body grid-mobile__room-name">{room.name}</span>
+                    <span className="t-cap t-muted">
+                      {room.capacity}인 · {room.floor}
+                    </span>
+                  </header>
+                  {bookingsState.loading ? (
+                    <div className="grid-skeleton-card" aria-hidden="true" />
+                  ) : roomBookings.length === 0 ? (
+                    <p className="t-small t-muted">오늘 예약이 없어요</p>
+                  ) : (
+                    <div className="mr-stack">
+                      {roomBookings.map((b) => (
+                        <Card key={b.id} mine={b.isMine}>
+                          <div className="mr-row" style={{ justifyContent: "space-between" }}>
+                            <span className="t-small grid-mobile__organizer">{b.organizerName}</span>
+                            <span className="t-small t-num t-muted">
+                              {hhmm(b.start)}–{hhmm(b.end)}
+                            </span>
+                          </div>
+                          {isNoShow(b, now, POLICY.checkInGraceMinutes) ? (
+                            <div style={{ marginTop: 6 }}>
+                              <Badge tone="attn">미체크인</Badge>
+                            </div>
+                          ) : null}
+                        </Card>
+                      ))}
+                    </div>
+                  )}
+                </section>
+              );
+            })}
+          </div>
         </div>
       ) : view === "week" ? (
         <WeekView
@@ -620,9 +761,6 @@ export function GridScreen() {
           weekRoomId={weekRoomId}
           onRoomChange={setWeekRoomId}
           weekStart={weekStart}
-          onPrevWeek={() => setWeekAnchor((d) => addWeeks(d, -1))}
-          onNextWeek={() => setWeekAnchor((d) => addWeeks(d, 1))}
-          onThisWeek={() => setWeekAnchor(startOfDay(new Date()))}
           bookings={weekState.data ?? []}
           loading={weekState.loading}
           error={weekState.error}
@@ -635,9 +773,6 @@ export function GridScreen() {
       ) : (
         <MonthView
           monthAnchor={monthAnchor}
-          onPrevMonth={() => setMonthAnchor((d) => addMonths(d, -1))}
-          onNextMonth={() => setMonthAnchor((d) => addMonths(d, 1))}
-          onThisMonth={() => setMonthAnchor(startOfMonth(new Date()))}
           bookings={monthState.data ?? []}
           loading={monthState.loading}
           error={monthState.error}
@@ -770,9 +905,6 @@ function WeekView({
   weekRoomId,
   onRoomChange,
   weekStart,
-  onPrevWeek,
-  onNextWeek,
-  onThisWeek,
   bookings,
   loading,
   error,
@@ -786,9 +918,6 @@ function WeekView({
   weekRoomId: string;
   onRoomChange: (id: string) => void;
   weekStart: Date;
-  onPrevWeek: () => void;
-  onNextWeek: () => void;
-  onThisWeek: () => void;
   bookings: Booking[];
   loading: boolean;
   error: Error | null;
@@ -822,28 +951,10 @@ function WeekView({
     "--grid-slot-h": String(weekSlotPx) + "px",
   } as CSSProperties;
 
-  const rangeLabel =
-    new Intl.DateTimeFormat("ko-KR", { month: "long", day: "numeric" }).format(weekStart) +
-    " – " +
-    new Intl.DateTimeFormat("ko-KR", { month: "long", day: "numeric" }).format(addDays(weekStart, 6));
-
   const gridTemplateColumns = "var(--grid-axis-w) repeat(7, minmax(var(--grid-col-min), 1fr))";
 
   return (
-    <div style={{ marginTop: 16 }}>
-      <div className="grid-toolbar mr-row">
-        <Button variant="secondary" onClick={onPrevWeek}>
-          이전 주
-        </Button>
-        <Button variant="secondary" onClick={onThisWeek}>
-          이번 주
-        </Button>
-        <Button variant="secondary" onClick={onNextWeek}>
-          다음 주
-        </Button>
-        <span className="t-small t-muted">{rangeLabel}</span>
-      </div>
-
+    <div>
       {filteredRooms.length > 0 ? (
         <div className="grid-roomchips mr-row" role="group" aria-label="회의실 선택">
           {filteredRooms.map((room) => (
@@ -871,87 +982,93 @@ function WeekView({
         </div>
       ) : null}
 
-      {loading ? (
-        <p className="mr-state">주간 예약 현황을 불러오는 중…</p>
-      ) : (
-        <div
-          className="grid-scroll grid-week"
-          style={weekScrollStyle}
-        >
-          <div className="grid-table" style={{ gridTemplateColumns }}>
-            <div className="grid-corner" />
+      {/* .grid-scroll 은 항상 마운트한다 — 로딩 중에만 사라지면 pane 모드의
+       * flex:1 sizing 이 꺼졌다 켜지며 스크롤 위치와 페이지 높이가 튄다(day 뷰와 동일 이유). */}
+      <div className="grid-scroll grid-week" style={weekScrollStyle}>
+        <div className="grid-table" style={{ gridTemplateColumns }}>
+          <div className="grid-corner" />
 
-            {weekDays.map((day, i) => (
-              <div
-                key={i}
-                className={cx("grid-room-header", sameYMD(day, today) && "grid-room-header--today")}
-              >
-                <span className="t-small grid-room-header__name">{WEEKDAY_LABELS[i]}요일</span>
-                <span className="t-cap t-muted t-num">
-                  {new Intl.DateTimeFormat("ko-KR", { month: "numeric", day: "numeric" }).format(day)}
-                </span>
-              </div>
-            ))}
-
-            <div className="grid-axis">
-              {slotIndices.map((i) => {
-                const label = slotHourLabel(axisDayStart, i, POLICY.slotMinutes);
-                return (
-                  <div
-                    key={i}
-                    className={cx(
-                      "grid-slot",
-                      "grid-axis__cell",
-                      slotIsHourBoundary(i, POLICY.slotMinutes) ? "grid-slot--hour" : "grid-slot--half",
-                    )}
-                  >
-                    {label ? <span className="t-cap t-num grid-axis__label">{label}</span> : null}
-                  </div>
-                );
-              })}
+          {weekDays.map((day, i) => (
+            <div
+              key={i}
+              className={cx("grid-room-header", sameYMD(day, today) && "grid-room-header--today")}
+            >
+              {loading ? (
+                <>
+                  <span className="grid-skeleton-bar" aria-hidden="true" />
+                  <span className="grid-skeleton-bar grid-skeleton-bar--sm" aria-hidden="true" />
+                </>
+              ) : (
+                <>
+                  <span className="t-small grid-room-header__name">{WEEKDAY_LABELS[i]}요일</span>
+                  <span className="t-cap t-muted t-num">
+                    {new Intl.DateTimeFormat("ko-KR", { month: "numeric", day: "numeric" }).format(day)}
+                  </span>
+                </>
+              )}
             </div>
+          ))}
 
-            {weekDays.map((day, i) => {
-              const dStart = gridDayStart(day, POLICY);
-              const dEnd = new Date(dStart.getTime() + slotCount * POLICY.slotMinutes * MINUTE);
-              const dayBookings = bookings.filter(
-                (b) =>
-                  matchesDept(b) &&
-                  b.end.getTime() > dStart.getTime() &&
-                  b.start.getTime() < dEnd.getTime(),
-              );
+          <div className="grid-axis">
+            {slotIndices.map((i) => {
+              const label = slotHourLabel(axisDayStart, i, POLICY.slotMinutes);
               return (
-                <div key={i} className="grid-col">
-                  {slotIndices.map((s) => (
-                    <div
-                      key={s}
-                      className={cx(
-                        "grid-slot",
-                        slotIsHourBoundary(s, POLICY.slotMinutes) ? "grid-slot--hour" : "grid-slot--half",
-                      )}
-                    />
-                  ))}
-
-                  {dayBookings.map((b) => {
-                    const clippedStart = b.start.getTime() < dStart.getTime() ? dStart : b.start;
-                    const clippedEnd = b.end.getTime() > dEnd.getTime() ? dEnd : b.end;
-                    const placement = placeInGrid(clippedStart, clippedEnd, dStart, POLICY.slotMinutes, weekSlotPx);
-                    return (
-                      <GridEventBlock
-                        key={b.id}
-                        booking={b}
-                        placement={placement}
-                        now={now}
-                        onSelect={onSelectBooking}
-                      />
-                    );
-                  })}
+                <div
+                  key={i}
+                  className={cx(
+                    "grid-slot",
+                    "grid-axis__cell",
+                    slotIsHourBoundary(i, POLICY.slotMinutes) ? "grid-slot--hour" : "grid-slot--half",
+                  )}
+                >
+                  {label ? <span className="t-cap t-num grid-axis__label">{label}</span> : null}
                 </div>
               );
             })}
           </div>
+
+          {weekDays.map((day, i) => {
+            const dStart = gridDayStart(day, POLICY);
+            const dEnd = new Date(dStart.getTime() + slotCount * POLICY.slotMinutes * MINUTE);
+            const dayBookings = loading
+              ? []
+              : bookings.filter(
+                  (b) =>
+                    matchesDept(b) &&
+                    b.end.getTime() > dStart.getTime() &&
+                    b.start.getTime() < dEnd.getTime(),
+                );
+            return (
+              <div key={i} className="grid-col">
+                {slotIndices.map((s) => (
+                  <div
+                    key={s}
+                    className={cx(
+                      "grid-slot",
+                      slotIsHourBoundary(s, POLICY.slotMinutes) ? "grid-slot--hour" : "grid-slot--half",
+                    )}
+                  />
+                ))}
+
+                {dayBookings.map((b) => {
+                  const clippedStart = b.start.getTime() < dStart.getTime() ? dStart : b.start;
+                  const clippedEnd = b.end.getTime() > dEnd.getTime() ? dEnd : b.end;
+                  const placement = placeInGrid(clippedStart, clippedEnd, dStart, POLICY.slotMinutes, weekSlotPx);
+                  return (
+                    <GridEventBlock
+                      key={b.id}
+                      booking={b}
+                      placement={placement}
+                      now={now}
+                      onSelect={onSelectBooking}
+                    />
+                  );
+                })}
+              </div>
+            );
+          })}
         </div>
-      )}
+      </div>
     </div>
   );
 }
@@ -962,9 +1079,6 @@ function WeekView({
 
 function MonthView({
   monthAnchor,
-  onPrevMonth,
-  onNextMonth,
-  onThisMonth,
   bookings,
   loading,
   error,
@@ -975,9 +1089,6 @@ function MonthView({
   now,
 }: {
   monthAnchor: Date;
-  onPrevMonth: () => void;
-  onNextMonth: () => void;
-  onThisMonth: () => void;
   bookings: Booking[];
   loading: boolean;
   error: Error | null;
@@ -987,10 +1098,6 @@ function MonthView({
   onSelectDate: (d: Date) => void;
   now: Date;
 }) {
-  const monthLabel = useMemo(
-    () => new Intl.DateTimeFormat("ko-KR", { year: "numeric", month: "long" }).format(monthAnchor),
-    [monthAnchor],
-  );
   const today = useMemo(() => startOfDay(now), [now]);
   const gridOpenMinutes = gridSlotCount(POLICY) * POLICY.slotMinutes;
 
@@ -1004,20 +1111,7 @@ function MonthView({
   }, [monthAnchor]);
 
   return (
-    <div style={{ marginTop: 16 }}>
-      <div className="grid-toolbar mr-row">
-        <Button variant="secondary" onClick={onPrevMonth}>
-          이전 달
-        </Button>
-        <Button variant="secondary" onClick={onThisMonth}>
-          이번 달
-        </Button>
-        <Button variant="secondary" onClick={onNextMonth}>
-          다음 달
-        </Button>
-        <span className="t-small t-muted">{monthLabel}</span>
-      </div>
-
+    <div>
       {error ? (
         <div style={{ marginTop: 16 }}>
           <Alert>
@@ -1029,17 +1123,22 @@ function MonthView({
         </div>
       ) : null}
 
-      {loading ? (
-        <p className="mr-state">월간 예약 현황을 불러오는 중…</p>
-      ) : (
-        <div className="grid-month" style={{ marginTop: 16 }}>
-          {WEEKDAY_LABELS.map((label) => (
-            <div key={label} className="grid-month__weekday t-cap t-muted">
-              {label}
-            </div>
-          ))}
+      {/* 월간 개요도 격자와 같은 원칙 — 셀 프레임(요일 헤딩 + 7xN 칸)은 데이터와 무관하니
+       * 항상 그리고, 로딩 중엔 건수/막대 대신 중립색 스켈레톤만 채워 높이 점프를 없앤다. */}
+      <div className="grid-month" style={{ marginTop: 16 }}>
+        {WEEKDAY_LABELS.map((label) => (
+          <div key={label} className="grid-month__weekday t-cap t-muted">
+            {label}
+          </div>
+        ))}
 
-          {cells.map((d) => {
+        {loading
+          ? cells.map((d) => (
+              <div key={ymd(d)} className="grid-month__cell grid-month__cell--skeleton" aria-hidden="true">
+                <span className="grid-skeleton-bar grid-skeleton-bar--sm" />
+              </div>
+            ))
+          : cells.map((d) => {
             const inMonth = d.getMonth() === monthAnchor.getMonth();
             const cellStart = startOfDay(d);
             const cellEnd = addDays(cellStart, 1);
@@ -1101,9 +1200,8 @@ function MonthView({
                 ) : null}
               </button>
             );
-          })}
-        </div>
-      )}
+            })}
+      </div>
     </div>
   );
 }

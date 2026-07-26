@@ -40,12 +40,14 @@
   width: 100%;
   max-width: 480px;
   margin: 0 auto;
-  padding: 8px 20px calc(48px + env(safe-area-inset-bottom));
+  /* 상단 여백을 더 줘 방 이름이 헤더 바로 밑에 눌려 붙지 않게 한다 — Apple 은
+   * 화면당 유일한 Display 앞에 숨 쉴 공간을 둔다. */
+  padding: 24px 20px calc(48px + env(safe-area-inset-bottom));
 }
 
-/* Display Hero — DESIGN.md 상 이 화면의 회의실 이름에만 쓰는 유일한 자리 */
+/* Display Hero — DESIGN.md 상 이 화면의 회의실 이름에만 쓰는 유일한 자리.
+ * main 이 이미 상단 여백을 주므로 추가 margin 은 두지 않는다. */
 .mr-landing__title {
-  margin-top: 8px;
   color: var(--c-fg);
 }
 
@@ -54,8 +56,10 @@
   color: var(--c-muted);
 }
 
+/* 상태 카드는 이 화면의 결론이다 — 방 이름/메타 정보와 뚜렷하게 떨어뜨려
+ * 그 자체로 하나의 결론처럼 읽히게 한다. */
 .mr-landing__section {
-  margin-top: 20px;
+  margin-top: 32px;
 }
 
 .mr-landing__statusline {
@@ -64,14 +68,25 @@
   gap: 10px;
 }
 
+/* 결론 문장이므로 본문(t-body)보다 한 단 크고 굵게 — Title 스케일로 무게를 준다.
+ * JSX 는 계속 공용 t-body 클래스를 쓰고, 이 스코프 안에서만 override 한다. */
+.mr-landing__statusline .t-body,
+.mr-landing__mine-head .t-body {
+  font-size: var(--t-title-size);
+  line-height: var(--t-title-lh);
+  font-weight: 600;
+  color: var(--c-fg);
+}
+
 /* 상태 점은 무채색으로만 구분한다.
  * --c-action 을 "비어있음"에 쓰면 바로 아래 예약 버튼과 액센트가 중복되고,
  * DESIGN.md §12-2 가 유채색 액센트를 "내 것"에 배정한 규칙과 어긋난다.
- * "내 것" 은 카드 배경(--c-mine-bg)이 이미 표시하므로 점에는 색을 쓰지 않는다. */
+ * "내 것" 은 카드 배경(--c-mine-bg)이 이미 표시하므로 점에는 색을 쓰지 않는다.
+ * 결론 텍스트가 커진 만큼 점도 한 단 키워 비례를 맞춘다. */
 .mr-landing__dot {
   flex: none;
-  width: 10px;
-  height: 10px;
+  width: 12px;
+  height: 12px;
   border-radius: 50%;
   background: var(--c-muted);
 }
@@ -189,7 +204,12 @@
   flex: none;
 }
 
+/* 빈 상태도 하나의 독립된 블록으로 읽히게 — 위 상태 카드들의 넉넉한 여백과
+ * 리듬을 맞춘다. 인라인 한 줄로 끼워 넣으면 힘없이 묻힌다. */
 .mr-landing__empty {
+  display: block;
+  padding: 24px 0;
+  text-align: center;
   color: var(--c-muted);
 }
 

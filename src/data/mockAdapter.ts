@@ -3,6 +3,7 @@ import type { Booking, BookingDraft, CurrentUser, DirectoryPerson, UserPrefs } f
 import { overlaps } from "../domain/time";
 import { expandRecurrence } from "../domain/recurrence";
 import rooms from "../config/rooms.json";
+import { MOCK_IDENTITY } from "../config/currentUser";
 
 /**
  * 환경변수를 붙이기 전까지 화면을 돌리는 인메모리 어댑터.
@@ -12,11 +13,12 @@ import rooms from "../config/rooms.json";
  * 제목에 "__taken" / "__declined" 을 넣으면 각 실패를 재현한다.
  */
 
-const ME: CurrentUser = {
-  email: "sungjun@molcube.com",
-  name: "성준",
-  isAdmin: true,
-};
+/**
+ * 로그인한 사람과 예약 데이터의 "나" 는 같은 사람이어야 한다 — 어긋나면 isMine
+ * 판정과 관리자 권한이 조용히 틀어진다. 그래서 값을 두 곳에 적지 않고
+ * src/config/currentUser.ts 하나를 양쪽(mockAuthAdapter 포함)이 참조한다.
+ */
+const ME: CurrentUser = { ...MOCK_IDENTITY, isAdmin: true };
 
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 

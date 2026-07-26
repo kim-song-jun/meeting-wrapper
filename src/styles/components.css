@@ -16,6 +16,12 @@
 .mr-btn:disabled {
   cursor: not-allowed;
 }
+/* DESIGN.md §4: Primary Focus 는 outline 이 아니라 부드러운 글로우(--shadow-focus).
+ * 전역 :focus-visible(base.css) 하드 아웃라인을 버튼류에서만 글로우로 대체한다. */
+.mr-btn:focus-visible {
+  outline: none;
+  box-shadow: var(--shadow-focus);
+}
 /* 누를 때 반응 — DS/⚪ tier, 수치(0.97/150ms)는 규칙이 아니라 취향 휴리스틱.
  * transform 만 사용해 레이아웃에 영향을 주지 않는다(눌렀다 떼는 왕복 모두 애니메이트되도록
  * transition 은 위 base 규칙에 이미 포함되어 있다). */
@@ -139,6 +145,83 @@
 }
 .mr-field__hint--warn {
   color: var(--c-attn-fg);
+}
+
+/* ---------- Form Layout ----------
+ * BookingDialog 처럼 여러 필드가 세로로 쌓이는 폼의 섹션 간격.
+ * 흩어진 style={{marginTop:16}} 대신 컨테이너 gap 으로 통일한다. */
+.mr-form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+/* 섹션 안에서 헤더(라디오/셀렉트/알림 등)에 딸린 하위 콘텐츠 — 섹션 간격(16px)보다
+ * 한 단 좁게(8px), 같은 섹션에 속한다는 것을 시각적으로 드러낸다. */
+.mr-subsection {
+  margin-top: 8px;
+}
+
+/* ---------- RadioGroup ---------- */
+.mr-radiogroup {
+  border: none;
+  padding: 0;
+  margin: 0;
+}
+.mr-radiogroup__options {
+  display: flex;
+  flex-direction: column;
+}
+.mr-radio {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  /* 44px 터치 타깃 하한 — 이 폼은 모바일 QR 랜딩에서도 열린다 */
+  min-height: var(--h-action);
+  cursor: pointer;
+  font-size: var(--t-body-size);
+  color: var(--c-fg);
+}
+/* 시각적으로만 숨긴다 — 스크린리더·키보드 포커스·label 클릭 위임은 그대로 살아있다 */
+.mr-radio__input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+.mr-radio__dot {
+  flex-shrink: 0;
+  width: 20px;
+  height: 20px;
+  border-radius: var(--r-pill);
+  border: 1.5px solid var(--c-border-strong);
+  position: relative;
+  transition: border-color var(--dur-hover) var(--ease-out);
+}
+.mr-radio__dot::after {
+  content: "";
+  position: absolute;
+  inset: 4px;
+  border-radius: var(--r-pill);
+  background: var(--c-action);
+  transform: scale(0);
+  transition: transform var(--dur-hover) var(--ease-out);
+}
+.mr-radio__input:checked + .mr-radio__dot {
+  border-color: var(--c-action);
+}
+.mr-radio__input:checked + .mr-radio__dot::after {
+  transform: scale(1);
+}
+.mr-radio__input:focus-visible + .mr-radio__dot {
+  box-shadow: var(--shadow-focus);
+}
+.mr-radio__label {
+  user-select: none;
 }
 
 /* ---------- Card ---------- */
@@ -268,6 +351,11 @@
   color: var(--c-fg);
   border-bottom-color: var(--c-action);
 }
+/* 버튼과 같은 포커스 언어 — 전역 하드 아웃라인 대신 글로우 */
+.mr-tab:focus-visible {
+  outline: none;
+  box-shadow: var(--shadow-focus);
+}
 /* 누를 때 반응 — DS/⚪ tier */
 .mr-tab:active {
   transform: scale(0.97);
@@ -297,7 +385,8 @@
 }
 .mr-dialog {
   background: var(--c-surface);
-  border-radius: var(--r-lg);
+  /* DESIGN.md §4: 다이얼로그 radius 20px — 카드(18px)보다 한 단 큰 --r-xl */
+  border-radius: var(--r-xl);
   box-shadow: var(--shadow-modal);
   padding: 24px;
   width: 100%;
@@ -367,7 +456,7 @@
   }
   .mr-dialog {
     max-width: none;
-    border-radius: var(--r-lg) var(--r-lg) 0 0;
+    border-radius: var(--r-xl) var(--r-xl) 0 0;
     padding-bottom: calc(24px + env(safe-area-inset-bottom));
     animation: mr-sheet var(--dur-dialog-in) var(--ease-out);
   }

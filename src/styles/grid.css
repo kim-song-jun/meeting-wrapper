@@ -55,7 +55,133 @@
 }
 
 .grid-toolbar {
+  margin: 0;
+}
+
+/* ---------- 뷰 전환 segmented control ----------
+ * 일간/주간/월간은 상호 배타적인 3개 뷰이므로 언더라인 탭(공유 Tabs 컴포넌트,
+ * MyBookingsScreen 과 공유해 components.css 소유) 대신 이 화면 전용 segmented
+ * control 로 묶는다. 무엇을 보고 있는지 하나의 폐곡선 안에서 바로 읽힌다.
+ * DESIGN.md 컴포넌트 목록엔 없는 형태라 [local] — 지오메트리는 §4 버튼 규칙을
+ * 그대로 따른다(6px 대신 pill 인 이유: 여러 옵션 중 하나를 고르는 그룹 컨트롤은
+ * 개별 버튼과 달리 pill 로 묶는 관행 — DESIGN.md 배지·칩과 같은 근거). */
+.grid-viewswitch {
+  display: inline-flex;
+  /* 부모(.grid-screen)가 flex column 이라 align-items 기본값 stretch 가
+   * inline-flex 를 화면 폭 전체로 늘린다 — 세그먼티드 컨트롤은 내용만큼만
+   * 차지해야 "3개 중 하나"로 읽힌다. */
+  align-self: flex-start;
+  padding: 3px;
+  gap: 2px;
+  background: var(--c-surface-muted);
+  border: 1px solid var(--c-border);
+  border-radius: var(--r-sm);
+  margin-bottom: 28px; /* 아래 필터/날짜 컨트롤 클러스터와 성격이 다른 그룹이라 크게 뗀다 */
+}
+
+.grid-viewswitch__btn {
+  height: var(--h-action); /* 44px — 모바일에서도 항상 보이는 최상단 내비게이션이라 compact 를 쓸 수 없다 */
+  padding: 0 20px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: var(--r-sm);
+  background: none;
+  color: var(--c-muted);
+  font-size: var(--t-small-size);
+  font-weight: var(--t-label-w);
+  cursor: pointer;
+  transition: background-color var(--dur-hover) var(--ease-out), color var(--dur-hover) var(--ease-out),
+    transform var(--dur-hover) var(--ease-out);
+}
+.grid-viewswitch__btn:active {
+  transform: scale(0.97);
+}
+.grid-viewswitch__btn.is-active {
+  background: var(--c-surface);
+  color: var(--c-fg);
+  font-weight: 600;
+  /* [local] 카드용 --shadow-soft(0 4px 24px)는 이 크기의 세그먼트엔 과하다 —
+   * 선택된 조각이 살짝 들뜬 정도만 필요하므로 훨씬 얕은 값을 여기서만 쓴다. */
+  box-shadow: 0 1px 2px rgba(23, 23, 23, 0.08);
+}
+
+/* ---------- 필터 + 날짜 툴바 컨테이너 ----------
+ * 인원/부서 필터와 날짜 탐색은 서로 다른 컨트롤이지만 둘 다 "지금 이 화면에
+ * 뭐가 보이는지"를 조정한다는 점에서 한 클러스터다. 옅은 배경 하나로 묶어
+ * 격자 콘텐츠와도, 위 뷰 전환과도 경계를 준다. */
+.grid-controlbar {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 14px 16px;
+  background: var(--c-surface-muted);
+  border: 1px solid var(--c-border);
+  border-radius: var(--r-lg);
   margin-bottom: 16px;
+}
+
+/* ---------- 날짜 스테퍼 (주간·월간 공유) ----------
+ * 이전/다음은 하나의 결정을 반으로 나눈 것이므로 보더를 공유하는 2분할 pill 로
+ * 묶는다. "이번 주"/"이번 달"은 성격이 다른 별도 액션(현재로 점프)이라 분리한다. */
+.grid-datestepper {
+  display: inline-flex;
+  height: var(--h-action);
+  border: 1px solid var(--c-border);
+  border-radius: var(--r-sm);
+  overflow: hidden;
+  background: var(--c-surface);
+}
+.grid-datestepper__btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  /* 정사각형 — 부모가 height: var(--h-action) 이므로 폭도 같은 토큰을 참조한다.
+   * 44px 리터럴로 두면 토큰이 바뀔 때 조용히 직사각형이 된다. */
+  width: var(--h-action);
+  height: 100%;
+  border: none;
+  background: none;
+  color: var(--c-secondary);
+  font-size: var(--t-body-size);
+  line-height: 1;
+  cursor: pointer;
+  transition: background-color var(--dur-hover) var(--ease-out), color var(--dur-hover) var(--ease-out);
+}
+.grid-datestepper__btn:hover {
+  background: var(--c-canvas);
+  color: var(--c-fg);
+}
+.grid-datestepper__divider {
+  width: 1px;
+  align-self: stretch;
+  background: var(--c-border);
+}
+
+/* ---------- 로딩 스켈레톤 ----------
+ * 스피너 대신 최종 프레임과 같은 자리를 중립색으로 채운다(Apple 은 스피너를
+ * 남발하지 않는다). 모션 없음 — 깜빡이는 shimmer 는 넣지 않는다. */
+.grid-skeleton-bar {
+  display: block;
+  width: 64%;
+  height: 10px;
+  border-radius: 4px;
+  background: var(--c-border);
+}
+.grid-skeleton-bar--sm {
+  width: 40%;
+  height: 8px;
+}
+.grid-skeleton-card {
+  height: 56px;
+  border-radius: var(--r-md);
+  background: var(--c-surface-muted);
+  border: 1px solid var(--c-border);
+}
+.grid-month__cell--skeleton {
+  background: var(--c-surface);
+  cursor: default;
 }
 
 /*
@@ -83,7 +209,7 @@
 /* ---------- 뷰 공통 필터 바 (인원·부서) ---------- */
 
 .grid-filterbar.mr-row {
-  margin: 16px 0;
+  margin: 0;
   align-items: flex-start;
 }
 
@@ -601,7 +727,8 @@
 @media (prefers-reduced-motion: reduce) {
   .grid-deptchip:active,
   .grid-roomchip:active,
-  .grid-event:active {
+  .grid-event:active,
+  .grid-viewswitch__btn:active {
     transform: none;
   }
 }

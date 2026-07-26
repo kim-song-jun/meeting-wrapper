@@ -1,0 +1,82 @@
+/*
+ * /login — Shell 밖 단독 화면(QR 랜딩과 같은 급). 배경은 base.css 의 전역
+ * body::before 앰비언트 블루 radial 이 자동 적용된다 — 여기서 새로 만들
+ * 것 없음.
+ */
+
+.mr-login {
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 24px 20px;
+  padding-top: max(24px, env(safe-area-inset-top));
+  padding-bottom: max(24px, env(safe-area-inset-bottom));
+}
+
+@media (max-width: 767px) {
+  .mr-login {
+    padding: 20px 16px;
+    padding-top: max(20px, env(safe-area-inset-top));
+    padding-bottom: max(20px, env(safe-area-inset-bottom));
+  }
+}
+
+.mr-login__col {
+  width: 100%;
+  max-width: 360px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.mr-login__mark {
+  margin-bottom: 16px;
+}
+
+.mr-login__title {
+  margin: 0;
+  color: var(--c-fg);
+}
+
+.mr-login__subtitle {
+  margin: 4px 0 0;
+}
+
+/*
+ * 아이덴티티 블록과 액션 사이 — Apple 사인인 페이지 관행의 넉넉한 여백.
+ * 도메인 거부 상태(③)는 Primary 버튼이 사라져 안내 문구가 subtitle 바로
+ * 다음 형제가 되므로, 어느 쪽이 오든 subtitle 다음 요소에 32px 을 준다.
+ */
+.mr-login__subtitle + .mr-btn,
+.mr-login__subtitle + .mr-login__hint {
+  margin-top: 32px;
+}
+
+.mr-login__hint {
+  margin: 8px 0 0;
+}
+
+.mr-login__failure {
+  margin-top: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: 100%;
+}
+
+.mr-login__failure .mr-alert div:focus-visible {
+  outline: 2px solid var(--c-action);
+  outline-offset: 2px;
+  border-radius: var(--r-md);
+}
+
+/* 세션 확인 중(checking) — 로고만 화면 중앙에, 텍스트·스피너 없음 */
+.mr-boot-splash {
+  min-height: 100dvh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}

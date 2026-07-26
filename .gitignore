@@ -11,3 +11,6 @@ tsconfig.tsbuildinfo
 .env
 .env.*
 !.env.example
+
+# insane-review (GPT 리뷰 패킹/응답 산출물 — 커밋하지 않는다)
+.insane-review/

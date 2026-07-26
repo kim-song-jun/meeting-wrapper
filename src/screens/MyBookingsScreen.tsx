@@ -82,7 +82,8 @@ export function MyBookingsScreen() {
 
   return (
     <div>
-      <p className="mine-user">
+      <h1 className="t-title mine-title">내 예약</h1>
+      <p className="mine-user t-small t-muted">
         {user.name} · {user.email}
         {user.isAdmin ? " · 관리자" : ""}
       </p>
@@ -167,29 +168,27 @@ function BookingItem({ booking, onCancel }: { booking: Booking; onCancel: () => 
   const link = conferenceUrl(booking);
 
   return (
-    <Card mine>
-      <div className="mine-item">
-        <div className="mine-item__main">
-          <span className="mine-item__room">{room?.name ?? booking.roomId}</span>
-          <span className="mine-item__meta t-num">
-            {hhmm(booking.start)}–{hhmm(booking.end)} ({humanDuration(durationMin)}) · 인원{" "}
-            {booking.headcount}명
-            {booking.attendeeCount > 0 ? " · 초대 " + String(booking.attendeeCount) + "명" : null}
-          </span>
-          {link ? (
-            <a className="mine-item__link" href={link} target="_blank" rel="noreferrer">
-              {link}
-            </a>
-          ) : null}
-        </div>
-        <div className="mine-item__actions">
-          {/* "취소" 단독은 예약 모달의 "닫기" 뜻과 혼동된다. 무엇을 지우는지 밝힌다. */}
-          <Button variant="secondary" onClick={onCancel}>
-            예약 취소
-          </Button>
-        </div>
+    <div className="mine-item">
+      <div className="mine-item__main">
+        <span className="mine-item__room">{room?.name ?? booking.roomId}</span>
+        <span className="mine-item__meta t-num">
+          {hhmm(booking.start)}–{hhmm(booking.end)} ({humanDuration(durationMin)}) · 인원{" "}
+          {booking.headcount}명
+          {booking.attendeeCount > 0 ? " · 초대 " + String(booking.attendeeCount) + "명" : null}
+        </span>
+        {link ? (
+          <a className="mine-item__link" href={link} target="_blank" rel="noreferrer">
+            {link}
+          </a>
+        ) : null}
       </div>
-    </Card>
+      <div className="mine-item__actions">
+        {/* "취소" 단독은 예약 모달의 "닫기" 뜻과 혼동된다. 무엇을 지우는지 밝힌다. */}
+        <Button variant="secondary" onClick={onCancel}>
+          예약 취소
+        </Button>
+      </div>
+    </div>
   );
 }
 
@@ -331,23 +330,21 @@ function AllTab() {
 function AdminBookingItem({ booking, onCancel }: { booking: Booking; onCancel: () => void }) {
   const durationMin = (booking.end.getTime() - booking.start.getTime()) / MINUTE;
   return (
-    <Card mine={booking.isMine}>
-      <div className="mine-item">
-        <div className="mine-item__main">
-          <span className="mine-item__room">{booking.organizerName}</span>
-          <span className="mine-item__meta t-num">
-            {hhmm(booking.start)}–{hhmm(booking.end)} ({humanDuration(durationMin)})
-          </span>
-          {booking.isMine ? <Badge tone="mine">내 예약</Badge> : null}
-        </div>
-        <div className="mine-item__actions">
-          {/* "취소" 단독은 예약 모달의 "닫기" 뜻과 혼동된다. 무엇을 지우는지 밝힌다. */}
-          <Button variant="secondary" onClick={onCancel}>
-            예약 취소
-          </Button>
-        </div>
+    <div className="mine-item">
+      <div className="mine-item__main">
+        <span className="mine-item__room">{booking.organizerName}</span>
+        <span className="mine-item__meta t-num">
+          {hhmm(booking.start)}–{hhmm(booking.end)} ({humanDuration(durationMin)})
+        </span>
+        {booking.isMine ? <Badge tone="mine">내 예약</Badge> : null}
       </div>
-    </Card>
+      <div className="mine-item__actions">
+        {/* "취소" 단독은 예약 모달의 "닫기" 뜻과 혼동된다. 무엇을 지우는지 밝힌다. */}
+        <Button variant="secondary" onClick={onCancel}>
+          예약 취소
+        </Button>
+      </div>
+    </div>
   );
 }
 
