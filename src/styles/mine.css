@@ -15,10 +15,9 @@
 }
 
 .mine-day-heading {
-  font-family: var(--font-display);
-  font-size: var(--t-tile-size);
-  line-height: var(--t-tile-lh);
-  letter-spacing: var(--t-tile-ls);
+  font-family: var(--font-sans);
+  font-size: var(--t-section-size);
+  line-height: var(--t-section-lh);
   font-weight: 600;
   margin-bottom: 12px;
 }
@@ -58,7 +57,6 @@
 .mine-item__room {
   font-size: var(--t-body-size);
   line-height: var(--t-body-lh);
-  letter-spacing: var(--t-body-ls);
   font-weight: 600;
 }
 

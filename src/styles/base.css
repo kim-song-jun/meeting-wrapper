@@ -14,10 +14,10 @@ body,
 
 body {
   margin: 0;
-  font-family: var(--font-text);
+  font-family: var(--font-sans);
   font-size: var(--t-body-size);
   line-height: var(--t-body-lh);
-  letter-spacing: var(--t-body-ls);
+  font-weight: var(--t-body-w);
   color: var(--c-fg);
   background: var(--c-canvas);
   -webkit-font-smoothing: antialiased;
@@ -47,45 +47,43 @@ a {
 
 /* 키보드 사용자에게만 포커스 링을 보인다 */
 :focus-visible {
-  outline: 2px solid var(--c-primary);
+  outline: 2px solid var(--c-action);
   outline-offset: 2px;
 }
 
 /* ---- type utilities ---- */
-.t-hero {
-  font-family: var(--font-display);
-  font-size: var(--t-hero-size);
-  line-height: var(--t-hero-lh);
-  letter-spacing: var(--t-hero-ls);
-  font-weight: 600;
+.t-display {
+  font-family: var(--font-sans);
+  font-size: var(--t-display-size);
+  line-height: var(--t-display-lh);
+  font-weight: var(--t-display-w);
 }
 .t-section {
-  font-family: var(--font-display);
+  font-family: var(--font-sans);
   font-size: var(--t-section-size);
   line-height: var(--t-section-lh);
-  font-weight: 600;
+  font-weight: var(--t-section-w);
 }
-.t-tile {
-  font-family: var(--font-display);
-  font-size: var(--t-tile-size);
-  line-height: var(--t-tile-lh);
-  letter-spacing: var(--t-tile-ls);
-  font-weight: 600;
+.t-title {
+  font-family: var(--font-sans);
+  font-size: var(--t-title-size);
+  line-height: var(--t-title-lh);
+  font-weight: var(--t-title-w);
 }
 .t-body {
   font-size: var(--t-body-size);
   line-height: var(--t-body-lh);
-  letter-spacing: var(--t-body-ls);
+  font-weight: var(--t-body-w);
 }
 .t-small {
   font-size: var(--t-small-size);
   line-height: var(--t-small-lh);
-  letter-spacing: var(--t-small-ls);
+  font-weight: var(--t-small-w);
 }
 .t-cap {
   font-size: var(--t-cap-size);
   line-height: var(--t-cap-lh);
-  letter-spacing: var(--t-cap-ls);
+  font-weight: var(--t-cap-w);
 }
 .t-muted {
   color: var(--c-muted);

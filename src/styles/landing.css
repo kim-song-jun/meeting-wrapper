@@ -17,11 +17,10 @@
 }
 
 .mr-landing__brand {
-  font-family: var(--font-display);
+  font-family: var(--font-sans);
   font-size: var(--t-small-size);
   font-weight: 600;
-  color: var(--c-secondary);
-  letter-spacing: var(--t-small-ls);
+  color: var(--c-brand);
 }
 
 .mr-landing__main {
@@ -54,7 +53,7 @@
 }
 
 /* 상태 점은 무채색으로만 구분한다.
- * --c-primary 를 "비어있음"에 쓰면 바로 아래 예약 버튼과 액센트가 중복되고,
+ * --c-action 을 "비어있음"에 쓰면 바로 아래 예약 버튼과 액센트가 중복되고,
  * DESIGN.md §12-2 가 유채색 액센트를 "내 것"에 배정한 규칙과 어긋난다.
  * "내 것" 은 카드 배경(--c-mine-bg)이 이미 표시하므로 점에는 색을 쓰지 않는다. */
 .mr-landing__dot {
@@ -154,7 +153,7 @@
   gap: 12px;
   background: var(--c-surface);
   border: 1px solid var(--c-border);
-  border-radius: var(--r-control);
+  border-radius: var(--r-md);
   padding: 10px 14px;
 }
 
@@ -211,7 +210,7 @@
   min-height: var(--h-action);
   background: var(--c-surface);
   border: 1px solid var(--c-border);
-  border-radius: var(--r-control);
+  border-radius: var(--r-md);
   padding: 0 14px;
   color: var(--c-link);
   text-decoration: none;

@@ -1,84 +1,129 @@
 /*
- * molroom design tokens — DESIGN.md 에서 파생.
+ * molroom design tokens — MolCube 브랜드에서 파생.
+ *
+ * 출처: molcube-web/molcube-frontend/tailwind.config.js (2026-07-26 실측)
+ *       로고 색은 public/images/molcube/molcube.png 픽셀에서 추출.
  *
  * 증거 등급을 반드시 유지할 것:
- *   [verified] Apple 공개 표면 2026-07-11 실측. 임의로 바꾸지 말 것.
- *   [local]    molroom 로컬 확장. Apple 이 보증하지 않음.
- *   [unresolved] 근거 없어 미정. 필요하면 실측하거나 명시적으로 결정할 것.
+ *   [brand]  molcube-web 에 실제로 있는 토큰. 임의로 바꾸지 말 것.
+ *   [logo]   MolCube 로고 이미지에서 추출한 값.
+ *   [local]  molroom 로컬 확장. MolCube 에 없음.
+ *   [a11y]   접근성 때문에 브랜드 값에서 의도적으로 벗어난 값. 사유가 함께 적혀 있다.
  *
  * 값을 바꾸기 전에 DESIGN.md 를 먼저 읽는다.
  */
 
 :root {
-  /* ---- color: verified ---- */
-  --c-primary: #0071e3;        /* [verified] 채워진 액션. 흰 텍스트 대비 4.70:1 */
-  --c-brand: #000000;          /* [verified] 다크 섹션 */
-  --c-canvas: #f5f5f7;         /* [verified] 밝은 섹션 · 격자 배경 */
-  --c-surface: #ffffff;        /* [verified] 카드 · 다이얼로그 · 예약된 셀 */
-  --c-fg: #1d1d1f;             /* [verified] 주 텍스트. on white 16.83:1 */
-  --c-muted: #6e6e73;          /* [verified] 보조 텍스트. on white 5.07:1 */
-  --c-secondary: #515154;      /* [verified] 중립. on white 7.91:1 */
-  --c-on-primary: #ffffff;     /* [verified] 파란 채움 위 텍스트 */
-  --c-link: #0066cc;           /* [verified] 링크 · 아웃라인. on white 5.57:1 */
-  --c-link-dark: #2997ff;      /* [verified] 다크 섹션의 밝은 파랑 */
+  /* ================= 브랜드 색 ================= */
 
-  /* ---- color: local (예약 상태) ----
-   * 레퍼런스에 상태색이 없어 로컬 확장. 대비비는 실측 계산값.
-   * 비어있음에는 색을 주지 않는다 — --c-canvas 를 그대로 쓴다.
-   * 남의 예약도 색을 주지 않는다 — 정상 상태이므로 --c-surface.
+  /* MolCube 로고의 세 면 + 외곽선. 워드마크와 장식에만 쓴다. */
+  --c-brand: #202362;        /* [brand] brand-indigo. 로고 외곽선 #202362 */
+  --c-brand-blue: #4281FF;   /* [brand] primary. 로고 파란 면 #4279BC 의 UI 버전 */
+  --c-brand-mint: #73FEDD;   /* [logo] 로고 민트 면 */
+  --c-brand-amber: #FFC006;  /* [logo] 로고 노란 면 */
+
+  /*
+   * 채움 액션 배경.
+   *
+   * [a11y] MolCube 자신은 bg-primary(#4281FF) + 흰 텍스트를 쓰지만 대비가
+   * 3.61:1 로 WCAG AA 본문 기준(4.5:1)에 못 미친다. 같은 블루 계열의 실제
+   * MolCube 토큰인 accent.hover(#185FA5, 흰 텍스트 6.52:1)를 대신 쓴다.
+   * 색상환을 벗어나지 않으면서 읽히는 버튼을 만드는 유일한 방법이다.
    */
-  --c-mine-bg: #e8f2fd;        /* [local] 내 예약. fg 대비 14.87:1 */
-  --c-mine-border: #66aef0;    /* [local] 내 예약 테두리 */
-  --c-attn-fg: #8a5300;        /* [local] 주의 텍스트. on white 6.33:1, on tint 5.82:1 */
-  --c-attn-bg: #fff4e5;        /* [local] 주의 배경 */
-  --c-border: #d2d2d7;         /* [local] 기본 보더 · 30분 격자선 */
-  --c-border-strong: #c7c7cc;  /* [local] 정시 격자선 */
-  --c-backdrop: rgba(0, 0, 0, 0.4); /* [local] 다이얼로그 backdrop */
+  --c-action: #185FA5;        /* [a11y] accent.hover. 흰 텍스트 6.52:1 */
+  --c-action-hover: #0C447C;  /* [brand] accent.text. 흰 텍스트 9.84:1 */
+  --c-action-tint: #E6F1FB;   /* [brand] accent.light · dna-bg */
+  --c-action-border: #B5D4F4; /* [brand] accent.border */
+  --c-on-action: #ffffff;     /* [brand] */
 
-  /* 빨강은 정의하지 않는다 [unresolved]
-   * 예약된 방은 오류가 아니다. 파괴적 확인에 필요해지면 그때 실측해 추가한다. */
+  --c-link: #185FA5;          /* [a11y] #4281FF 는 흰 배경에서 3.61:1 로 미달 */
 
-  /* ---- typography: verified ---- */
-  --font-text: -apple-system, BlinkMacSystemFont, "SF Pro Text",
-               "Apple SD Gothic Neo", "Pretendard", sans-serif;
-  --font-display: -apple-system, BlinkMacSystemFont, "SF Pro Display",
-                  "Apple SD Gothic Neo", "Pretendard", sans-serif;
+  /* ================= 중립 ================= */
+  --c-canvas: #FAFAF8;        /* [brand] surface.subtle. 따뜻한 오프화이트 */
+  --c-surface: #ffffff;       /* [brand] surface.DEFAULT */
+  --c-surface-muted: #F5F5F2; /* [brand] surface.muted */
+  --c-border: #E4E4E0;        /* [brand] border.DEFAULT */
+  --c-border-strong: #CFCFCA; /* [brand] border.strong */
 
-  --t-hero-size: 56px;      --t-hero-lh: 60px;   --t-hero-ls: -0.28px;   /* [verified] */
-  --t-section-size: 40px;   --t-section-lh: 44px; --t-section-ls: normal; /* [verified] */
-  --t-tile-size: 28px;      --t-tile-lh: 32px;   --t-tile-ls: 0.196px;   /* [verified] */
-  --t-body-size: 17px;      --t-body-lh: 25px;   --t-body-ls: -0.374px;  /* [verified] */
-  --t-small-size: 14px;     --t-small-lh: 18px;  --t-small-ls: -0.224px; /* [verified] */
-  --t-cap-size: 12px;       --t-cap-lh: 16px;    --t-cap-ls: -0.12px;    /* [verified] */
+  /* MolCube 는 gray 를 Tailwind neutral 로 별칭한다 (tailwind.config.js) */
+  --c-fg: #171717;            /* [brand] neutral-900. on canvas 17.15:1 */
+  --c-secondary: #525252;     /* [brand] neutral-600. on canvas 7.48:1 */
+  --c-muted: #737373;         /* [brand] neutral-500. on canvas 4.54:1 */
 
-  /* ---- geometry ---- */
-  --r-pill: 980px;   /* [verified] 마케팅 pill */
-  --r-card: 18px;    /* [verified] HIG 문서 카드. 네이티브 앱으로 가면 다시 정할 것 */
-  --r-control: 8px;  /* [local] 입력 컨트롤. 검증값이 없어 로컬로 정함 [unresolved 참조] */
+  --c-stage: #071B33;         /* [brand] viewer.stage. 다크 표면이 필요할 때 */
+  --c-backdrop: rgba(7, 27, 51, 0.45); /* [local] viewer.stage 를 깔아 다이얼로그 뒤를 덮는다 */
 
-  --h-action: 44px;         /* [verified] 큰 컨트롤 · 터치 타깃 하한 */
-  --h-action-compact: 36px; /* [verified] 컴팩트 컨트롤 */
+  /* ================= 예약 상태 =================
+   * MolCube 는 이미 분자 종류별 의미색 쌍(protein/dna/rna/ligand)을 갖고 있다.
+   * 상태색을 새로 발명하지 않고 그 쌍을 빌려 쓴다 — 브랜드 안에 머문다.
+   *
+   * 비어있음: 색을 주지 않는다(--c-canvas 그대로). 부재는 강조가 아니다.
+   * 남의 예약: 색을 주지 않는다(--c-surface). 정상 상태다.
+   */
+  --c-mine-bg: #E6F1FB;      /* [brand] dna-bg. fg 대비 15.66:1 */
+  --c-mine-fg: #185FA5;      /* [brand] dna-text. tint 위 5.70:1 */
+  --c-mine-border: #B5D4F4;  /* [brand] accent.border */
+
+  --c-attn-bg: #FAEEDA;      /* [brand] rna-bg */
+  --c-attn-fg: #854F0B;      /* [brand] rna-text. tint 위 5.87:1 */
+
+  /* 빨강은 정의하지 않는다. 예약된 방은 오류가 아니다.
+   * 파괴적 확인에 필요해지면 그때 MolCube 에서 찾아 온다. */
+
+  /* ================= 타이포그래피 ================= */
+  /* MolCube 는 Pretendard Variable 을 본문 sans 로, IBM Plex Mono 를 mono 로 쓴다 */
+  --font-sans: "Pretendard Variable", Pretendard, -apple-system, BlinkMacSystemFont,
+               system-ui, "Apple SD Gothic Neo", Roboto, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  /*
+   * 위계는 MolCube 의 Tailwind 스케일을 따른다 (Apple 마케팅 스케일보다 조밀하다).
+   * 본문 16px — 이 값 미만이면 모바일 Safari 가 입력 필드에서 자동 확대한다.
+   */
+  --t-display-size: 36px; --t-display-lh: 44px; --t-display-w: 700; /* [brand] 4xl */
+  --t-title-size: 24px;   --t-title-lh: 32px;   --t-title-w: 600;   /* [brand] 2xl */
+  --t-section-size: 20px; --t-section-lh: 28px; --t-section-w: 600; /* [brand] xl */
+  --t-body-size: 16px;    --t-body-lh: 24px;    --t-body-w: 400;    /* [brand] base */
+  --t-small-size: 14px;   --t-small-lh: 20px;   --t-small-w: 400;   /* [brand] sm */
+  --t-cap-size: 12px;     --t-cap-lh: 16px;     --t-cap-w: 400;     /* [brand] xs */
+  --t-label-w: 500;                                                  /* [brand] font-medium */
+
+  /* ================= 지오메트리 ================= */
+  /* MolCube 하우스 스타일은 라운드 사각형이다 (rounded-lg 811회 · md 467 · xl 315).
+   * pill(rounded-full)은 배지·칩에만 쓴다 (484회, 주로 태그류). */
+  --r-sm: 6px;    /* [brand] rounded-md — 버튼 */
+  --r-md: 8px;    /* [brand] borderRadius.DEFAULT — 입력 */
+  --r-lg: 12px;   /* [brand] borderRadius.lg — 카드 (가장 많이 쓰임) */
+  --r-xl: 16px;   /* [brand] borderRadius.xl — 큰 표면 */
+  --r-pill: 980px;/* [brand] rounded-full — 배지·칩 전용 */
+
+  --h-action: 44px;         /* [a11y] 터치 타깃 하한. MolCube 는 py-2.5+14px≈40px */
+  --h-action-compact: 36px; /* [local] 데스크톱 격자 인접 전용 */
   --h-input: 40px;          /* [local] */
-  --h-tab: 53px;            /* [verified] Apple Store 갤러리 탭 */
-  --h-badge: 20px;          /* [local] */
+  --h-tab: 44px;            /* [local] */
+  --h-badge: 22px;          /* [local] */
 
-  --pad-action: 11px 21px;         /* [verified] */
-  --pad-action-compact: 8px 15px;  /* [verified] */
-  --pad-content: 20px;             /* [verified] 콘텐츠 클러스터 */
+  --pad-action: 10px 20px;         /* [brand] px-5 py-2.5 */
+  --pad-action-compact: 6px 14px;  /* [local] */
+  --pad-content: 16px;             /* [brand] p-4 */
 
-  /* ---- booking grid: local ---- */
-  --grid-slot-min: 30;      /* [local] 슬롯 단위(분) */
-  --grid-slot-h: 28px;      /* [local] 30분당 높이 — 08:00~20:00 이 한 화면에 들어감 */
-  --grid-col-min: 132px;    /* [local] 회의실 열 최소 폭 */
-  --grid-axis-w: 64px;      /* [local] 시간 축 폭 */
+  /* ================= 그림자 ================= */
+  --shadow-focus: 0 0 0 3px rgba(55, 138, 221, 0.18); /* [brand] boxShadow.focus */
+  --shadow-modal: 0 8px 32px rgba(0, 0, 0, 0.12);     /* [brand] boxShadow.modal */
+  --shadow-soft: 4px 0 50px rgba(17, 20, 21, 0.05);   /* [brand] boxShadow.soft */
 
-  /* ---- motion: local ----
-   * 레퍼런스에서 승격된 Apple 모션 토큰은 없다(없음이 확인됨).
-   * 아래는 전부 로컬 확장이며 최소로 유지한다. */
-  --ease-out: cubic-bezier(0.32, 0.72, 0, 1);
-  --dur-dialog-in: 200ms;
-  --dur-dialog-out: 150ms;
-  --dur-cell: 120ms;
+  /* ================= 예약 격자 (local) ================= */
+  --grid-slot-min: 30;
+  --grid-slot-h: 28px;
+  --grid-col-min: 132px;
+  --grid-axis-w: 64px;
+
+  /* ================= 모션 ================= */
+  /* [brand] molcube-web 의 fade-in-down 0.3s ease-out / fade-out-up 0.2s ease-in */
+  --ease-out: cubic-bezier(0, 0, 0.2, 1);
+  --dur-dialog-in: 300ms;
+  --dur-dialog-out: 200ms;
+  --dur-cell: 200ms;
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -10,7 +10,7 @@
   border: none;
   cursor: pointer;
   white-space: nowrap;
-  font-family: var(--font-text);
+  font-family: var(--font-sans);
   transition: background-color var(--dur-cell) var(--ease-out);
 }
 .mr-btn:disabled {
@@ -18,40 +18,49 @@
 }
 
 .mr-btn--primary {
-  background: var(--c-primary);
-  color: var(--c-on-primary);
-  border-radius: var(--r-pill);
+  background: var(--c-action);
+  color: var(--c-on-action);
+  border-radius: var(--r-sm);
   padding: var(--pad-action);
   height: var(--h-action);
   font-size: var(--t-body-size);
 }
+.mr-btn--primary:hover:not(:disabled) {
+  background: var(--c-action-hover);
+}
 .mr-btn--secondary {
   background: transparent;
-  color: var(--c-link);
-  border: 1px solid var(--c-link);
-  border-radius: var(--r-pill);
+  color: var(--c-action);
+  border: 1px solid var(--c-action-border);
+  border-radius: var(--r-sm);
   padding: var(--pad-action);
   height: var(--h-action);
   font-size: var(--t-body-size);
 }
 .mr-btn--compact {
-  background: var(--c-primary);
-  color: var(--c-on-primary);
-  border-radius: var(--r-pill);
+  background: var(--c-action);
+  color: var(--c-on-action);
+  border-radius: var(--r-sm);
   padding: var(--pad-action-compact);
   height: var(--h-action-compact);
   font-size: var(--t-small-size);
 }
+.mr-btn--compact:hover:not(:disabled) {
+  background: var(--c-action-hover);
+}
 .mr-btn--compact.mr-btn--quiet {
   background: transparent;
-  color: var(--c-link);
-  border: 1px solid var(--c-link);
+  color: var(--c-action);
+  border: 1px solid var(--c-action-border);
+}
+.mr-btn--compact.mr-btn--quiet:hover:not(:disabled) {
+  background: transparent;
 }
 
 /* 비활성은 opacity 로 흐리지 않는다. 사유는 버튼 옆 캡션으로 상시 노출한다. */
 .mr-btn--primary:disabled,
 .mr-btn--compact:disabled {
-  background: var(--c-canvas);
+  background: var(--c-surface-muted);
   color: var(--c-muted);
   border: 1px solid var(--c-border);
 }
@@ -86,19 +95,19 @@
   background: var(--c-surface);
   color: var(--c-fg);
   border: 1px solid var(--c-border);
-  border-radius: var(--r-control);
+  border-radius: var(--r-md);
   height: var(--h-input);
   padding: 0 12px;
-  /* 17px 유지: 16px 미만이면 모바일 Safari 가 자동 확대해 QR 예약 흐름이 깨진다 */
+  /* 16px 유지: 16px 미만이면 모바일 Safari 가 자동 확대해 QR 예약 흐름이 깨진다 */
   font-size: var(--t-body-size);
 }
 .mr-input::placeholder {
   color: var(--c-muted);
 }
 .mr-input:focus {
-  border-color: var(--c-primary);
+  border-color: var(--c-action);
   outline: none;
-  box-shadow: 0 0 0 3px rgba(0, 113, 227, 0.2);
+  box-shadow: var(--shadow-focus);
 }
 .mr-field__hint {
   font-size: var(--t-cap-size);
@@ -113,7 +122,7 @@
 /* ---------- Card ---------- */
 .mr-card {
   background: var(--c-surface);
-  border-radius: var(--r-card);
+  border-radius: var(--r-lg);
   padding: var(--pad-content);
   border: 1px solid var(--c-border);
 }
@@ -134,12 +143,11 @@
   padding: 0 8px;
   font-size: var(--t-cap-size);
   line-height: var(--t-cap-lh);
-  letter-spacing: var(--t-cap-ls);
   white-space: nowrap;
 }
 .mr-badge--mine {
   background: var(--c-mine-bg);
-  color: var(--c-fg);
+  color: var(--c-mine-fg);
 }
 .mr-badge--attn {
   background: var(--c-attn-bg);
@@ -171,7 +179,7 @@
 }
 .mr-tab[aria-selected="true"] {
   color: var(--c-fg);
-  border-bottom-color: var(--c-primary);
+  border-bottom-color: var(--c-action);
 }
 
 /* ---------- Dialog ---------- */
@@ -188,7 +196,8 @@
 }
 .mr-dialog {
   background: var(--c-surface);
-  border-radius: var(--r-card);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-modal);
   padding: 24px;
   width: 100%;
   max-width: 480px;
@@ -197,11 +206,10 @@
   animation: mr-rise var(--dur-dialog-in) var(--ease-out);
 }
 .mr-dialog__title {
-  font-family: var(--font-display);
-  font-size: var(--t-tile-size);
-  line-height: var(--t-tile-lh);
-  letter-spacing: var(--t-tile-ls);
-  font-weight: 600;
+  font-family: var(--font-sans);
+  font-size: var(--t-title-size);
+  line-height: var(--t-title-lh);
+  font-weight: var(--t-title-w);
 }
 .mr-dialog__sub {
   font-size: var(--t-small-size);
@@ -240,7 +248,7 @@
   }
   .mr-dialog {
     max-width: none;
-    border-radius: var(--r-card) var(--r-card) 0 0;
+    border-radius: var(--r-lg) var(--r-lg) 0 0;
     padding-bottom: calc(24px + env(safe-area-inset-bottom));
     animation: mr-sheet var(--dur-dialog-in) var(--ease-out);
   }
@@ -259,7 +267,7 @@
 
 /* ---------- 공통 알림 ---------- */
 .mr-alert {
-  border-radius: var(--r-control);
+  border-radius: var(--r-md);
   padding: 12px 14px;
   font-size: var(--t-small-size);
   line-height: var(--t-small-lh);
@@ -268,7 +276,7 @@
 }
 .mr-alert--info {
   background: var(--c-mine-bg);
-  color: var(--c-fg);
+  color: var(--c-mine-fg);
 }
 
 /* ---------- 인원 스테퍼 ----------
@@ -321,9 +329,9 @@
   height: var(--h-action-compact);
   padding: var(--pad-action-compact);
   border-radius: var(--r-pill);
-  border: 1px solid var(--c-link);
+  border: 1px solid var(--c-action-border);
   background: transparent;
-  color: var(--c-link);
+  color: var(--c-action);
   font-size: var(--t-small-size);
   cursor: pointer;
 }
@@ -337,7 +345,7 @@
   margin: 0;
   padding: 0;
   border: 1px solid var(--c-border);
-  border-radius: var(--r-control);
+  border-radius: var(--r-md);
   background: var(--c-surface);
   overflow: hidden;
 }
@@ -385,7 +393,7 @@
   padding: 0 4px 0 10px;
   border-radius: var(--r-pill);
   background: var(--c-mine-bg);
-  color: var(--c-fg);
+  color: var(--c-mine-fg);
   font-size: var(--t-small-size);
 }
 .mr-picker__remove {

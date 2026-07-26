@@ -20,10 +20,10 @@
 }
 
 .mr-appbar__brand {
-  font-family: var(--font-display);
+  font-family: var(--font-sans);
   font-size: var(--t-body-size);
-  font-weight: 600;
-  letter-spacing: -0.2px;
+  font-weight: var(--t-title-w);
+  color: var(--c-brand);
 }
 
 .mr-appbar__nav {
@@ -39,8 +39,8 @@
   padding: 6px 0;
 }
 .mr-navlink.active {
-  color: var(--c-fg);
-  font-weight: 600;
+  color: var(--c-action);
+  font-weight: var(--t-label-w);
 }
 
 .mr-main {

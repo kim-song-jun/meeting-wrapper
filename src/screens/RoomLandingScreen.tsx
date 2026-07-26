@@ -231,7 +231,7 @@ export function RoomLandingScreen() {
     <div className="mr-landing">
       <LandingHeader />
       <main className="mr-landing__main">
-        <h1 className="t-hero mr-landing__title">{room.name}</h1>
+        <h1 className="t-display mr-landing__title">{room.name}</h1>
         <p className="t-body mr-landing__meta">
           {String(room.capacity)}인 · {room.floor}
         </p>
