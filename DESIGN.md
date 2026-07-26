@@ -103,7 +103,9 @@ molcube 환경은 macOS 가 아닐 수 있다. 폴백 스택은 `-apple-system, 
 ### molroom Compact Action
 - Background: `#0071e3` / Text: `#ffffff` `verified`
 - Radius: 980px / Padding: 8px 15px / Height: 36px / Font: 14px 400 `verified`
-- Use: 격자 위 인라인 액션, `+15분` / `-15분` 연장 컨트롤
+- Use: **데스크톱 격자 인접 컨텍스트에서만.** 격자 위 인라인 액션, 격자 상세 다이얼로그의 `+15분` / `-15분`
+- 모바일(QR 랜딩)의 같은 연장 컨트롤은 Compact 를 쓰지 않고 **Secondary(44px)** 를 쓴다.
+  36px 는 터치 타깃 하한을 밑돈다. 같은 동작이라도 표면에 따라 지오메트리가 다른 것이 맞다 `local`
 - 비활성(다음 예약과 충돌): opacity 는 쓰지 말 것. 배경 `#f5f5f7`, 텍스트 `#6e6e73`, 커서 not-allowed, 사유를 툴팁이 아니라 **버튼 옆 캡션으로 상시 노출** `local`
 
 ### molroom Input

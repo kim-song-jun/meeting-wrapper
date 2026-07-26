@@ -31,10 +31,13 @@
   margin-bottom: 12px;
 }
 
+/* 1440px 화면에서 카드가 통째로 늘어나면 취소 버튼이 저 멀리 떨어져 읽기 나쁘다.
+ * 읽기 좋은 줄 길이로 제한한다. */
 .mine-list {
   display: flex;
   flex-direction: column;
   gap: 12px;
+  max-width: 720px;
 }
 
 .mine-item {

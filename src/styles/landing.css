@@ -1,0 +1,218 @@
+/* QR 랜딩 (/r/:roomId) — 모바일 우선, 단일 결정(지금 비었나 → 탭) 최적화.
+ * 앱 셸 없이 단독으로 렌더되므로 자체 미니 헤더를 포함한다.
+ * 값은 전부 tokens.css 변수를 참조한다. DESIGN.md §3, §8, §12-7 참고. */
+
+.mr-landing {
+  min-height: 100%;
+  display: flex;
+  flex-direction: column;
+  background: var(--c-canvas);
+}
+
+.mr-landing__header {
+  display: flex;
+  align-items: center;
+  height: 44px;
+  padding: 0 20px;
+}
+
+.mr-landing__brand {
+  font-family: var(--font-display);
+  font-size: var(--t-small-size);
+  font-weight: 600;
+  color: var(--c-secondary);
+  letter-spacing: var(--t-small-ls);
+}
+
+.mr-landing__main {
+  flex: 1;
+  width: 100%;
+  max-width: 480px;
+  margin: 0 auto;
+  padding: 8px 20px calc(48px + env(safe-area-inset-bottom));
+}
+
+/* Display Hero — DESIGN.md 상 이 화면의 회의실 이름에만 쓰는 유일한 자리 */
+.mr-landing__title {
+  margin-top: 8px;
+  color: var(--c-fg);
+}
+
+.mr-landing__meta {
+  margin-top: 4px;
+  color: var(--c-muted);
+}
+
+.mr-landing__section {
+  margin-top: 20px;
+}
+
+.mr-landing__statusline {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+/* 상태 점은 무채색으로만 구분한다.
+ * --c-primary 를 "비어있음"에 쓰면 바로 아래 예약 버튼과 액센트가 중복되고,
+ * DESIGN.md §12-2 가 유채색 액센트를 "내 것"에 배정한 규칙과 어긋난다.
+ * "내 것" 은 카드 배경(--c-mine-bg)이 이미 표시하므로 점에는 색을 쓰지 않는다. */
+.mr-landing__dot {
+  flex: none;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--c-muted);
+}
+.mr-landing__dot[data-tone="free"] {
+  background: var(--c-fg);
+}
+
+.mr-landing__sub {
+  margin-top: 6px;
+}
+
+.mr-landing__presets {
+  margin-top: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.mr-landing__gapcard {
+  margin-top: 12px;
+}
+
+.mr-landing__gaplabel {
+  color: var(--c-muted);
+}
+
+.mr-landing__gaptime {
+  margin-top: 2px;
+}
+
+.mr-landing__gapaction {
+  margin-top: 12px;
+}
+
+.mr-landing__mine-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.mr-landing__mine-actions {
+  margin-top: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.mr-landing__mine-row {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.mr-landing__mine-row > * {
+  flex: 1 1 auto;
+}
+
+.mr-landing__checkedin {
+  display: flex;
+  align-items: center;
+  height: var(--h-action);
+  color: var(--c-fg);
+}
+
+.mr-landing__alert {
+  margin-top: 12px;
+}
+
+.mr-landing__today {
+  margin-top: 32px;
+}
+
+.mr-landing__today-title {
+  font-weight: 600;
+  color: var(--c-secondary);
+  margin-bottom: 12px;
+}
+
+.mr-landing__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.mr-landing__item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  background: var(--c-surface);
+  border: 1px solid var(--c-border);
+  border-radius: var(--r-control);
+  padding: 10px 14px;
+}
+
+.mr-landing__item-main {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  min-width: 0;
+}
+
+.mr-landing__item-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mr-landing__item-badges {
+  display: flex;
+  gap: 6px;
+  flex: none;
+}
+
+.mr-landing__empty {
+  color: var(--c-muted);
+}
+
+.mr-landing__footer {
+  margin-top: 40px;
+  text-align: center;
+}
+
+.mr-landing__gridlink {
+  color: var(--c-muted);
+  text-decoration: none;
+}
+.mr-landing__gridlink:hover {
+  color: var(--c-secondary);
+  text-decoration: underline;
+}
+
+/* ---- 알 수 없는 회의실 ---- */
+.mr-landing__roomlist {
+  list-style: none;
+  margin: 16px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.mr-landing__roomlink {
+  display: flex;
+  align-items: center;
+  min-height: var(--h-action);
+  background: var(--c-surface);
+  border: 1px solid var(--c-border);
+  border-radius: var(--r-control);
+  padding: 0 14px;
+  color: var(--c-link);
+  text-decoration: none;
+}

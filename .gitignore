@@ -2,6 +2,7 @@ node_modules/
 dist/
 .DS_Store
 *.local
+tsconfig.tsbuildinfo
 
 # Playwright MCP scratch output
 .playwright-mcp/

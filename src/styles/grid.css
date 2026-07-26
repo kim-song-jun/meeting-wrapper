@@ -1,0 +1,260 @@
+/* 예약 격자 — DESIGN.md §4 molroom Booking Grid, §5, §8 을 따른다.
+ * 값을 바꾸기 전에 DESIGN.md 의 증거 등급을 확인할 것. 토큰만 쓰고 색을 하드코딩하지 않는다. */
+
+.grid-screen {
+  display: flex;
+  flex-direction: column;
+}
+
+.grid-toolbar {
+  margin-bottom: 16px;
+}
+
+.grid-date-input {
+  width: 168px;
+  flex: none;
+}
+
+.grid-retry {
+  background: none;
+  border: none;
+  padding: 0;
+  color: inherit;
+  text-decoration: underline;
+  font: inherit;
+  cursor: pointer;
+}
+
+/* ---------- 데스크톱/태블릿 격자 (>=768px) ---------- */
+
+.grid-scroll {
+  overflow: auto;
+  max-height: 70vh;
+  border: 1px solid var(--c-border);
+  border-radius: var(--r-card);
+  background: var(--c-canvas);
+}
+
+.grid-table {
+  display: grid;
+  /* grid-template-columns 는 회의실 수에 맞춰 컴포넌트가 인라인으로 설정한다 */
+}
+
+.grid-table.is-dragging {
+  cursor: grabbing;
+  user-select: none;
+}
+
+.grid-corner {
+  position: sticky;
+  top: 0;
+  left: 0;
+  z-index: 4;
+  background: var(--c-surface);
+  border-bottom: 1px solid var(--c-border);
+  border-right: 1px solid var(--c-border);
+}
+
+.grid-room-header {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: var(--c-surface);
+  border-bottom: 1px solid var(--c-border);
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.grid-room-header__name {
+  font-weight: 600;
+  color: var(--c-fg);
+}
+
+.grid-axis {
+  position: sticky;
+  left: 0;
+  z-index: 3;
+  background: var(--c-canvas);
+  border-right: 1px solid var(--c-border);
+  width: var(--grid-axis-w);
+}
+
+.grid-slot {
+  height: var(--grid-slot-h);
+  box-sizing: border-box;
+}
+
+.grid-slot--hour {
+  border-bottom: 1px solid var(--c-border-strong);
+}
+
+.grid-slot--half {
+  border-bottom: 1px solid var(--c-border);
+}
+
+.grid-axis__cell {
+  position: relative;
+  cursor: default;
+}
+
+.grid-axis__label {
+  position: absolute;
+  top: -6px;
+  right: 8px;
+  color: var(--c-muted);
+  background: var(--c-canvas);
+  padding-left: 4px;
+}
+
+/* 첫 라벨은 위에 격자선이 없다. -6px 로 띄우면 sticky 회의실 헤더 뒤로 숨는다
+ * (실측: 라벨 274~290 vs 헤더 바닥 280). 자기 셀 안으로 내린다. */
+.grid-axis__cell:first-child .grid-axis__label {
+  top: 2px;
+}
+
+.grid-col {
+  position: relative;
+  border-right: 1px solid var(--c-border);
+}
+
+.grid-col > .grid-slot {
+  cursor: cell;
+}
+
+.grid-selection {
+  position: absolute;
+  left: 2px;
+  right: 2px;
+  background: var(--c-mine-bg);
+  border: 1px solid var(--c-primary);
+  border-radius: var(--r-control);
+  pointer-events: none;
+  z-index: 1;
+}
+
+.grid-event {
+  position: absolute;
+  left: 2px;
+  right: 2px;
+  overflow: hidden;
+  border-radius: var(--r-control);
+  padding: 4px 6px;
+  cursor: pointer;
+  transition: background-color var(--dur-cell) var(--ease-out);
+}
+
+.grid-event--mine {
+  background: var(--c-mine-bg);
+  border: 1px solid var(--c-mine-border);
+}
+
+.grid-event--other {
+  background: var(--c-surface);
+  border: 1px solid var(--c-border);
+}
+
+.grid-event__name {
+  font-size: var(--t-small-size);
+  font-weight: 600;
+  color: var(--c-fg);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.grid-event__time {
+  font-size: var(--t-cap-size);
+  color: var(--c-muted);
+  flex: none;
+  white-space: nowrap;
+}
+
+.grid-event__compact {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 100%;
+}
+
+.grid-event__compact .grid-event__name {
+  flex: 1;
+  min-width: 0;
+}
+
+.grid-event__full {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  height: 100%;
+  overflow: hidden;
+}
+
+.grid-event__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
+
+.grid-event__row .grid-event__name {
+  flex: 1;
+  min-width: 0;
+}
+
+.grid-now {
+  position: relative;
+  pointer-events: none;
+}
+
+.grid-now__line {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 1px;
+  /* 예약 상태색이 아니라 중립 회색 — 화면당 하나뿐인 파란 액센트는 '내 예약'에 남겨둔다 */
+  background: var(--c-secondary);
+}
+
+/* 768~1023px: 회의실 일부만 보이고 가로 스크롤로 나머지를 본다.
+ * grid-col-min + minmax(1fr) 조합이 이미 그 동작을 만들어내므로 별도 규칙이 필요 없다. */
+
+/* ---------- 모바일 (<768px): 격자 대신 하루 단위 세로 리스트 ---------- */
+
+.grid-mobile {
+  display: none;
+}
+
+.grid-mobile__hint {
+  margin-bottom: 16px;
+}
+
+.grid-mobile__room {
+  margin-bottom: 24px;
+}
+
+.grid-mobile__room-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.grid-mobile__room-name {
+  font-weight: 600;
+}
+
+.grid-mobile__organizer {
+  font-weight: 600;
+}
+
+@media (max-width: 767px) {
+  .grid-desktop {
+    display: none;
+  }
+  .grid-mobile {
+    display: block;
+  }
+}

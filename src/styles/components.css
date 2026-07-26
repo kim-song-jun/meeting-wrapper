@@ -216,6 +216,13 @@
   margin-top: 24px;
 }
 
+/* 파괴적 동작과 안전한 기본 동작이 한 줄에 있을 때.
+ * 같은 생김새로 나란히 두면 "예약 취소"를 "닫기"인 줄 알고 누른다.
+ * 색으로 구분할 빨강이 없으므로(DESIGN.md §2 unresolved) 거리로 분리한다. */
+.mr-dialog__actions--split {
+  justify-content: space-between;
+}
+
 @keyframes mr-fade {
   from { opacity: 0; }
   to { opacity: 1; }

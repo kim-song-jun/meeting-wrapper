@@ -144,12 +144,15 @@ export function Dialog({
   onClose,
   children,
   actions,
+  actionsLayout = "end",
 }: {
   title: string;
   subtitle?: string;
   onClose: () => void;
   children: ReactNode;
   actions: ReactNode;
+  /** "split" 은 파괴적 동작을 안전한 기본 동작에서 떨어뜨린다 */
+  actionsLayout?: "end" | "split";
 }) {
   const panelRef = useRef<HTMLDivElement>(null);
 
@@ -180,7 +183,9 @@ export function Dialog({
         <h2 className="mr-dialog__title">{title}</h2>
         {subtitle ? <p className="mr-dialog__sub t-num">{subtitle}</p> : null}
         {children}
-        <div className="mr-dialog__actions">{actions}</div>
+        <div className={cx("mr-dialog__actions", actionsLayout === "split" && "mr-dialog__actions--split")}>
+          {actions}
+        </div>
       </div>
     </div>
   );
