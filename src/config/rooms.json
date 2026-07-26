@@ -1,23 +1,18 @@
 [
   {
-    "id": "room-a",
-    "email": "molcube.com_room-a@resource.calendar.google.com",
-    "name": "3층 회의실 A",
-    "capacity": 8,
-    "floor": "3F"
-  },
-  {
     "id": "room-small",
     "email": "molcube.com_room-small@resource.calendar.google.com",
-    "name": "3층 소회의실",
+    "name": "소회의실",
+    "short": "소",
     "capacity": 4,
     "floor": "3F"
   },
   {
-    "id": "room-b",
-    "email": "molcube.com_room-b@resource.calendar.google.com",
-    "name": "4층 회의실 B",
+    "id": "room-large",
+    "email": "molcube.com_room-large@resource.calendar.google.com",
+    "name": "대회의실",
+    "short": "대",
     "capacity": 12,
-    "floor": "4F"
+    "floor": "3F"
   }
 ]

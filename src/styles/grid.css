@@ -133,9 +133,6 @@
   .grid-controlbar .grid-roomchip {
     padding: 0 12px;
   }
-  .grid-controlbar .mr-input.grid-date-input {
-    width: 150px;
-  }
   /* 인원 레이블은 스테퍼 위가 아니라 옆에 붙는다 — 세로 한 줄을 아낀다 */
   .grid-controlbar .mr-field__label {
     display: inline;
@@ -252,16 +249,42 @@
   cursor: default;
 }
 
-/*
- * .mr-input 과 클래스 하나 대 하나로 붙으면 진다 — main.tsx 가 App(→ GridScreen →
- * grid.css)을 components.css 보다 먼저 import 하므로 번들에서 components.css 가
- * 뒤에 오고, .mr-input { width: 100% } 이 이겨 날짜 입력이 1225px 로 늘어나 있었다
- * (실측). 그 탓에 툴바가 한 줄 더 접혀 잠긴 판의 세로 예산을 그냥 깎아먹었다.
- * 두 클래스를 함께 걸어 순서와 무관하게 이기게 한다.
- */
-.mr-input.grid-date-input {
-  width: 168px;
-  flex: none;
+
+/* ---------- 날짜 피커 ----------
+ * 보이는 것은 서식화된 라벨이고, 그 위를 투명한 date input 이 덮는다.
+ * 네이티브 피커의 키보드·모바일 동작을 그대로 쓰면서 표시 형식과 폭만 우리가 정한다. */
+.grid-datepick {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  height: var(--h-action);
+  padding: 0 10px;
+  border-radius: var(--r-sm);
+  cursor: pointer;
+  transition: background-color var(--dur-hover) var(--ease-out);
+}
+.grid-datepick:hover {
+  background: var(--c-surface-muted);
+}
+.grid-datepick__label {
+  font-weight: 600;
+  white-space: nowrap;
+  pointer-events: none;
+}
+.grid-datepick__input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  font: inherit;
+}
+.grid-datepick:focus-within {
+  background: var(--c-surface-muted);
+  box-shadow: var(--shadow-focus);
 }
 
 .grid-retry {
@@ -509,13 +532,21 @@
   cursor: cell;
 }
 
+/* 드래그 중인 선택 구간. 사각형만 있으면 몇 시를 잡는 중인지 왼쪽 축과 눈으로
+ * 맞춰야 한다 — 시각과 길이를 블록 안에 같이 띄운다. */
 .grid-selection {
   position: absolute;
   left: 2px;
   right: 2px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 1px;
+  padding: 2px 8px;
+  overflow: hidden;
   background: var(--c-mine-bg);
   border: 1px solid var(--c-action);
-  border-radius: var(--r-md);
+  border-radius: var(--r-event);
   pointer-events: none;
   z-index: 1;
 }
@@ -644,8 +675,66 @@
 }
 
 /* 오늘 열은 색이 아니라 헤더 굵기로 구분한다 (DESIGN.md — 예약 상태색 외 강조는 만들지 않는다) */
+/* 오늘 — 캘린더는 오늘 날짜를 파랗게 표시한다. 굵게만 하면 다른 요일과 구분이 약하다.
+ * 주간 뷰의 헤더는 요일 이름(name)과 날짜(meta) 두 줄이라 날짜 쪽을 강조한다. */
 .grid-room-header--today .grid-room-header__name {
   font-weight: 700;
+  color: var(--c-action);
+}
+.grid-room-header--today .grid-room-header__meta {
+  color: var(--c-action);
+  font-weight: 600;
+}
+
+
+.grid-selection__label {
+  font-size: var(--t-grid-size);
+  line-height: var(--t-grid-lh);
+  font-weight: 600;
+  color: var(--c-action);
+  white-space: nowrap;
+}
+.grid-selection__dur {
+  color: var(--c-secondary);
+  white-space: nowrap;
+}
+
+/* ---------- 회의실 구분 (2개: 소회의실 · 대회의실) ----------
+ * 방이 둘뿐이라 색으로 나눌 이유가 없다 — 열 위치가 이미 어느 방인지 말한다.
+ * 대신 (1) 헤더에서 이름과 정원을 확실히 읽히게 하고, (2) 방과 방 사이 경계선을
+ * 셀 내부 격자선보다 진하게 줘서 "어느 열이 어느 방인지" 가 스캔 중에도 유지되게 한다.
+ * 색은 화면당 하나뿐인 액센트("내 예약")에 남겨둔다. */
+.grid-room-header__name {
+  font-size: var(--t-body-size);
+  line-height: var(--t-grid-lh);
+  font-weight: 600;
+  color: var(--c-fg);
+}
+.grid-room-header__meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.grid-room-header__cap {
+  display: inline-flex;
+  align-items: center;
+  height: var(--h-badge);
+  padding: 0 8px;
+  border-radius: var(--r-pill);
+  background: var(--c-surface-muted);
+  color: var(--c-secondary);
+  font-weight: 500;
+}
+
+/* 방 경계는 30분선(--c-surface-muted)보다 진하게. 마지막 열은 오른쪽 선을 두지 않는다. */
+.grid-col {
+  border-right: 1px solid var(--c-border);
+}
+.grid-col:last-child {
+  border-right: none;
+}
+.grid-room-header + .grid-room-header {
+  border-left: 1px solid var(--c-border);
 }
 
 /* ---------- 월간 뷰 ----------
@@ -656,27 +745,33 @@
 .grid-month {
   display: grid;
   grid-template-columns: repeat(7, minmax(0, 1fr));
-  gap: 1px;
-  background: var(--c-border);
-  border: 1px solid var(--c-border);
-  border-radius: var(--r-lg);
-  overflow: hidden;
+  /* 1px gap + 배경색으로 선을 만드는 기법은 셀 사이가 모두 같은 굵기라 표처럼 보인다.
+   * 캘린더 월간 뷰는 헤어라인 격자다 — 셀이 자기 위·왼쪽 선을 그린다. */
+  gap: 0;
+  background: var(--c-surface);
+  border-top: 1px solid var(--c-border);
+  border-left: 1px solid var(--c-border);
 }
 
 .grid-month__weekday {
   background: var(--c-surface);
-  padding: 8px 10px;
-  text-align: center;
+  padding: 6px 10px;
+  text-align: right;
+  border-right: 1px solid var(--c-border);
+  border-bottom: 1px solid var(--c-border);
+  font-weight: 500;
 }
 
 .grid-month__cell {
   display: flex;
   flex-direction: column;
-  align-items: flex-start;
+  align-items: flex-end;
   gap: 4px;
-  min-height: 92px;
-  padding: 8px 10px;
+  min-height: 96px;
+  padding: 6px 8px;
   border: none;
+  border-right: 1px solid var(--c-border);
+  border-bottom: 1px solid var(--c-border);
   background: var(--c-surface);
   text-align: left;
   cursor: pointer;
@@ -700,33 +795,90 @@
   background: var(--c-canvas);
 }
 
-.grid-month__cell--today .grid-month__daynum {
-  font-weight: 700;
-}
-
+/* 오늘 — 캘린더는 굵게가 아니라 채운 원으로 표시한다. 숫자가 원 안에서 흔들리지
+ * 않도록 정사각 박스에 가운데 정렬한다. */
 .grid-month__daynum {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 24px;
+  height: 24px;
+  padding: 0 6px;
+  border-radius: var(--r-pill);
   font-size: var(--t-small-size);
+  font-weight: 500;
+}
+.grid-month__cell--today .grid-month__daynum {
+  background: var(--c-action);
+  color: var(--c-on-action);
+  font-weight: 600;
 }
 
-.grid-month__count {
-  color: var(--c-secondary);
-}
-
-.grid-month__bars {
+/* ---------- 월간 칸 안의 일정 칩 ---------- */
+.grid-month__events {
   display: flex;
-  align-items: flex-end;
-  gap: 3px;
-  height: 20px;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 2px;
   width: 100%;
-  margin-top: auto;
+  margin-top: 2px;
+  min-width: 0;
 }
 
-.grid-month__bar {
-  flex: 1;
-  min-width: 4px;
-  background: var(--c-border-strong);
-  border-radius: 2px 2px 0 0;
+.grid-month__chip {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: var(--c-surface-muted);
+  font-size: var(--t-cap-size);
+  line-height: 16px;
+  color: var(--c-secondary);
+  text-align: left;
 }
+.grid-month__chip--mine {
+  background: var(--c-mine-bg);
+  color: var(--c-mine-fg);
+}
+.grid-month__chip-time {
+  flex: none;
+  font-variant-numeric: tabular-nums;
+}
+/* 방 약칭 — 두 방을 한 글자로 가른다. 칩 안에서 유일하게 폭이 고정된 자리 */
+.grid-month__chip-room {
+  flex: none;
+  width: 15px;
+  text-align: center;
+  border-radius: 3px;
+  background: var(--c-surface);
+  color: var(--c-secondary);
+  font-weight: 600;
+}
+.grid-month__chip--mine .grid-month__chip-room {
+  background: var(--c-surface);
+  color: var(--c-mine-fg);
+}
+.grid-month__chip-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--c-fg);
+}
+.grid-month__chip--mine .grid-month__chip-name {
+  color: var(--c-mine-fg);
+  font-weight: 500;
+}
+.grid-month__more {
+  color: var(--c-muted);
+  padding-left: 5px;
+}
+
+
+
 
 /* ---------- 모바일 (<768px): 격자 대신 하루 단위 세로 리스트 ---------- */
 

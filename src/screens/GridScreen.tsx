@@ -72,6 +72,9 @@ function sameYMD(a: Date, b: Date): boolean {
 
 const WEEKDAY_LABELS = ["월", "화", "수", "목", "금", "토", "일"] as const;
 
+/** 월간 칸 하나에 그리는 일정 칩 최대 개수. 96px 칸에 날짜 + 칩 3개가 들어간다. */
+const MONTH_CHIP_LIMIT = 3;
+
 /** 화면에 로드된 예약들에서 주최자 부서를 distinct 로 뽑는다. 설정 파일에 따로 두지 않는다. */
 function distinctDepartments(bookings: readonly Booking[]): string[] {
   const set = new Set<string>();
@@ -415,6 +418,22 @@ export function GridScreen() {
     return { top: placement.top, height: placement.height };
   }
 
+  /**
+   * 드래그 중 선택 구간의 시간 범위. 사각형만 보이면 지금 몇 시를 잡고 있는지
+   * 왼쪽 시간축과 눈으로 맞춰야 한다 — 캘린더 앱은 끄는 동안 시각을 같이 보여준다.
+   * 시각 계산은 selectionStyle 과 같은 slotToDate 를 쓴다(두 값이 갈라지지 않게).
+   */
+  function selectionLabel(d: DragState): { text: string; minutes: number } {
+    const min = Math.min(d.anchor, d.current);
+    const max = Math.max(d.anchor, d.current);
+    const start = slotToDate(min);
+    const end = slotToDate(max + 1);
+    return {
+      text: hhmm(start) + "–" + hhmm(end),
+      minutes: (end.getTime() - start.getTime()) / MINUTE,
+    };
+  }
+
   /* ---- now indicator ---- */
   // 순간(점) 이므로 구간을 받는 placeInGrid 대신, 도메인이 제공하는
   // slotIndexOf 로 슬롯 인덱스만 구하고 슬롯 높이를 곱한다.
@@ -516,23 +535,46 @@ export function GridScreen() {
         {filteredRooms.length > 0 ? (
           view === "day" ? (
             <div className="grid-toolbar mr-row">
+              {/* 주간·월간과 같은 ‹ › 스테퍼를 쓴다 — 뷰를 바꿔도 날짜 이동 위치가 안 변한다.
+                  "내일" 버튼은 ›  하나로 대체됐다. */}
+              <div className="grid-datestepper" role="group" aria-label="날짜 이동">
+                <button
+                  type="button"
+                  className="grid-datestepper__btn"
+                  onClick={() => setSelectedDate((d) => addDays(d, -1))}
+                  aria-label="이전 날"
+                >
+                  <span aria-hidden="true">‹</span>
+                </button>
+                <span className="grid-datestepper__divider" aria-hidden="true" />
+                <button
+                  type="button"
+                  className="grid-datestepper__btn"
+                  onClick={() => setSelectedDate((d) => addDays(d, 1))}
+                  aria-label="다음 날"
+                >
+                  <span aria-hidden="true">›</span>
+                </button>
+              </div>
               <Button variant="secondary" onClick={() => setSelectedDate(startOfDay(new Date()))}>
                 오늘
               </Button>
-              <Button
-                variant="secondary"
-                onClick={() => setSelectedDate(addDays(startOfDay(new Date()), 1))}
-              >
-                내일
-              </Button>
-              <input
-                type="date"
-                className="mr-input grid-date-input"
-                value={ymd(selectedDate)}
-                onChange={onDateInputChange}
-                aria-label="날짜 선택"
-              />
-              <span className="t-small t-muted">{dateLabel}</span>
+              {/*
+                날짜 라벨 자체가 피커다. 네이티브 date input 은 표시 형식을 못 바꾸고
+                (2026. 07. 26. 고정) 폭도 커서 툴바를 잡아먹는다. 라벨을 보여주고
+                input 을 그 위에 투명하게 덮어 캘린더 앱처럼 "날짜를 눌러 이동" 하게 한다.
+                네이티브 피커를 그대로 쓰므로 키보드·모바일 동작은 브라우저 것이다.
+              */}
+              <span className="grid-datepick">
+                <span className="grid-datepick__label t-body">{dateLabel}</span>
+                <input
+                  type="date"
+                  className="grid-datepick__input"
+                  value={ymd(selectedDate)}
+                  onChange={onDateInputChange}
+                  aria-label="날짜 선택"
+                />
+              </span>
             </div>
           ) : view === "week" ? (
             <DateStepper
@@ -617,9 +659,10 @@ export function GridScreen() {
                       </>
                     ) : (
                       <>
-                        <span className="t-small grid-room-header__name">{room.name}</span>
-                        <span className="t-cap t-muted">
-                          {room.capacity}인 · {room.floor}
+                        <span className="grid-room-header__name">{room.name}</span>
+                        <span className="grid-room-header__meta t-cap">
+                          <span className="grid-room-header__cap t-num">{room.capacity}인</span>
+                          <span className="t-muted">{room.floor}</span>
                         </span>
                       </>
                     )}
@@ -674,7 +717,14 @@ export function GridScreen() {
                       ))}
 
                       {!bookingsState.loading && drag && drag.roomId === room.id ? (
-                        <div className="grid-selection" style={selectionStyle(drag)} />
+                        <div className="grid-selection" style={selectionStyle(drag)}>
+                          <span className="grid-selection__label t-num">
+                            {selectionLabel(drag).text}
+                          </span>
+                          <span className="grid-selection__dur t-cap">
+                            {humanDuration(selectionLabel(drag).minutes)}
+                          </span>
+                        </div>
                       ) : null}
 
                       {roomBookings.map((b) => {
@@ -1000,8 +1050,8 @@ function WeekView({
                 </>
               ) : (
                 <>
-                  <span className="t-small grid-room-header__name">{WEEKDAY_LABELS[i]}요일</span>
-                  <span className="t-cap t-muted t-num">
+                  <span className="grid-room-header__name">{WEEKDAY_LABELS[i]}</span>
+                  <span className="grid-room-header__meta t-cap t-num">
                     {new Intl.DateTimeFormat("ko-KR", { month: "numeric", day: "numeric" }).format(day)}
                   </span>
                 </>
@@ -1099,7 +1149,6 @@ function MonthView({
   now: Date;
 }) {
   const today = useMemo(() => startOfDay(now), [now]);
-  const gridOpenMinutes = gridSlotCount(POLICY) * POLICY.slotMinutes;
 
   const cells = useMemo(() => {
     const firstCell = startOfWeek(monthAnchor);
@@ -1149,19 +1198,7 @@ function MonthView({
                 b.end.getTime() > cellStart.getTime() &&
                 b.start.getTime() < cellEnd.getTime(),
             );
-            const dGridStart = gridDayStart(d, POLICY);
-            const dGridEnd = new Date(dGridStart.getTime() + gridOpenMinutes * MINUTE);
 
-            const occupancyOf = (roomId: string): number => {
-              let minutes = 0;
-              for (const b of cellBookings) {
-                if (b.roomId !== roomId) continue;
-                const s = Math.max(b.start.getTime(), dGridStart.getTime());
-                const e = Math.min(b.end.getTime(), dGridEnd.getTime());
-                if (e > s) minutes += (e - s) / MINUTE;
-              }
-              return gridOpenMinutes > 0 ? Math.min(1, minutes / gridOpenMinutes) : 0;
-            };
 
             return (
               <button
@@ -1183,19 +1220,34 @@ function MonthView({
                 }
               >
                 <span className="grid-month__daynum t-num">{d.getDate()}</span>
-                <span className="grid-month__count t-cap t-num">
-                  {cellBookings.length > 0 ? String(cellBookings.length) + "건" : "–"}
-                </span>
-                {filteredRooms.length > 0 ? (
-                  <span className="grid-month__bars" aria-hidden="true">
-                    {filteredRooms.map((room) => (
-                      <span
-                        key={room.id}
-                        className="grid-month__bar"
-                        style={{ height: String(Math.round(occupancyOf(room.id) * 100)) + "%" }}
-                        title={room.name}
-                      />
-                    ))}
+                {/*
+                  건수 + 회색 막대만 보여주면 "그날 뭐가 있는지" 를 알 수 없다.
+                  캘린더 월간 뷰는 일정 자체를 보여준다 — 시각 · 방 약칭 · 주최자.
+                  칸에 들어가는 만큼(3개)만 그리고 나머지는 "+N" 으로 접는다.
+                */}
+                {cellBookings.length > 0 ? (
+                  <span className="grid-month__events">
+                    {cellBookings
+                      .slice()
+                      .sort((x, y) => x.start.getTime() - y.start.getTime())
+                      .slice(0, MONTH_CHIP_LIMIT)
+                      .map((b) => (
+                        <span
+                          key={b.id}
+                          className={cx("grid-month__chip", b.isMine && "grid-month__chip--mine")}
+                        >
+                          <span className="grid-month__chip-time t-num">{hhmm(b.start)}</span>
+                          <span className="grid-month__chip-room">
+                            {roomById(b.roomId)?.short ?? ""}
+                          </span>
+                          <span className="grid-month__chip-name">{b.organizerName}</span>
+                        </span>
+                      ))}
+                    {cellBookings.length > MONTH_CHIP_LIMIT ? (
+                      <span className="grid-month__more t-cap">
+                        +{cellBookings.length - MONTH_CHIP_LIMIT}
+                      </span>
+                    ) : null}
                   </span>
                 ) : null}
               </button>

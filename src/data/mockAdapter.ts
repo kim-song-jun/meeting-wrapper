@@ -81,14 +81,15 @@ function departmentOf(email: string): string | null {
 }
 
 function seed(): Booking[] {
-  const roomA = rooms[0]!.id;
-  const roomSmall = rooms[1]!.id;
-  const roomB = rooms[2]!.id;
+  // 회의실은 소회의실·대회의실 둘이다(config/rooms.json). 시드는 둘에 나눠 넣는다 —
+  // 한 방에 몰아넣으면 "다른 방은 비었는데 이 방만 찼다" 같은 실제 판단 상황이 안 나온다.
+  const roomSmall = rooms[0]!.id;
+  const roomLarge = rooms[1]!.id;
 
   return [
     {
       id: nextId(),
-      roomId: roomA,
+      roomId: roomLarge,
       title: "채용 면접",
       organizerName: "김철수",
       organizerEmail: "chulsoo@molcube.com",
@@ -104,7 +105,7 @@ function seed(): Booking[] {
     },
     {
       id: nextId(),
-      roomId: roomA,
+      roomId: roomLarge,
       title: "주간 기획회의",
       organizerName: ME.name,
       organizerEmail: ME.email,
@@ -121,7 +122,7 @@ function seed(): Booking[] {
     },
     {
       id: nextId(),
-      roomId: roomSmall,
+      roomId: roomLarge,
       title: "1on1",
       organizerName: "박지현",
       organizerEmail: "jihyun@molcube.com",
@@ -137,7 +138,7 @@ function seed(): Booking[] {
     },
     {
       id: nextId(),
-      roomId: roomB,
+      roomId: roomSmall,
       // 체크인 없이 시작 시각이 지난 상태 — 미체크인 배지가 뜨는지 확인용
       title: "디자인 리뷰",
       organizerName: "이영희",
@@ -154,7 +155,7 @@ function seed(): Booking[] {
     },
     {
       id: nextId(),
-      roomId: roomB,
+      roomId: roomSmall,
       title: "전사 주간회의",
       organizerName: "이영희",
       organizerEmail: "younghee@molcube.com",
@@ -190,7 +191,7 @@ function seed(): Booking[] {
     // '반복 걸면 다 잡히겠지' 가 아니라는 걸 보여주는 재현 케이스.
     {
       id: nextId(),
-      roomId: roomA,
+      roomId: roomLarge,
       title: "디자인 스프린트",
       organizerName: "최민지",
       organizerEmail: "minji@molcube.com",
@@ -206,7 +207,7 @@ function seed(): Booking[] {
     },
     {
       id: nextId(),
-      roomId: roomA,
+      roomId: roomLarge,
       title: "브랜드 워크숍",
       organizerName: "정하은",
       organizerEmail: "haeun@molcube.com",

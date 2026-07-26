@@ -193,10 +193,11 @@ Google OAuth 액세스 토큰의 수명은 **1시간이며 애플리케이션이
 // src/config/rooms.json
 [
   {
-    "id": "room-a",
+    "id": "room-small",
     "email": "molcube.com_xxxxx@resource.calendar.google.com",
-    "name": "3층 회의실 A",
-    "capacity": 8,
+    "name": "소회의실",
+    "short": "소",
+    "capacity": 4,
     "floor": "3F"
   }
 ]
@@ -266,7 +267,7 @@ Google OAuth 액세스 토큰의 수명은 **1시간이며 애플리케이션이
 회의실 문에 붙인 QR이 이 URL을 가리킨다. QR에는 **서명 토큰이 아니라 평범한 고정 URL**을 넣는다 — QR은 사진 찍어 공유하면 그만이라 토큰을 넣어도 실질적 방어가 되지 않고, 실제 보안 경계는 구글 로그인이기 때문이다.
 
 ```
-      3층 회의실 A · 8인
+      소회의실 · 4인
       ┌──────────────────┐
       │  🟢 지금 비어있음  │
       │  다음 예약 14:00  │

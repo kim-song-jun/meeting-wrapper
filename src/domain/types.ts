@@ -8,6 +8,8 @@ export interface Room {
   /** Google Calendar 리소스 캘린더 주소 */
   email: string;
   name: string;
+  /** 월간 칩처럼 이름을 다 쓸 수 없는 좁은 자리에 쓰는 한두 글자 약칭 */
+  short: string;
   capacity: number;
   floor: string;
 }
