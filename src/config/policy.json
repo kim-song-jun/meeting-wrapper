@@ -1,0 +1,10 @@
+{
+  "maxDurationMinutes": 240,
+  "maxAdvanceDays": 28,
+  "gridStartHour": 8,
+  "gridEndHour": 20,
+  "slotMinutes": 30,
+  "checkInGraceMinutes": 10,
+  "extendStepMinutes": 15,
+  "admins": ["sungjun@molcube.com"]
+}

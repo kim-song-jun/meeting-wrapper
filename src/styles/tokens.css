@@ -1,0 +1,90 @@
+/*
+ * molroom design tokens — DESIGN.md 에서 파생.
+ *
+ * 증거 등급을 반드시 유지할 것:
+ *   [verified] Apple 공개 표면 2026-07-11 실측. 임의로 바꾸지 말 것.
+ *   [local]    molroom 로컬 확장. Apple 이 보증하지 않음.
+ *   [unresolved] 근거 없어 미정. 필요하면 실측하거나 명시적으로 결정할 것.
+ *
+ * 값을 바꾸기 전에 DESIGN.md 를 먼저 읽는다.
+ */
+
+:root {
+  /* ---- color: verified ---- */
+  --c-primary: #0071e3;        /* [verified] 채워진 액션. 흰 텍스트 대비 4.70:1 */
+  --c-brand: #000000;          /* [verified] 다크 섹션 */
+  --c-canvas: #f5f5f7;         /* [verified] 밝은 섹션 · 격자 배경 */
+  --c-surface: #ffffff;        /* [verified] 카드 · 다이얼로그 · 예약된 셀 */
+  --c-fg: #1d1d1f;             /* [verified] 주 텍스트. on white 16.83:1 */
+  --c-muted: #6e6e73;          /* [verified] 보조 텍스트. on white 5.07:1 */
+  --c-secondary: #515154;      /* [verified] 중립. on white 7.91:1 */
+  --c-on-primary: #ffffff;     /* [verified] 파란 채움 위 텍스트 */
+  --c-link: #0066cc;           /* [verified] 링크 · 아웃라인. on white 5.57:1 */
+  --c-link-dark: #2997ff;      /* [verified] 다크 섹션의 밝은 파랑 */
+
+  /* ---- color: local (예약 상태) ----
+   * 레퍼런스에 상태색이 없어 로컬 확장. 대비비는 실측 계산값.
+   * 비어있음에는 색을 주지 않는다 — --c-canvas 를 그대로 쓴다.
+   * 남의 예약도 색을 주지 않는다 — 정상 상태이므로 --c-surface.
+   */
+  --c-mine-bg: #e8f2fd;        /* [local] 내 예약. fg 대비 14.87:1 */
+  --c-mine-border: #66aef0;    /* [local] 내 예약 테두리 */
+  --c-attn-fg: #8a5300;        /* [local] 주의 텍스트. on white 6.33:1, on tint 5.82:1 */
+  --c-attn-bg: #fff4e5;        /* [local] 주의 배경 */
+  --c-border: #d2d2d7;         /* [local] 기본 보더 · 30분 격자선 */
+  --c-border-strong: #c7c7cc;  /* [local] 정시 격자선 */
+  --c-backdrop: rgba(0, 0, 0, 0.4); /* [local] 다이얼로그 backdrop */
+
+  /* 빨강은 정의하지 않는다 [unresolved]
+   * 예약된 방은 오류가 아니다. 파괴적 확인에 필요해지면 그때 실측해 추가한다. */
+
+  /* ---- typography: verified ---- */
+  --font-text: -apple-system, BlinkMacSystemFont, "SF Pro Text",
+               "Apple SD Gothic Neo", "Pretendard", sans-serif;
+  --font-display: -apple-system, BlinkMacSystemFont, "SF Pro Display",
+                  "Apple SD Gothic Neo", "Pretendard", sans-serif;
+
+  --t-hero-size: 56px;      --t-hero-lh: 60px;   --t-hero-ls: -0.28px;   /* [verified] */
+  --t-section-size: 40px;   --t-section-lh: 44px; --t-section-ls: normal; /* [verified] */
+  --t-tile-size: 28px;      --t-tile-lh: 32px;   --t-tile-ls: 0.196px;   /* [verified] */
+  --t-body-size: 17px;      --t-body-lh: 25px;   --t-body-ls: -0.374px;  /* [verified] */
+  --t-small-size: 14px;     --t-small-lh: 18px;  --t-small-ls: -0.224px; /* [verified] */
+  --t-cap-size: 12px;       --t-cap-lh: 16px;    --t-cap-ls: -0.12px;    /* [verified] */
+
+  /* ---- geometry ---- */
+  --r-pill: 980px;   /* [verified] 마케팅 pill */
+  --r-card: 18px;    /* [verified] HIG 문서 카드. 네이티브 앱으로 가면 다시 정할 것 */
+  --r-control: 8px;  /* [local] 입력 컨트롤. 검증값이 없어 로컬로 정함 [unresolved 참조] */
+
+  --h-action: 44px;         /* [verified] 큰 컨트롤 · 터치 타깃 하한 */
+  --h-action-compact: 36px; /* [verified] 컴팩트 컨트롤 */
+  --h-input: 40px;          /* [local] */
+  --h-tab: 53px;            /* [verified] Apple Store 갤러리 탭 */
+  --h-badge: 20px;          /* [local] */
+
+  --pad-action: 11px 21px;         /* [verified] */
+  --pad-action-compact: 8px 15px;  /* [verified] */
+  --pad-content: 20px;             /* [verified] 콘텐츠 클러스터 */
+
+  /* ---- booking grid: local ---- */
+  --grid-slot-min: 30;      /* [local] 슬롯 단위(분) */
+  --grid-slot-h: 28px;      /* [local] 30분당 높이 — 08:00~20:00 이 한 화면에 들어감 */
+  --grid-col-min: 132px;    /* [local] 회의실 열 최소 폭 */
+  --grid-axis-w: 64px;      /* [local] 시간 축 폭 */
+
+  /* ---- motion: local ----
+   * 레퍼런스에서 승격된 Apple 모션 토큰은 없다(없음이 확인됨).
+   * 아래는 전부 로컬 확장이며 최소로 유지한다. */
+  --ease-out: cubic-bezier(0.32, 0.72, 0, 1);
+  --dur-dialog-in: 200ms;
+  --dur-dialog-out: 150ms;
+  --dur-cell: 120ms;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --dur-dialog-in: 0ms;
+    --dur-dialog-out: 0ms;
+    --dur-cell: 0ms;
+  }
+}

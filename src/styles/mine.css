@@ -1,0 +1,120 @@
+/* /me — 내 예약 / 설정. mine 화면 전용 스타일. 값은 tokens.css 변수만 사용한다. */
+
+.mine-user {
+  color: var(--c-muted);
+  font-size: var(--t-small-size);
+  line-height: var(--t-small-lh);
+  margin-bottom: 20px;
+}
+
+.mine-section {
+  margin-top: 28px;
+}
+.mine-section:first-child {
+  margin-top: 20px;
+}
+
+.mine-day-heading {
+  font-family: var(--font-display);
+  font-size: var(--t-tile-size);
+  line-height: var(--t-tile-lh);
+  letter-spacing: var(--t-tile-ls);
+  font-weight: 600;
+  margin-bottom: 12px;
+}
+
+.mine-room-heading {
+  font-size: var(--t-small-size);
+  line-height: var(--t-small-lh);
+  color: var(--c-secondary);
+  font-weight: 600;
+  margin-bottom: 12px;
+}
+
+.mine-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.mine-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.mine-item__main {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.mine-item__room {
+  font-size: var(--t-body-size);
+  line-height: var(--t-body-lh);
+  letter-spacing: var(--t-body-ls);
+  font-weight: 600;
+}
+
+.mine-item__meta {
+  color: var(--c-muted);
+  font-size: var(--t-small-size);
+  line-height: var(--t-small-lh);
+}
+
+.mine-item__link {
+  font-size: var(--t-small-size);
+  line-height: var(--t-small-lh);
+  color: var(--c-link);
+  text-decoration: none;
+  word-break: break-all;
+}
+
+.mine-item__actions {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.mine-empty {
+  color: var(--c-muted);
+  font-size: var(--t-body-size);
+  line-height: var(--t-body-lh);
+}
+.mine-empty a {
+  color: var(--c-link);
+}
+
+.mine-admin-note {
+  color: var(--c-muted);
+  font-size: var(--t-small-size);
+  line-height: var(--t-small-lh);
+  margin-bottom: 16px;
+}
+
+.mine-settings-card {
+  max-width: 480px;
+}
+
+.mine-settings-note {
+  color: var(--c-muted);
+  font-size: var(--t-cap-size);
+  line-height: var(--t-cap-lh);
+  margin-top: 8px;
+}
+
+.mine-settings-actions {
+  margin-top: 16px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.mine-settings-success {
+  color: var(--c-fg);
+  font-size: var(--t-small-size);
+  line-height: var(--t-small-lh);
+}

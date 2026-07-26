@@ -1,0 +1,277 @@
+/* molroom primitives — DESIGN.md §4 Component Stylings 를 그대로 옮긴 것.
+ * 값을 바꾸기 전에 DESIGN.md 의 증거 등급을 확인할 것. */
+
+/* ---------- Button ---------- */
+.mr-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border: none;
+  cursor: pointer;
+  white-space: nowrap;
+  font-family: var(--font-text);
+  transition: background-color var(--dur-cell) var(--ease-out);
+}
+.mr-btn:disabled {
+  cursor: not-allowed;
+}
+
+.mr-btn--primary {
+  background: var(--c-primary);
+  color: var(--c-on-primary);
+  border-radius: var(--r-pill);
+  padding: var(--pad-action);
+  height: var(--h-action);
+  font-size: var(--t-body-size);
+}
+.mr-btn--secondary {
+  background: transparent;
+  color: var(--c-link);
+  border: 1px solid var(--c-link);
+  border-radius: var(--r-pill);
+  padding: var(--pad-action);
+  height: var(--h-action);
+  font-size: var(--t-body-size);
+}
+.mr-btn--compact {
+  background: var(--c-primary);
+  color: var(--c-on-primary);
+  border-radius: var(--r-pill);
+  padding: var(--pad-action-compact);
+  height: var(--h-action-compact);
+  font-size: var(--t-small-size);
+}
+.mr-btn--compact.mr-btn--quiet {
+  background: transparent;
+  color: var(--c-link);
+  border: 1px solid var(--c-link);
+}
+
+/* 비활성은 opacity 로 흐리지 않는다. 사유는 버튼 옆 캡션으로 상시 노출한다. */
+.mr-btn--primary:disabled,
+.mr-btn--compact:disabled {
+  background: var(--c-canvas);
+  color: var(--c-muted);
+  border: 1px solid var(--c-border);
+}
+.mr-btn--secondary:disabled {
+  color: var(--c-muted);
+  border-color: var(--c-border);
+}
+.mr-btn--block {
+  width: 100%;
+}
+
+.mr-reason {
+  font-size: var(--t-small-size);
+  line-height: var(--t-small-lh);
+  color: var(--c-muted);
+}
+
+/* ---------- Input ---------- */
+.mr-field {
+  display: block;
+}
+.mr-field__label {
+  display: block;
+  font-size: var(--t-small-size);
+  line-height: var(--t-small-lh);
+  color: var(--c-secondary);
+  margin-bottom: 6px;
+}
+.mr-input {
+  display: block;
+  width: 100%;
+  background: var(--c-surface);
+  color: var(--c-fg);
+  border: 1px solid var(--c-border);
+  border-radius: var(--r-control);
+  height: var(--h-input);
+  padding: 0 12px;
+  /* 17px 유지: 16px 미만이면 모바일 Safari 가 자동 확대해 QR 예약 흐름이 깨진다 */
+  font-size: var(--t-body-size);
+}
+.mr-input::placeholder {
+  color: var(--c-muted);
+}
+.mr-input:focus {
+  border-color: var(--c-primary);
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(0, 113, 227, 0.2);
+}
+.mr-field__hint {
+  font-size: var(--t-cap-size);
+  line-height: var(--t-cap-lh);
+  color: var(--c-muted);
+  margin-top: 6px;
+}
+.mr-field__hint--warn {
+  color: var(--c-attn-fg);
+}
+
+/* ---------- Card ---------- */
+.mr-card {
+  background: var(--c-surface);
+  border-radius: var(--r-card);
+  padding: var(--pad-content);
+  border: 1px solid var(--c-border);
+}
+.mr-card--mine {
+  background: var(--c-mine-bg);
+  border-color: var(--c-mine-border);
+}
+.mr-card--flat {
+  border: none;
+}
+
+/* ---------- Badge ---------- */
+.mr-badge {
+  display: inline-flex;
+  align-items: center;
+  height: var(--h-badge);
+  border-radius: var(--r-pill);
+  padding: 0 8px;
+  font-size: var(--t-cap-size);
+  line-height: var(--t-cap-lh);
+  letter-spacing: var(--t-cap-ls);
+  white-space: nowrap;
+}
+.mr-badge--mine {
+  background: var(--c-mine-bg);
+  color: var(--c-fg);
+}
+.mr-badge--attn {
+  background: var(--c-attn-bg);
+  color: var(--c-attn-fg);
+}
+.mr-badge--neutral {
+  background: var(--c-canvas);
+  color: var(--c-secondary);
+}
+
+/* ---------- Tabs ---------- */
+.mr-tabs {
+  display: flex;
+  gap: 24px;
+  border-bottom: 1px solid var(--c-border);
+}
+.mr-tab {
+  height: var(--h-tab);
+  display: flex;
+  align-items: center;
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  padding: 0;
+  font-size: var(--t-body-size);
+  color: var(--c-muted);
+  cursor: pointer;
+}
+.mr-tab[aria-selected="true"] {
+  color: var(--c-fg);
+  border-bottom-color: var(--c-primary);
+}
+
+/* ---------- Dialog ---------- */
+.mr-backdrop {
+  position: fixed;
+  inset: 0;
+  background: var(--c-backdrop);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  z-index: 50;
+  animation: mr-fade var(--dur-dialog-in) var(--ease-out);
+}
+.mr-dialog {
+  background: var(--c-surface);
+  border-radius: var(--r-card);
+  padding: 24px;
+  width: 100%;
+  max-width: 480px;
+  max-height: 100%;
+  overflow-y: auto;
+  animation: mr-rise var(--dur-dialog-in) var(--ease-out);
+}
+.mr-dialog__title {
+  font-family: var(--font-display);
+  font-size: var(--t-tile-size);
+  line-height: var(--t-tile-lh);
+  letter-spacing: var(--t-tile-ls);
+  font-weight: 600;
+}
+.mr-dialog__sub {
+  font-size: var(--t-small-size);
+  line-height: var(--t-small-lh);
+  color: var(--c-muted);
+  margin-top: 2px;
+}
+.mr-dialog__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  margin-top: 24px;
+}
+
+@keyframes mr-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes mr-rise {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: none; }
+}
+
+/* 모바일에서 중앙 모달은 엄지가 닿지 않는다 → 하단 시트로 전환 */
+@media (max-width: 767px) {
+  .mr-backdrop {
+    align-items: flex-end;
+    padding: 0;
+  }
+  .mr-dialog {
+    max-width: none;
+    border-radius: var(--r-card) var(--r-card) 0 0;
+    padding-bottom: calc(24px + env(safe-area-inset-bottom));
+    animation: mr-sheet var(--dur-dialog-in) var(--ease-out);
+  }
+  @keyframes mr-sheet {
+    from { transform: translateY(100%); }
+    to { transform: none; }
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mr-backdrop,
+  .mr-dialog {
+    animation: none;
+  }
+}
+
+/* ---------- 공통 알림 ---------- */
+.mr-alert {
+  border-radius: var(--r-control);
+  padding: 12px 14px;
+  font-size: var(--t-small-size);
+  line-height: var(--t-small-lh);
+  background: var(--c-attn-bg);
+  color: var(--c-attn-fg);
+}
+.mr-alert--info {
+  background: var(--c-mine-bg);
+  color: var(--c-fg);
+}
+
+.mr-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.mr-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}

@@ -1,0 +1,66 @@
+/* 앱 셸 — 화면별 스타일은 각 화면이 자기 css 를 import 한다 */
+
+.mr-shell {
+  min-height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.mr-appbar {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  padding: 0 20px;
+  height: 56px;
+  background: var(--c-surface);
+  border-bottom: 1px solid var(--c-border);
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+.mr-appbar__brand {
+  font-family: var(--font-display);
+  font-size: var(--t-body-size);
+  font-weight: 600;
+  letter-spacing: -0.2px;
+}
+
+.mr-appbar__nav {
+  display: flex;
+  gap: 20px;
+}
+
+.mr-navlink {
+  color: var(--c-muted);
+  text-decoration: none;
+  font-size: var(--t-small-size);
+  line-height: var(--t-small-lh);
+  padding: 6px 0;
+}
+.mr-navlink.active {
+  color: var(--c-fg);
+  font-weight: 600;
+}
+
+.mr-main {
+  flex: 1;
+  padding: 24px 20px 64px;
+  max-width: 1280px;
+  width: 100%;
+  margin: 0 auto;
+}
+
+@media (max-width: 767px) {
+  .mr-main {
+    padding: 16px 16px 48px;
+  }
+}
+
+/* 로딩·에러 공통 */
+.mr-state {
+  padding: 48px 0;
+  text-align: center;
+  color: var(--c-muted);
+  font-size: var(--t-small-size);
+}
