@@ -62,7 +62,10 @@
   --c-attn-bg: #FFF3E5;      /* [local] */
   --c-attn-fg: #8F4B00;      /* [local] tint 위 6.05:1 */
 
-  /* 빨강은 정의하지 않는다. 예약된 방은 오류가 아니다. */
+  /* 예약 상태에는 빨강을 쓰지 않는다 — 예약된 방은 오류가 아니다.
+   * 단 "지금 몇 시인가" 를 가리키는 현재시각 선은 상태색이 아니라 시간 표시이고,
+   * 캘린더 앱의 보편적 관행이다(iOS/macOS 캘린더의 빨간 선). 그 한 자리에만 쓴다. */
+  --c-now: #FF3B30;          /* [apple] iOS system red. 현재시각 선 전용 */
 
   /* ================= 타이포그래피 =================
    * Apple 은 SF Pro 를 쓰지만 웹에 배포되는 폰트가 아니다. Apple 기기에서는
@@ -85,6 +88,7 @@
   --t-small-size: 14px;   --t-small-lh: 20px;   --t-small-w: 400;   /* [apple] caption */
   --t-cap-size: 12px;     --t-cap-lh: 16px;     --t-cap-w: 400;     /* [apple] legal */
   --t-label-w: 500;                                                  /* [local] */
+  --t-grid-size: 13px;    --t-grid-lh: 16px;                         /* [local] 격자 이벤트 — 28px 슬롯 안에 이름+시간이 들어가야 한다 */
 
   /*
    * 자간 — apple.com 의 타이포그래피 클래스는 크기별로 음의 트래킹을 준다.
@@ -107,6 +111,7 @@
   --r-lg: 18px;   /* [apple] HIG reference card */
   --r-xl: 20px;   /* [local] 다이얼로그처럼 더 큰 표면 */
   --r-pill: 980px;/* [apple] 배지·칩 */
+  --r-event: 6px; /* [local] 격자 이벤트 블록. 28px 슬롯에 12px radius 를 주면 카드처럼 보인다 */
 
   --h-action: 44px;         /* [apple] marketing primary 높이. 터치 타깃 하한과도 일치 */
   --h-action-compact: 36px; /* [apple] marketing compact. 데스크톱 격자 인접 전용 */

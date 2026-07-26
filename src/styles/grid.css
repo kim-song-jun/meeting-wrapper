@@ -80,7 +80,9 @@
 }
 
 .grid-viewswitch__btn {
-  height: var(--h-action); /* 44px — 모바일에서도 항상 보이는 최상단 내비게이션이라 compact 를 쓸 수 없다 */
+  /* 모바일에서는 44px 을 지키고, 포인터가 있는 데스크톱에서는 macOS 툴바처럼 낮춘다
+   * (아래 @media (min-width: 768px) 참조). 44px 세그먼트는 웹앱 티가 난다. */
+  height: var(--h-action);
   padding: 0 20px;
   display: inline-flex;
   align-items: center;
@@ -98,6 +100,59 @@
 .grid-viewswitch__btn:active {
   transform: scale(0.97);
 }
+/*
+ * 데스크톱 툴바 압축.
+ *
+ * 44px 은 손가락 하한이지 포인터의 기본값이 아니다. macOS 캘린더의 툴바 컨트롤은
+ * 28~32px 이고, 그 차이가 "웹앱"과 "캘린더 앱"을 가른다. 마우스가 있는 환경
+ * (hover: hover + 768px 이상)에서만 낮추고, 모바일은 44px 그대로 둔다.
+ *
+ * 잠긴 판에서는 이 32px 차이가 그대로 격자 높이로 돌아온다.
+ */
+@media (min-width: 768px) and (hover: hover) {
+  .grid-viewswitch {
+    margin-bottom: 16px;
+  }
+  .grid-viewswitch__btn {
+    height: 30px;
+    padding: 0 14px;
+  }
+
+  .grid-controlbar .mr-btn,
+  .grid-controlbar .grid-deptchip,
+  .grid-controlbar .grid-roomchip,
+  .grid-controlbar .grid-filter-reset,
+  .grid-controlbar .mr-input {
+    height: 30px;
+    font-size: var(--t-small-size);
+  }
+  .grid-controlbar .mr-btn {
+    padding: 0 14px;
+  }
+  .grid-controlbar .grid-deptchip,
+  .grid-controlbar .grid-roomchip {
+    padding: 0 12px;
+  }
+  .grid-controlbar .mr-input.grid-date-input {
+    width: 150px;
+  }
+  /* 인원 레이블은 스테퍼 위가 아니라 옆에 붙는다 — 세로 한 줄을 아낀다 */
+  .grid-controlbar .mr-field__label {
+    display: inline;
+    margin: 0 8px 0 0;
+  }
+  .grid-filterbar.mr-row > div:first-child {
+    display: flex;
+    align-items: center;
+  }
+  .grid-datestepper {
+    height: 30px;
+  }
+  .grid-datestepper__btn {
+    width: 30px;
+  }
+}
+
 .grid-viewswitch__btn.is-active {
   background: var(--c-surface);
   color: var(--c-fg);
@@ -111,15 +166,28 @@
  * 인원/부서 필터와 날짜 탐색은 서로 다른 컨트롤이지만 둘 다 "지금 이 화면에
  * 뭐가 보이는지"를 조정한다는 점에서 한 클러스터다. 옅은 배경 하나로 묶어
  * 격자 콘텐츠와도, 위 뷰 전환과도 경계를 준다. */
+/*
+ * 컨트롤은 물러나 있어야 한다(DESIGN.md §1·§12-1). 채운 회색 패널로 묶으면
+ * 격자보다 컨트롤이 먼저 읽히고, 잠긴 판에서는 그만큼 격자 높이를 뺏는다.
+ * 배경·보더 없이 여백만으로 묶는다.
+ */
 .grid-controlbar {
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  padding: 14px 16px;
-  background: var(--c-surface-muted);
-  border: 1px solid var(--c-border);
-  border-radius: var(--r-lg);
-  margin-bottom: 16px;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+/* 필터와 날짜 탐색을 한 줄로 — 두 줄로 쌓으면 그만큼 격자가 짧아진다.
+ * 위 압축 블록이 아니라 여기 두는 이유: base 정의(flex-direction: column)가
+ * 파일 뒤쪽에 있어, 앞에 쓰면 같은 specificity 로 밀린다. */
+@media (min-width: 768px) and (hover: hover) {
+  .grid-controlbar {
+    flex-direction: row;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px 20px;
+  }
 }
 
 /* ---------- 날짜 스테퍼 (주간·월간 공유) ----------
@@ -279,15 +347,17 @@
    */
   overscroll-behavior: contain; /* 🟢 SCROLL — 격자 끝에서 스크롤이 페이지로 새는 체이닝을 막는다 */
   scrollbar-gutter: stable; /* 🟢 LAYOUT STABILITY — 세로 스크롤바 등장으로 격자 폭이 튀지 않게 */
-  border: 1px solid var(--glass-edge);
-  border-radius: var(--r-lg);
   /*
-   * 불투명하게 둔다. 여기를 반투명으로 열면 빈 슬롯(격자의 대부분)이 부모 배경을
-   * 물려받아 반투명해지고, 자체 배경을 가진 예약된 셀만 불투명해진다 —
-   * "빈 시간에는 색을 주지 않는다"(DESIGN.md §2·§7)가 정확히 뒤집힌다.
-   * 유리는 그 위를 덮는 sticky 크롬(코너·헤더·시간축)이 담당한다.
+   * 테두리와 radius 를 두지 않는다. 캘린더 격자는 "화면에 놓인 카드"가 아니라
+   * 화면 그 자체다 — macOS/iOS 캘린더 어느 쪽도 격자를 둥근 박스로 감싸지 않는다.
+   * 경계는 위쪽 헤어라인 하나로 끝낸다.
+   *
+   * 불투명하게 둔다. 반투명으로 열면 빈 슬롯(격자의 대부분)이 부모 배경을 물려받아
+   * 반투명해지고 자체 배경을 가진 예약된 셀만 불투명해진다 — "빈 시간에는 색을 주지
+   * 않는다"(DESIGN.md §2·§7)가 정확히 뒤집힌다. 유리는 sticky 크롬이 담당한다.
    */
-  background: var(--c-canvas);
+  border-top: 1px solid var(--c-border);
+  background: var(--c-surface);
 }
 
 .grid-table {
@@ -374,8 +444,8 @@
   position: sticky;
   left: 0;
   z-index: 3;
-  background: var(--c-canvas);
-  border-right: 1px solid var(--c-border);
+  background: var(--c-surface);
+  /* 캘린더의 시간축은 선으로 갈라지지 않는다 — 여백이 경계다 */
   width: var(--grid-axis-w);
 }
 
@@ -399,12 +469,13 @@
   box-sizing: border-box;
 }
 
+/* 정시선이 리듬을 만들고 30분선은 거들기만 한다. 둘 다 진하면 격자가 표로 보인다. */
 .grid-slot--hour {
-  border-bottom: 1px solid var(--c-border-strong);
+  border-bottom: 1px solid var(--c-border);
 }
 
 .grid-slot--half {
-  border-bottom: 1px solid var(--c-border);
+  border-bottom: 1px solid var(--c-surface-muted);
 }
 
 .grid-axis__cell {
@@ -431,7 +502,7 @@
 
 .grid-col {
   position: relative;
-  border-right: 1px solid var(--c-border);
+  border-right: 1px solid var(--c-surface-muted);
 }
 
 .grid-col > .grid-slot {
@@ -454,8 +525,10 @@
   left: 2px;
   right: 2px;
   overflow: hidden;
-  border-radius: var(--r-md);
-  padding: 4px 6px;
+  border-radius: var(--r-event);
+  /* 왼쪽 3px 는 색 막대 자리 — 캘린더 이벤트의 표준 형태다 */
+  padding: 3px 6px 3px 9px;
+  border-left: 3px solid transparent;
   cursor: pointer;
   transition: background-color var(--dur-cell) var(--ease-out), transform var(--dur-hover) var(--ease-out);
 }
@@ -465,18 +538,22 @@
   transform: scale(0.98);
 }
 
+/* 내 예약 — 화면당 하나뿐인 유채색 액센트 */
 .grid-event--mine {
   background: var(--c-mine-bg);
-  border: 1px solid var(--c-mine-border);
+  border-left-color: var(--c-action);
 }
 
+/* 남의 예약 — 정상 상태이므로 색을 주지 않는다. 중립 틴트 + 중립 막대.
+ * 흰 배경 + 회색 보더로 두면 격자 위에 카드가 떠 있는 것처럼 보였다. */
 .grid-event--other {
-  background: var(--c-surface);
-  border: 1px solid var(--c-border);
+  background: var(--c-surface-muted);
+  border-left-color: var(--c-border-strong);
 }
 
 .grid-event__name {
-  font-size: var(--t-small-size);
+  font-size: var(--t-grid-size);
+  line-height: var(--t-grid-lh);
   font-weight: 600;
   color: var(--c-fg);
   overflow: hidden;
@@ -486,7 +563,8 @@
 
 .grid-event__time {
   font-size: var(--t-cap-size);
-  color: var(--c-muted);
+  line-height: var(--t-grid-lh);
+  color: var(--c-secondary);
   flex: none;
   white-space: nowrap;
 }
@@ -528,13 +606,27 @@
   pointer-events: none;
 }
 
+/*
+ * 현재시각 선. 캘린더 앱의 보편 관행대로 빨강을 쓴다 — 이건 예약 "상태"가 아니라
+ * 시간 표시라 "예약된 방을 빨강으로 칠하지 않는다"(DESIGN.md §7)와 충돌하지 않는다.
+ * 왼쪽 점이 있어야 선이 격자선 중 하나로 묻히지 않는다.
+ */
 .grid-now__line {
   position: absolute;
   left: 0;
   right: 0;
   height: 1px;
-  /* 예약 상태색이 아니라 중립 회색 — 화면당 하나뿐인 파란 액센트는 '내 예약'에 남겨둔다 */
-  background: var(--c-secondary);
+  background: var(--c-now);
+}
+.grid-now__line::before {
+  content: "";
+  position: absolute;
+  left: -3px;
+  top: -3px;
+  width: 7px;
+  height: 7px;
+  border-radius: var(--r-pill);
+  background: var(--c-now);
 }
 
 /* 768~1023px: 회의실 일부만 보이고 가로 스크롤로 나머지를 본다.
