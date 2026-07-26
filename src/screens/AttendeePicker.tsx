@@ -128,8 +128,9 @@ export function AttendeePicker({
       {noMatch ? (
         canAddRaw ? (
           <div className="mr-row" style={{ marginTop: 8 }}>
+            {/* secondary(44px) — 이 피커는 모바일 QR 랜딩의 예약 다이얼로그 안에서도 열린다 */}
             <Button
-              variant="compact-quiet"
+              variant="secondary"
               onClick={() => add({ email: typedEmail, name: typedEmail, detail: null })}
             >
               {typedEmail} 직접 추가

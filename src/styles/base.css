@@ -6,6 +6,14 @@
   box-sizing: border-box;
 }
 
+/*
+ * 이중 스크롤 제거 작업에서 확인: 이 100% 체인은 screens.css 의 .mr-shell
+ * (min-height:100dvh) / .mr-shell--pane (height:100dvh) 과 충돌하지 않는다.
+ * body 가 height:100% 로 뷰포트를 채우는 목적은 콘텐츠가 짧을 때도
+ * --c-canvas 배경이 뷰포트 전체를 덮게 하는 것뿐이고, 실제 스크롤 가능
+ * 여부는 각 화면의 .mr-shell(--pane) 규칙이 min-height 로 열어두거나
+ * height+overflow:hidden 으로 잠그는 쪽에서 결정한다. 그대로 유지한다.
+ */
 html,
 body,
 #root {

@@ -20,9 +20,15 @@ function BrandMark() {
   );
 }
 
-function Shell({ children }: { children: React.ReactNode }) {
+/*
+ * pane: 예약 현황(격자) 화면 전용. 문서 스크롤을 잠그고 격자 판(.grid-scroll,
+ * grid.css)만 세로로 스크롤되게 한다 — 이중 스크롤 제거. /me 같은 리스트
+ * 화면은 pane 을 켜지 않는다: 지금처럼 페이지 전체가 스크롤돼야 자연스럽다.
+ * CSS 쪽 구현은 screens.css(.mr-shell--pane)와 grid.css(.grid-scroll 등)를 본다.
+ */
+function Shell({ children, pane = false }: { children: React.ReactNode; pane?: boolean }) {
   return (
-    <div className="mr-shell">
+    <div className={pane ? "mr-shell mr-shell--pane" : "mr-shell"}>
       <header className="mr-appbar">
         <span className="mr-appbar__brand">
           <BrandMark />
@@ -50,7 +56,7 @@ export function App() {
       <Route
         path="/"
         element={
-          <Shell>
+          <Shell pane>
             <GridScreen />
           </Shell>
         }

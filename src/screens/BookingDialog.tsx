@@ -174,6 +174,9 @@ export function BookingDialog({ roomId, start, end, prefs, onClose, onCreated }:
       title="회의실 예약"
       subtitle={subtitle}
       onClose={onClose}
+      /* 데이터 입력 폼이므로 배경 클릭으로 닫지 않는다 (omd:feel MODAL 🟢).
+         제목·인원·참석자·반복·Zoom 링크를 적다가 배경을 한 번 잘못 누르면 전부 사라진다. */
+      dismissible={false}
       actions={
         <>
           <Button variant="secondary" onClick={onClose} disabled={busy}>
@@ -213,9 +216,12 @@ export function BookingDialog({ roomId, start, end, prefs, onClose, onCreated }:
         <span className="mr-field__label">인원</span>
         <div className="mr-stepper">
           {/* 함수형 업데이터를 쓴다. setHeadcount(headcount + 1) 로 하면 연타할 때
-              같은 렌더의 옛 값을 읽어 증가분이 유실된다 (실제로 4번 눌러 +1만 됨). */}
+              같은 렌더의 옛 값을 읽어 증가분이 유실된다 (실제로 4번 눌러 +1만 됨).
+              secondary(44px)를 쓰는 이유: 이 다이얼로그는 모바일 QR 랜딩에서도 열린다.
+              compact(36px)는 DESIGN.md §4 가 "데스크톱 격자 인접 컨텍스트에서만" 으로
+              못박은 값이고, 모바일 터치 타깃 하한(44px)을 밑돈다. */}
           <Button
-            variant="compact-quiet"
+            variant="secondary"
             onClick={() => setHeadcount((n) => Math.max(1, n - 1))}
             disabled={headcount <= 1}
             aria-label="인원 줄이기"
@@ -224,7 +230,7 @@ export function BookingDialog({ roomId, start, end, prefs, onClose, onCreated }:
           </Button>
           <span className="mr-stepper__value">{headcount}명</span>
           <Button
-            variant="compact-quiet"
+            variant="secondary"
             onClick={() => setHeadcount((n) => n + 1)}
             aria-label="인원 늘리기"
           >

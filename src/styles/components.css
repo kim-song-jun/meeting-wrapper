@@ -11,10 +11,16 @@
   cursor: pointer;
   white-space: nowrap;
   font-family: var(--font-sans);
-  transition: background-color var(--dur-cell) var(--ease-out);
+  transition: background-color var(--dur-cell) var(--ease-out), transform var(--dur-hover) var(--ease-out);
 }
 .mr-btn:disabled {
   cursor: not-allowed;
+}
+/* 누를 때 반응 — DS/⚪ tier, 수치(0.97/150ms)는 규칙이 아니라 취향 휴리스틱.
+ * transform 만 사용해 레이아웃에 영향을 주지 않는다(눌렀다 떼는 왕복 모두 애니메이트되도록
+ * transition 은 위 base 규칙에 이미 포함되어 있다). */
+.mr-btn:active:not(:disabled) {
+  transform: scale(0.97);
 }
 
 .mr-btn--primary {
@@ -86,6 +92,8 @@
   font-size: var(--t-small-size);
   line-height: var(--t-small-lh);
   color: var(--c-muted);
+  /* omd:feel TYPE 🟡 — 비활성 사유 문장이 한 단어만 남는 줄로 꺾이지 않게 */
+  text-wrap: pretty;
 }
 
 /* ---------- Input ---------- */
@@ -193,6 +201,8 @@
 .mr-appbar .mr-navlink,
 .mr-dialog .mr-dialog__sub,
 .mr-dialog .mr-reason,
+.mr-dialog .mr-field__hint,
+.mr-dialog .mr-stepper__note,
 .mr-card--glass .mr-reason,
 .mr-card--glass .t-muted,
 .mr-card--mine .mr-reason {
@@ -247,10 +257,16 @@
   font-size: var(--t-body-size);
   color: var(--c-muted);
   cursor: pointer;
+  transition: color var(--dur-hover) var(--ease-out), border-color var(--dur-hover) var(--ease-out),
+    transform var(--dur-hover) var(--ease-out);
 }
 .mr-tab[aria-selected="true"] {
   color: var(--c-fg);
   border-bottom-color: var(--c-action);
+}
+/* 누를 때 반응 — DS/⚪ tier */
+.mr-tab:active {
+  transform: scale(0.97);
 }
 
 /* ---------- Dialog ---------- */
@@ -264,6 +280,10 @@
   padding: 24px;
   z-index: 50;
   animation: mr-fade var(--dur-dialog-in) var(--ease-out);
+  /* omd:feel SCROLL 🟢 — 배경 스크롤로 새는 것 방지(모바일에서 바디까지 같이 스크롤되는
+   * 이중 스크롤 안티패턴). 이 컨테이너 자체는 스크롤하지 않지만 자식(.mr-dialog)의
+   * 스크롤 체이닝을 여기서 한 번 더 막는다. */
+  overscroll-behavior: contain;
 }
 @supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
   .mr-backdrop {
@@ -281,6 +301,11 @@
   max-height: 100%;
   overflow-y: auto;
   animation: mr-rise var(--dur-dialog-in) var(--ease-out);
+  /* omd:feel SCROLL 🟢 — 이 패널 안에서 끝까지 스크롤해도 상위(body/backdrop)로
+   * 스크롤이 새지 않게 한다. omd:feel LAYOUT STABILITY 🟢 — 스크롤바 유무로
+   * 콘텐츠 폭이 흔들리지 않게 거터를 항상 예약한다. */
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
 }
 @supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
   .mr-dialog {
@@ -296,12 +321,16 @@
   font-size: var(--t-title-size);
   line-height: var(--t-title-lh);
   font-weight: var(--t-title-w);
+  /* omd:feel TYPE 🟡 — 제목 줄바꿈이 "한 단어만 남는" 꼴이 되지 않게 균형있게 */
+  text-wrap: balance;
 }
 .mr-dialog__sub {
   font-size: var(--t-small-size);
   line-height: var(--t-small-lh);
   color: var(--c-muted);
   margin-top: 2px;
+  /* omd:feel TYPE 🟡 — 날짜/시간/인원 등 숫자가 자주 섞이는 자리. 자릿수 흔들림 방지 */
+  font-variant-numeric: tabular-nums;
 }
 .mr-dialog__actions {
   display: flex;
@@ -348,6 +377,16 @@
   .mr-backdrop,
   .mr-dialog {
     animation: none;
+  }
+  /* omd:feel MOTION 🟢 — 누를 때 이동/스케일을 없앤다. 클릭했다는 신호 자체는
+   * 각 요소의 hover/색 전환(background-color, border-color, color)이 이미 대신한다. */
+  .mr-btn:active:not(:disabled),
+  .mr-picker__team:active,
+  .mr-picker__result:active,
+  .mr-picker__remove:active,
+  .mr-disclosure:active,
+  .mr-tab:active {
+    transform: none;
   }
 }
 
@@ -417,18 +456,25 @@
   flex-wrap: wrap;
   gap: 8px;
 }
+/* 팀 프리셋 칩 — 44px. 이 피커는 모바일 QR 랜딩의 예약 다이얼로그 안에서도 열리므로
+ * 36px(--h-action-compact, 데스크톱 격자 인접 전용)를 쓸 수 없다. DESIGN.md §4. */
 .mr-picker__team {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  height: var(--h-action-compact);
-  padding: var(--pad-action-compact);
+  height: var(--h-action);
+  padding: var(--pad-action);
   border-radius: var(--r-pill);
   border: 1px solid var(--c-action-border);
   background: transparent;
   color: var(--c-action);
   font-size: var(--t-small-size);
   cursor: pointer;
+  transition: transform var(--dur-hover) var(--ease-out);
+}
+/* 누를 때 반응 — DS/⚪ tier, .mr-btn 과 동일 휴리스틱 */
+.mr-picker__team:active {
+  transform: scale(0.97);
 }
 .mr-picker__teamcount {
   color: var(--c-muted);
@@ -456,12 +502,17 @@
   background: transparent;
   text-align: left;
   cursor: pointer;
+  transition: background-color var(--dur-hover) var(--ease-out), transform var(--dur-hover) var(--ease-out);
 }
 .mr-picker__results li + li .mr-picker__result {
   border-top: 1px solid var(--c-border);
 }
 .mr-picker__result:hover {
   background: var(--c-canvas);
+}
+/* 누를 때 반응 — DS/⚪ tier, .mr-btn 과 동일 휴리스틱 */
+.mr-picker__result:active {
+  transform: scale(0.97);
 }
 .mr-picker__name {
   font-size: var(--t-body-size);
@@ -478,7 +529,9 @@
   padding: 0;
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
+  /* omd:feel Targets 🟢 — 인접 탭 타깃 간 8px 이상. 칩마다 ✕ 버튼이 들어 있어
+   * 6px 로는 옆 칩의 ✕ 를 잘못 누르기 쉽다. */
+  gap: 8px;
 }
 .mr-picker__chip {
   display: inline-flex;
@@ -497,6 +550,12 @@
     background: var(--glass-bg-tint);
   }
 }
+/*
+ * ✕ 는 24x24 로 둔다 — WCAG 2.5.8 AA 최소(24px)는 충족하지만 DESIGN.md 의 44px 권장에는
+ * 못 미친다. 히트 영역을 44x44 로 넓히면 28px 짜리 칩 밖으로 튀어나와 옆 칩의 ✕ 와
+ * 겹친다 — 잘못 눌러 엉뚱한 참석자가 지워지는 쪽이 24px 보다 나쁘다.
+ * 대신 위 .mr-picker__chips 의 간격을 8px 로 확보해 오조작 거리를 벌었다.
+ */
 .mr-picker__remove {
   width: 24px;
   height: 24px;
@@ -507,9 +566,14 @@
   font-size: 16px;
   line-height: 1;
   cursor: pointer;
+  transition: background-color var(--dur-hover) var(--ease-out), transform var(--dur-hover) var(--ease-out);
 }
 .mr-picker__remove:hover {
   background: var(--c-surface);
+}
+/* 누를 때 반응 — DS/⚪ tier */
+.mr-picker__remove:active {
+  transform: scale(0.97);
 }
 
 /* ---------- 접이식 섹션 ---------- */
@@ -524,6 +588,11 @@
   color: var(--c-link);
   font-size: var(--t-body-size);
   cursor: pointer;
+  transition: transform var(--dur-hover) var(--ease-out);
+}
+/* 누를 때 반응 — DS/⚪ tier */
+.mr-disclosure:active {
+  transform: scale(0.97);
 }
 
 .mr-stack {

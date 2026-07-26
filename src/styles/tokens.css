@@ -148,18 +148,32 @@
   --grid-col-min: 132px;
   --grid-axis-w: 64px;
 
-  /* ================= 모션 ================= */
-  /* [brand] molcube-web 의 fade-in-down 0.3s ease-out / fade-out-up 0.2s ease-in */
-  --ease-out: cubic-bezier(0, 0, 0.2, 1);
-  --dur-dialog-in: 300ms;
-  --dur-dialog-out: 200ms;
-  --dur-cell: 200ms;
+  /* ================= 모션 =================
+   * omd:feel MOTION. 전역 duration 하나로 통일하지 않고 이동 면적/거리에 비례해 나눈다 🟢.
+   * 전부 50ms 그리드에 양자화 🟢 (220ms/333ms 같은 애매한 값 금지).
+   * [brand] molcube-web 의 fade-in-down 0.3s ease-out / fade-out-up 0.2s ease-in 을
+   * 근거로 삼아 역할별 duration/ease 로 재정렬했다 — 색은 손대지 않는다.
+   */
+
+  /* ease 는 역할별로 분리한다 🟡 */
+  --ease-out: cubic-bezier(0, 0, 0.2, 1);   /* [brand] enter/사용자 트리거. molcube fade-in-down 과 동일 */
+  --ease-in: cubic-bezier(0.4, 0, 1, 1);    /* [local] exit/accelerate. enter 에는 쓰지 않는다 */
+  --ease-inout: cubic-bezier(0.4, 0, 0.2, 1); /* [local] 이미 보이는 요소의 morph(리사이즈 등) 전용 */
+
+  /* duration 은 이동 면적 크기 순: hover(색만) < overlay/modal(큰 표면).
+   * 닫힘(exit) duration 토큰은 두지 않는다 — Dialog 는 부모가 조건부 렌더로 즉시
+   * 언마운트하므로 닫힘 애니메이션이 존재하지 않는다. 애니메이션 없는 전환에
+   * "exit ≈ 0.8 x enter" 를 적용할 대상이 없다. 닫힘 연출을 넣으려면 모든 호출부의
+   * 닫기 경로를 Dialog 가 가로채도록 바꿔야 하고, 그때 토큰을 함께 되살린다. */
+  --dur-hover: 150ms;      /* [local] omd:feel 🟡 hover/색 전환 상한 150ms */
+  --dur-dialog-in: 300ms;  /* [brand] molcube fade-in-down 0.3s 과 일치. omd:feel 🟡 overlay/modal ~300ms */
+  --dur-cell: 150ms;       /* [local] omd:feel 🟡 버튼/격자 셀 hover 배경색 전환 — hover 카테고리(150ms) */
 }
 
 @media (prefers-reduced-motion: reduce) {
   :root {
+    --dur-hover: 0ms;
     --dur-dialog-in: 0ms;
-    --dur-dialog-out: 0ms;
     --dur-cell: 0ms;
   }
 }

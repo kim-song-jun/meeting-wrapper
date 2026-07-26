@@ -45,7 +45,8 @@ function LoadError({ what, error, onRetry }: { what: string; error: Error; onRet
       <span>
         {what}을 불러오지 못했어요 ({error.message}).
       </span>{" "}
-      <Button variant="compact-quiet" onClick={onRetry}>
+      {/* secondary(44px) — /me 는 모바일에서도 그대로 열리고 데스크톱 격자 인접 컨텍스트가 아니다 */}
+      <Button variant="secondary" onClick={onRetry}>
         다시 시도
       </Button>
     </Alert>

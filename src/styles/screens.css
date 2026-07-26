@@ -1,9 +1,51 @@
 /* 앱 셸 — 화면별 스타일은 각 화면이 자기 css 를 import 한다 */
 
+/*
+ * 100dvh 를 쓰는 이유: 모바일 브라우저는 주소창이 접히고 펼쳐질 때 뷰포트
+ * 실높이가 바뀐다. 100vh/100%(base.css 의 html/body/#root)는 그 변화를
+ * 따라가지 않아 콘텐츠가 가려지거나 아래에 빈 틈이 남는다. dvh 는 그 순간의
+ * 실제 보이는 뷰포트를 추적한다. 기본 셸은 min-height 라서 콘텐츠가 넘치면
+ * 지금처럼 문서(body)가 스크롤된다 — /me 같은 리스트 화면은 이 기본값 그대로.
+ */
 .mr-shell {
-  min-height: 100%;
+  min-height: 100dvh;
   display: flex;
   flex-direction: column;
+}
+
+/*
+ * 격자 화면(App.tsx 의 <Shell pane>) 전용 수정자.
+ *
+ * 실측된 이중 스크롤: 페이지가 scrollHeight 1150 / viewport 1000 으로
+ * 스크롤되는데, 그 안의 .grid-scroll 이 max-height:70vh(700px) 창에
+ * 1261px 콘텐츠를 또 담고 있었다 — 페이지를 150px 굴린 뒤 격자 안에서
+ * 563px 를 또 굴려야 했다.
+ *
+ * 해결: 셸 높이를 뷰포트에 고정(height, min-height 아님)하고
+ * overflow:hidden 을 준다. body 자체는 이 고정 높이를 넘지 않으므로
+ * 더 이상 스크롤되지 않는다 — 유일한 스크롤러는 grid.css 의 .grid-scroll
+ * (또는 격자가 없는 월간 뷰에서는 .grid-screen 자신)이 된다.
+ *
+ * 768px 미만(모바일)에서는 끈다. 일간 뷰가 세로 리스트로 바뀌어 페이지
+ * 스크롤이 자연스럽고(DESIGN.md §8), 강제로 판에 가두면 리스트가 잘린다.
+ */
+@media (min-width: 768px) {
+  .mr-shell--pane {
+    height: 100dvh;
+    overflow: hidden;
+  }
+
+  .mr-shell--pane .mr-main {
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    /* 판 안에서는 바닥 여백이 스크롤에 딸려 지나가는 게 아니라 고정된
+     * 세로 예산을 매번 깎아먹는다. 기본값(64px)은 "스크롤해서 지나치는
+     * 여백" 을 전제로 한 값이라 판 모드에서는 좌우와 맞춘다. */
+    padding-bottom: 24px;
+  }
 }
 
 .mr-appbar {
