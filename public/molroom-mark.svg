@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" role="img" aria-label="MolCube 로고">
+  <polygon points="50,8 88,29 50,50 12,29" fill="#73FEDD" stroke="#202362" stroke-width="3" stroke-linejoin="round"/>
+  <polygon points="12,29 50,50 50,92 12,71" fill="#4279BC" stroke="#202362" stroke-width="3" stroke-linejoin="round"/>
+  <polygon points="88,29 50,50 50,92 88,71" fill="#FFC006" stroke="#202362" stroke-width="3" stroke-linejoin="round"/>
+</svg>
