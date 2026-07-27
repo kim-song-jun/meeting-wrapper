@@ -62,21 +62,39 @@ function Sidebar() {
 
       <div className="mr-sidebar__section">
         <h2 className="mr-sidebar__heading">회의실</h2>
+        <p className="mr-sidebar__note t-cap">켠 회의실만 격자에 보여요.</p>
         {ROOMS.map((room) => {
           const on = rooms.isVisible(room.id);
+          /*
+           * 네이티브 체크박스를 버렸다.
+           *
+           * 13px 짜리 파란 사각형은 브라우저가 그리는 물건이라 Weak 쌍도 12px radius 도
+           * 적용되지 않았다 — 흰 사이드바에서 유일하게 OS 문법으로 남은 컨트롤이었다.
+           * 대신 행 전체를 role="switch" 버튼으로 만들고 켜짐을 Weak 채움으로 낸다
+           * (DESIGN.md §4 MolRoom Sidebar: 48px 행 · radius 12px · 선택은 Weak 쌍).
+           * 상태는 색만이 아니라 우측 점(--roomdot)으로도 나가므로 색각 이상에서도 읽힌다.
+           */
+          const last = on && ROOMS.filter((r) => rooms.isVisible(r.id)).length <= 1;
           return (
-            <label key={room.id} className="mr-sidebar__room">
-              <input
-                type="checkbox"
-                className="mr-sidebar__check"
-                checked={on}
-                onChange={() => rooms.toggle(room.id)}
-              />
+            <button
+              key={room.id}
+              type="button"
+              role="switch"
+              aria-checked={on}
+              disabled={last}
+              className={on ? "mr-sidebar__room is-on" : "mr-sidebar__room"}
+              onClick={() => rooms.toggle(room.id)}
+            >
+              <span className="mr-sidebar__roomdot" aria-hidden="true" />
               <span className="mr-sidebar__roomname">{room.name}</span>
               <span className="mr-sidebar__roomfloor t-cap">{room.floor}</span>
-            </label>
+            </button>
           );
         })}
+        {/* 비활성 사유는 상시 노출한다 — 왜 못 끄는지 툴팁으로 숨기지 않는다(DESIGN.md §4·§10) */}
+        {ROOMS.filter((r) => rooms.isVisible(r.id)).length <= 1 ? (
+          <p className="mr-sidebar__reason t-cap">회의실을 모두 끄면 격자가 비어요. 하나는 켜 둬요.</p>
+        ) : null}
       </div>
 
       {auth.status === "signed-in" && auth.user ? (

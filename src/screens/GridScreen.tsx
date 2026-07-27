@@ -555,7 +555,6 @@ export function GridScreen() {
   }, [bookingsState.data]);
 
   /* ---- 주간 뷰 상태 ---- */
-  const [weekRoomId, setWeekRoomId] = useState<string>(() => visibleRooms[0]?.id ?? "");
   const [weekAnchor, setWeekAnchor] = useState<Date>(() => startOfDay(new Date()));
   const weekStart = useMemo(() => startOfWeek(weekAnchor), [weekAnchor]);
   // repo 의 날짜 범위 조회는 from·to 를 모두 포함한다 (일 단위) — "주 끝"은 그 주의
@@ -582,20 +581,18 @@ export function GridScreen() {
     () => (view === "week" ? repo.listByRange(weekStart, weekEnd) : Promise.resolve([])),
     [view, weekStart.getTime(), weekEnd.getTime()],
   );
-  const weekRoomBookings = useMemo(
-    () => (weekState.data ?? []).filter((b) => b.roomId === weekRoomId),
-    [weekState.data, weekRoomId],
+  /*
+   * 주간도 **켜 둔 회의실을 전부** 그린다.
+   *
+   * 예전엔 격자 위에 회의실 칩 줄이 따로 있었고 거기서 방 하나만 고를 수 있었다.
+   * 그런데 회의실을 켜고 끄는 컨트롤은 좌측 사이드바에 이미 있다 — 같은 것을
+   * 정하는 컨트롤이 화면에 둘이었고, 둘의 규칙(다중 / 단일)까지 서로 달랐다.
+   * 사이드바 하나로 통일하고, 주간은 요일 안에서 방별로 열을 쪼갠다.
+   */
+  const weekBookings = useMemo(
+    () => (weekState.data ?? []).filter((b) => visibleRooms.some((r) => r.id === b.roomId)),
+    [weekState.data, visibleRooms],
   );
-
-  // 인원 필터로 현재 고른 방이 후보에서 빠지면 남은 후보 중 첫 방으로 옮긴다.
-  useEffect(() => {
-    if (visibleRooms.length === 0) return;
-    if (!visibleRooms.some((r) => r.id === weekRoomId)) {
-      const first = visibleRooms[0];
-      if (first) setWeekRoomId(first.id);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [visibleRooms]);
 
   /* ---- 월간 뷰 상태 ---- */
   const [monthAnchor, setMonthAnchor] = useState<Date>(() => startOfMonth(new Date()));
@@ -652,6 +649,32 @@ export function GridScreen() {
   const [dialogRange, setDialogRange] = useState<{ roomId: string; start: Date; end: Date } | null>(
     null,
   );
+
+  /*
+   * 다이얼로그가 열려 있는 동안 격자에 남겨 두는 **확정된 선택 구간.**
+   *
+   * drag 와 분리한 이유: drag 를 살려 두면 mousemove/Escape 핸들러가 계속 그것을
+   * 갱신한다 — 다이얼로그 뒤 배경에서 마우스를 움직이면 사각형이 따라 늘어난다.
+   * 이 값은 갱신 대상이 아니라 "무엇을 골랐는지"의 스냅샷이므로 별도로 둔다.
+   */
+  const [pendingSel, setPendingSel] = useState<{ roomId: string; min: number; max: number } | null>(
+    null,
+  );
+
+  /** 다이얼로그를 여는 유일한 통로. 격자에 남길 선택 구간도 여기서 함께 정한다. */
+  function openBookingDialog(roomId: string, start: Date, end: Date) {
+    setDialogRange({ roomId, start, end });
+    setPendingSel({
+      roomId,
+      min: Math.floor(slotIndexOf(start, dayStart, POLICY.slotMinutes)),
+      max: Math.floor(slotIndexOf(end, dayStart, POLICY.slotMinutes)) - 1,
+    });
+  }
+
+  function closeBookingDialog() {
+    setDialogRange(null);
+    setPendingSel(null);
+  }
 
   /* ---- 내 예약 드래그 수정 (일간 뷰 전용) ---- */
   const [edit, setEdit] = useState<EditDragState | null>(null);
@@ -748,11 +771,7 @@ export function GridScreen() {
         if (occupying) setDetailBooking(occupying);
         return;
       }
-      setDialogRange({
-        roomId,
-        start: slotToDate(slot),
-        end: slotToDate(slot + 1),
-      });
+      openBookingDialog(roomId, slotToDate(slot), slotToDate(slot + 1));
       return;
     }
     const move = (dSlot: number, dRoom: number) => {
@@ -921,7 +940,7 @@ export function GridScreen() {
       if (!d) return;
       const min = Math.min(d.anchor, d.current);
       const max = Math.max(d.anchor, d.current);
-      setDialogRange({ roomId: d.roomId, start: slotToDate(min), end: slotToDate(max + 1) });
+      openBookingDialog(d.roomId, slotToDate(min), slotToDate(max + 1));
       setDrag(null);
     }
     function onMouseUp() {
@@ -1007,9 +1026,7 @@ export function GridScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dayKey]);
 
-  function selectionStyle(d: DragState): CSSProperties {
-    const min = Math.min(d.anchor, d.current);
-    const max = Math.max(d.anchor, d.current);
+  function selectionStyle(min: number, max: number): CSSProperties {
     const placement = placeInGrid(slotToDate(min), slotToDate(max + 1), dayStart, POLICY.slotMinutes, slotPx);
     return { top: placement.top, height: placement.height };
   }
@@ -1019,9 +1036,7 @@ export function GridScreen() {
    * 왼쪽 시간축과 눈으로 맞춰야 한다 — 캘린더 앱은 끄는 동안 시각을 같이 보여준다.
    * 시각 계산은 selectionStyle 과 같은 slotToDate 를 쓴다(두 값이 갈라지지 않게).
    */
-  function selectionLabel(d: DragState): { text: string; minutes: number } {
-    const min = Math.min(d.anchor, d.current);
-    const max = Math.max(d.anchor, d.current);
+  function selectionLabel(min: number, max: number): { text: string; minutes: number } {
     const start = slotToDate(min);
     const end = slotToDate(max + 1);
     return {
@@ -1141,17 +1156,23 @@ export function GridScreen() {
           )
         ) : null}
 
-        <div className="grid-controlbar__right">
-          {/*
-            부서 필터는 **드롭다운**이다. 칩 네 개를 인라인으로 늘어놓으면 좁은
-            폭에서 줄바꿈되며 툴바가 두세 줄로 터진다(440px 에서 실측 194px).
-            Jobber 는 필터를 드롭다운 버튼 하나로 접고 켜진 개수만 배지로 보여준다.
+        {/*
+          부서 필터는 **드롭다운**이다. 칩 네 개를 인라인으로 늘어놓으면 좁은
+          폭에서 줄바꿈되며 툴바가 두세 줄로 터진다(440px 에서 실측 194px).
+          Jobber 는 필터를 드롭다운 버튼 하나로 접고 켜진 개수만 배지로 보여준다.
 
-            네이티브 <select> 를 쓰는 이유: 부서는 하나만 고르는 값이고,
-            키보드·모바일 동작을 브라우저가 이미 정확히 해준다. 커스텀 팝오버를
-            만들면 포커스 트랩·외부 클릭·Esc 를 우리가 다시 구현해야 한다.
-          */}
-          {departments.length > 0 ? (
+          네이티브 <select> 를 쓰는 이유: 부서는 하나만 고르는 값이고,
+          키보드·모바일 동작을 브라우저가 이미 정확히 해준다. 커스텀 팝오버를
+          만들면 포커스 트랩·외부 클릭·Esc 를 우리가 다시 구현해야 한다.
+
+          자리는 **왼쪽 클러스터**다. 오른쪽에 뒀을 때 부서 필터와 뷰 전환이 한
+          덩어리로 보였는데, 둘은 축이 다르다 — 날짜·부서는 "무엇을 보나"(데이터를
+          고르는 것)이고 일/주/월·격자/목록은 "어떻게 보나"(같은 데이터를 그리는 방식)다.
+          같은 축끼리 붙여 두면 오른쪽 끝은 언제나 뷰 전환 하나만 남는다.
+        */}
+        {departments.length > 0 ? (
+          <>
+            <span className="grid-controlbar__divider" aria-hidden="true" />
             <label className="grid-deptselect">
               <span className="grid-deptselect__label">부서</span>
               <select
@@ -1167,7 +1188,10 @@ export function GridScreen() {
                 ))}
               </select>
             </label>
-          ) : null}
+          </>
+        ) : null}
+
+        <div className="grid-controlbar__right">
           {view === "day" || view === "agenda" ? (
             <Segmented
               items={DAY_MODES}
@@ -1378,16 +1402,33 @@ export function GridScreen() {
                         />
                       ))}
 
-                      {!firstLoad && drag && drag.roomId === room.id ? (
-                        <div className="grid-selection" style={selectionStyle(drag)}>
-                          <span className="grid-selection__label t-num">
-                            {selectionLabel(drag).text}
-                          </span>
-                          <span className="grid-selection__dur t-cap">
-                            {humanDuration(selectionLabel(drag).minutes)}
-                          </span>
-                        </div>
-                      ) : null}
+                      {(() => {
+                        /*
+                         * 드래그 중이면 지금 끌고 있는 구간을, 손을 떼고 다이얼로그가
+                         * 열려 있으면 **그 확정된 구간을** 같은 모양으로 계속 그린다.
+                         *
+                         * 예전엔 mouseup 에서 선택을 바로 지웠다. 그래서 다이얼로그가
+                         * 뜨는 순간 배경의 파란 사각형이 사라졌고, 뒤를 확인하려고 보면
+                         * 방금 무엇을 골랐는지 격자에 아무 흔적이 없었다 — 다이얼로그의
+                         * 시각 표시와 격자를 눈으로 대조할 수가 없었다.
+                         */
+                        const sel =
+                          drag && drag.roomId === room.id
+                            ? { min: Math.min(drag.anchor, drag.current), max: Math.max(drag.anchor, drag.current) }
+                            : pendingSel && pendingSel.roomId === room.id
+                              ? { min: pendingSel.min, max: pendingSel.max }
+                              : null;
+                        if (firstLoad || !sel) return null;
+                        const info = selectionLabel(sel.min, sel.max);
+                        return (
+                          <div className="grid-selection" style={selectionStyle(sel.min, sel.max)}>
+                            <span className="grid-selection__label t-num">{info.text}</span>
+                            <span className="grid-selection__dur t-cap">
+                              {humanDuration(info.minutes)}
+                            </span>
+                          </div>
+                        );
+                      })()}
 
                       {roomBookings.map((b) => {
                         const beingEdited = edit !== null && edit.bookingId === b.id;
@@ -1473,7 +1514,7 @@ export function GridScreen() {
                     <ButtonWithReason
                       variant="secondary"
                       onClick={() => {
-                        if (free) setDialogRange({ roomId: room.id, ...free });
+                        if (free) openBookingDialog(room.id, free.start, free.end);
                       }}
                       disabled={free === null}
                       reason={free === null && !firstLoad ? "오늘은 남은 시간이 없어요" : null}
@@ -1529,17 +1570,15 @@ export function GridScreen() {
           onSelectBooking={setDetailBooking}
           onCreate={() => {
             const next = nextFreeRange();
-            if (next) setDialogRange(next);
+            if (next) openBookingDialog(next.roomId, next.start, next.end);
             else setEditError("오늘은 남은 빈 시간이 없어요. 다른 날짜를 골라주세요.");
           }}
         />
       ) : view === "week" ? (
         <WeekView
           visibleRooms={visibleRooms}
-          weekRoomId={weekRoomId}
-          onRoomChange={setWeekRoomId}
           weekStart={weekStart}
-          bookings={weekRoomBookings}
+          bookings={weekBookings}
           loading={weekState.loading}
           error={weekState.error}
           onReload={weekState.reload}
@@ -1547,7 +1586,7 @@ export function GridScreen() {
           slotPx={slotPx}
           now={now}
           onSelectBooking={setDetailBooking}
-          onCreate={(start, end) => setDialogRange({ roomId: weekRoomId, start, end })}
+          onCreate={(roomId, start, end) => setDialogRange({ roomId, start, end })}
         />
       ) : (
         <MonthView
@@ -1573,9 +1612,9 @@ export function GridScreen() {
           start={dialogRange.start}
           end={dialogRange.end}
           prefs={prefsState.data ?? { defaultZoomUrl: null }}
-          onClose={() => setDialogRange(null)}
+          onClose={closeBookingDialog}
           onCreated={() => {
-            setDialogRange(null);
+            closeBookingDialog();
             bookingsState.reload();
             weekState.reload();
             monthState.reload();
@@ -1741,13 +1780,15 @@ function GridEventBlock({
 }
 
 /* ================================================================== */
-/* 주간 뷰 — 회의실 하나 x 시간 x 요일. placeInGrid 는 그대로 재사용하고
- * 축이 회의실에서 요일로 바뀔 뿐이다. 각 요일 열의 dayStart 만 그 날짜로 넘긴다. */
+/* 주간 뷰 — 시간 x (요일 x 회의실). placeInGrid 는 그대로 재사용하고
+ * 축이 회의실에서 요일로 바뀔 뿐이다. 각 요일 열의 dayStart 만 그 날짜로 넘긴다.
+ *
+ * 켜 둔 방이 둘 이상이면 요일 열을 방 수만큼 쪼개고 헤더를 2단으로 만든다
+ * (1단 = 요일·날짜, 2단 = 방 약칭). 한 방만 켜져 있으면 쪼갤 것이 없으므로
+ * 헤더도 1단으로 둔다 — 같은 약칭이 7번 반복되는 줄은 정보가 아니라 소음이다. */
 
 function WeekView({
   visibleRooms,
-  weekRoomId,
-  onRoomChange,
   weekStart,
   bookings,
   loading,
@@ -1760,8 +1801,6 @@ function WeekView({
   onCreate,
 }: {
   visibleRooms: readonly Room[];
-  weekRoomId: string;
-  onRoomChange: (id: string) => void;
   weekStart: Date;
   bookings: Booking[];
   loading: boolean;
@@ -1776,7 +1815,7 @@ function WeekView({
    * — 대신 한 칸(30분)을 눌러 시작하고, 길이는 다이얼로그에서 정한다. 이게 없던 동안
    * 주간 뷰에서는 빈 칸을 아무리 끌거나 눌러도 아무 일도 일어나지 않았다.
    */
-  onCreate: (start: Date, end: Date) => void;
+  onCreate: (roomId: string, start: Date, end: Date) => void;
 }) {
   const slotCount = gridSlotCount(POLICY);
   const slotIndices = useMemo(() => Array.from({ length: slotCount }, (_, i) => i), [slotCount]);
@@ -1797,31 +1836,31 @@ function WeekView({
 
   // --grid-slot-h 를 인라인으로 내려준다. placeInGrid 에 넘기는 weekSlotPx 와
   // 같은 숫자여야 CSS 행 높이와 이벤트 좌표가 갈라지지 않는다.
+  const roomCount = Math.max(1, visibleRooms.length);
+  const split = roomCount > 1;
+
+  /*
+   * 방을 쪼개면 열이 7개에서 7xN 개가 된다. 열 하한을 그대로 두면(160px) 방 둘에
+   * 1120px 이 되어 1440px 창에서도 가로 스크롤이 생긴다 — 주간의 목적은 "요일별
+   * 패턴을 한눈에" 라서 가로 스크롤이 그 목적을 정면으로 깎는다. 쪼갠 열은 하한을
+   * 낮춰(88px) 방 둘까지는 스크롤 없이 들어가게 한다. 대신 그 폭에는 시각을 함께
+   * 못 넣으므로 블록은 이름만 그린다(GridEventBlock 이 폭이 아니라 높이로 판단하던
+   * 것과 별개로, 여기서는 열 폭이 이미 좁다는 사실을 CSS 가 말줄임으로 처리한다).
+   */
   const weekScrollStyle = {
     marginTop: 16,
     "--grid-slot-h": String(weekSlotPx) + "px",
+    // 좁은 화면은 어차피 가로 스크롤이므로 열을 더 좁히지 않는다 — 손가락으로 누를 폭이 먼저다
+    // 76px: 1440px 창(사이드바 240 + 패딩 32 + 스크롤바 자리 15 제외)에서 방 둘 x 7일이
+    // 가로 스크롤 없이 딱 들어가는 값 — 실측 1101 / 14 = 78.6px 이 상한이다.
+    "--grid-week-col-min": isNarrow ? (split ? "96px" : "108px") : split ? "76px" : "132px",
   } as CSSProperties;
 
-  const gridTemplateColumns = "var(--grid-axis-w) repeat(7, minmax(var(--grid-col-min), 1fr))";
+  const gridTemplateColumns =
+    "var(--grid-axis-w) repeat(" + String(7 * roomCount) + ", minmax(var(--grid-week-col-min), 1fr))";
 
   return (
     <div>
-      {visibleRooms.length > 0 ? (
-        <div className="grid-roomchips mr-row" role="group" aria-label="회의실 선택">
-          {visibleRooms.map((room) => (
-            <button
-              key={room.id}
-              type="button"
-              className={cx("grid-roomchip", room.id === weekRoomId && "is-active")}
-              aria-pressed={room.id === weekRoomId}
-              onClick={() => onRoomChange(room.id)}
-            >
-              {room.name}
-            </button>
-          ))}
-        </div>
-      ) : null}
-
       {error ? (
         <div style={{ marginTop: 16 }}>
           <Alert>
@@ -1841,20 +1880,25 @@ function WeekView({
        * 그래서 **되는 경로를 함께** 알려준다.
        */}
       <p className="grid-hint">
-        빈 칸을 <b>누르면</b> 그 시간으로 예약할 수 있어요. 주간 보기에서는 <b>끌어서</b> 선택하거나
-        옮길 수 없어요 — 일정을 눌러 시간을 바꾸거나, 일간 보기에서 끌어 옮길 수 있어요.
+        빈 칸을 <b>누르면</b> 그 시간으로 예약돼요. 끌어서 옮기는 건 일간 보기에서 할 수 있어요.
       </p>
 
       {/* .grid-scroll 은 항상 마운트한다 — 로딩 중에만 사라지면 pane 모드의
        * flex:1 sizing 이 꺼졌다 켜지며 스크롤 위치와 페이지 높이가 튄다(day 뷰와 동일 이유). */}
-      <div className="grid-scroll grid-week" style={weekScrollStyle}>
+      <div className={cx("grid-scroll", "grid-week", split && "grid-week--split")} style={weekScrollStyle}>
         <div className="grid-table" style={{ gridTemplateColumns }}>
-          <div className="grid-corner" />
+          {/* 헤더가 2단이면 모서리도 2단을 덮어야 시간축 위가 뚫리지 않는다 */}
+          <div className={cx("grid-corner", split && "grid-corner--tall")} />
 
           {weekDays.map((day, i) => (
             <div
               key={i}
-              className={cx("grid-room-header", sameYMD(day, today) && "grid-room-header--today")}
+              className={cx(
+                "grid-room-header",
+                "grid-week-day",
+                sameYMD(day, today) && "grid-room-header--today",
+              )}
+              style={{ gridColumn: "span " + String(roomCount) }}
             >
               {loading ? (
                 <>
@@ -1871,6 +1915,25 @@ function WeekView({
               )}
             </div>
           ))}
+
+          {/* 2단 헤더 — 요일 아래에 방 약칭. 방이 하나면 그리지 않는다. */}
+          {split
+            ? weekDays.map((day, i) =>
+                visibleRooms.map((room) => (
+                  <div
+                    key={String(i) + ":" + room.id}
+                    className={cx(
+                      "grid-week-room",
+                      room.id === visibleRooms[0]?.id && i > 0 && "grid-week-room--daystart",
+                      sameYMD(day, today) && "grid-week-room--today",
+                    )}
+                    title={room.name}
+                  >
+                    {room.short}
+                  </div>
+                )),
+              )
+            : null}
 
           <div className="grid-axis">
             {slotIndices.map((i) => {
@@ -1893,56 +1956,74 @@ function WeekView({
           {weekDays.map((day, i) => {
             const dStart = gridDayStart(day, POLICY);
             const dEnd = new Date(dStart.getTime() + slotCount * POLICY.slotMinutes * MINUTE);
-            const dayBookings = loading
-              ? []
-              : bookings.filter(
-                  (b) =>
-                    matchesDept(b) &&
-                    b.end.getTime() > dStart.getTime() &&
-                    b.start.getTime() < dEnd.getTime(),
-                );
-            return (
-              <div key={i} className="grid-col">
-                {slotIndices.map((s) => {
-                  const slotStart = new Date(dStart.getTime() + s * POLICY.slotMinutes * MINUTE);
-                  return (
-                    <button
-                      key={s}
-                      type="button"
-                      className={cx(
-                        "grid-slot",
-                        "grid-slot--clickable",
-                        slotIsHourBoundary(s, POLICY.slotMinutes) ? "grid-slot--hour" : "grid-slot--half",
-                      )}
-                      aria-label={
-                        new Intl.DateTimeFormat("ko-KR", { month: "numeric", day: "numeric" }).format(day) +
-                        " " +
-                        hhmm(slotStart) +
-                        " 예약하기"
-                      }
-                      onClick={() =>
-                        onCreate(slotStart, new Date(slotStart.getTime() + POLICY.slotMinutes * MINUTE))
-                      }
-                    />
-                  );
-                })}
+            const dayLabel = new Intl.DateTimeFormat("ko-KR", {
+              month: "numeric",
+              day: "numeric",
+            }).format(day);
 
-                {dayBookings.map((b) => {
-                  const clippedStart = b.start.getTime() < dStart.getTime() ? dStart : b.start;
-                  const clippedEnd = b.end.getTime() > dEnd.getTime() ? dEnd : b.end;
-                  const placement = placeInGrid(clippedStart, clippedEnd, dStart, POLICY.slotMinutes, weekSlotPx);
-                  return (
-                    <GridEventBlock
-                      key={b.id}
-                      booking={b}
-                      placement={placement}
-                      now={now}
-                      onSelect={onSelectBooking}
-                    />
+            return visibleRooms.map((room, r) => {
+              const colBookings = loading
+                ? []
+                : bookings.filter(
+                    (b) =>
+                      b.roomId === room.id &&
+                      matchesDept(b) &&
+                      b.end.getTime() > dStart.getTime() &&
+                      b.start.getTime() < dEnd.getTime(),
                   );
-                })}
-              </div>
-            );
+              return (
+                <div
+                  key={String(i) + ":" + room.id}
+                  /* 방 사이는 얇은 선, 요일 사이는 진한 선 — 그래야 스캔 중에
+                   * "이 열이 어느 날의 어느 방인지" 가 유지된다 */
+                  className={cx("grid-col", r === visibleRooms.length - 1 && "grid-col--dayend")}
+                >
+                  {slotIndices.map((s) => {
+                    const slotStart = new Date(dStart.getTime() + s * POLICY.slotMinutes * MINUTE);
+                    return (
+                      <button
+                        key={s}
+                        type="button"
+                        className={cx(
+                          "grid-slot",
+                          "grid-slot--clickable",
+                          slotIsHourBoundary(s, POLICY.slotMinutes) ? "grid-slot--hour" : "grid-slot--half",
+                        )}
+                        aria-label={dayLabel + " " + hhmm(slotStart) + " " + room.name + " 예약하기"}
+                        onClick={() =>
+                          onCreate(
+                            room.id,
+                            slotStart,
+                            new Date(slotStart.getTime() + POLICY.slotMinutes * MINUTE),
+                          )
+                        }
+                      />
+                    );
+                  })}
+
+                  {colBookings.map((b) => {
+                    const clippedStart = b.start.getTime() < dStart.getTime() ? dStart : b.start;
+                    const clippedEnd = b.end.getTime() > dEnd.getTime() ? dEnd : b.end;
+                    const placement = placeInGrid(
+                      clippedStart,
+                      clippedEnd,
+                      dStart,
+                      POLICY.slotMinutes,
+                      weekSlotPx,
+                    );
+                    return (
+                      <GridEventBlock
+                        key={b.id}
+                        booking={b}
+                        placement={placement}
+                        now={now}
+                        onSelect={onSelectBooking}
+                      />
+                    );
+                  })}
+                </div>
+              );
+            });
           })}
         </div>
       </div>
