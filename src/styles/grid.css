@@ -59,12 +59,11 @@
 }
 
 /* ---------- 뷰 전환 segmented control ----------
- * 일간/주간/월간은 상호 배타적인 3개 뷰이므로 언더라인 탭(공유 Tabs 컴포넌트,
+ * 일간/일정/주간/월간은 상호 배타적인 4개 뷰이므로 언더라인 탭(공유 Tabs 컴포넌트,
  * MyBookingsScreen 과 공유해 components.css 소유) 대신 이 화면 전용 segmented
  * control 로 묶는다. 무엇을 보고 있는지 하나의 폐곡선 안에서 바로 읽힌다.
- * DESIGN.md 컴포넌트 목록엔 없는 형태라 [local] — 지오메트리는 §4 버튼 규칙을
- * 그대로 따른다(6px 대신 pill 인 이유: 여러 옵션 중 하나를 고르는 그룹 컨트롤은
- * 개별 버튼과 달리 pill 로 묶는 관행 — DESIGN.md 배지·칩과 같은 근거). */
+ * DESIGN.md §4 Tabs/Segmented 를 따른다: 트랙 --c-surface-muted + 흰 선택 조각,
+ * 조각 radius --r-seg(10px). pill 은 배지 전용(§7). */
 .grid-viewswitch {
   display: inline-flex;
   /* 부모(.grid-screen)가 flex column 이라 align-items 기본값 stretch 가
@@ -80,17 +79,17 @@
 }
 
 .grid-viewswitch__btn {
-  /* 모바일에서는 44px 을 지키고, 포인터가 있는 데스크톱에서는 macOS 툴바처럼 낮춘다
-   * (아래 @media (min-width: 768px) 참조). 44px 세그먼트는 웹앱 티가 난다. */
+  /* 높이는 데스크톱·모바일 모두 토큰을 그대로 쓴다(48/56px). 예전엔 포인터에서만
+   * 30px 로 낮췄는데, 그 근거가 macOS 툴바였다 — Toss 로 옮긴 뒤 사라진 근거다. */
   height: var(--h-action);
   padding: 0 20px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   border: none;
-  border-radius: var(--r-sm);
+  border-radius: var(--r-seg);
   background: none;
-  color: var(--c-muted);
+  color: var(--c-body);
   font-size: var(--t-small-size);
   font-weight: var(--t-label-w);
   cursor: pointer;
@@ -101,61 +100,26 @@
   transform: scale(0.97);
 }
 /*
- * 데스크톱 툴바 압축.
+ * 데스크톱 툴바 압축 블록을 **삭제했다.**
  *
- * 44px 은 손가락 하한이지 포인터의 기본값이 아니다. macOS 캘린더의 툴바 컨트롤은
- * 28~32px 이고, 그 차이가 "웹앱"과 "캘린더 앱"을 가른다. 마우스가 있는 환경
- * (hover: hover + 768px 이상)에서만 낮추고, 모바일은 44px 그대로 둔다.
+ * 여기엔 `@media (min-width:768px) and (hover:hover)` 로 툴바 컨트롤 전부를
+ * 30px / 14px 로 낮추는 규칙이 있었다. 주석에 근거가 "macOS 캘린더의 툴바
+ * 컨트롤은 28~32px" 이라고 적혀 있었다 — Apple 판본의 유산이고, Toss 로 옮긴
+ * 뒤에는 근거 자체가 없어진 값이다.
  *
- * 잠긴 판에서는 이 32px 차이가 그대로 격자 높이로 돌아온다.
+ * 컨트롤 높이 48px 은 DESIGN.md §1 의 Key Characteristic(`toss`)이다. 여기서만
+ * 몰래 30px 로 되돌리면 등급 체계가 무의미해진다 — 그리고 실제로 이 화면만
+ * 다른 밀도로 렌더되고 있었다.
+ *
+ * 대가: 잠긴 판에서 툴바가 18px 더 먹으므로 격자가 그만큼 짧아진다. 격자가 이미
+ * 스크롤하기로 한 결정(§1)의 연장이므로 받아들인다 — 툴바를 조밀하게 만들어야
+ * 하는 이유는 없었다. 조밀해야 하는 것은 격자 본문이다.
  */
-@media (min-width: 768px) and (hover: hover) {
-  .grid-viewswitch {
-    margin-bottom: 0;
-  }
-  .grid-viewswitch__btn {
-    height: 30px;
-    padding: 0 14px;
-  }
-
-  .grid-controlbar .mr-btn,
-  .grid-controlbar .grid-deptchip,
-  .grid-controlbar .grid-roomchip,
-  .grid-controlbar .mr-input {
-    height: 30px;
-    font-size: var(--t-small-size);
-  }
-  .grid-controlbar .mr-btn {
-    padding: 0 14px;
-  }
-  .grid-controlbar .grid-deptchip,
-  .grid-controlbar .grid-roomchip {
-    padding: 0 12px;
-  }
-  /* 인원 레이블은 스테퍼 위가 아니라 옆에 붙는다 — 세로 한 줄을 아낀다 */
-  .grid-controlbar .mr-field__label {
-    display: inline;
-    margin: 0 8px 0 0;
-  }
-  .grid-filterbar.mr-row > div:first-child {
-    display: flex;
-    align-items: center;
-  }
-  .grid-datestepper {
-    height: 30px;
-  }
-  .grid-datestepper__btn {
-    width: 30px;
-  }
-}
 
 .grid-viewswitch__btn.is-active {
   background: var(--c-surface);
   color: var(--c-fg);
   font-weight: 600;
-  /* [local] 카드용 --shadow-soft(0 4px 24px)는 이 크기의 세그먼트엔 과하다 —
-   * 선택된 조각이 살짝 들뜬 정도만 필요하므로 훨씬 얕은 값을 여기서만 쓴다. */
-  box-shadow: 0 1px 2px rgba(23, 23, 23, 0.08);
 }
 
 /* ---------- 필터 + 날짜 툴바 컨테이너 ----------
@@ -197,6 +161,28 @@
   gap: 8px 12px;
 }
 
+/* ---------- 조작 안내 한 줄 ----------
+ * 격자 바로 위. 컨트롤이 아니라 설명이므로 배경·보더·아이콘을 주지 않는다 —
+ * 배너처럼 만들면 일정보다 먼저 읽힌다(§12-1 은 "먼저 읽히는 것은 가용성 패턴").
+ * 굵게 강조하는 것은 **동작**(끌어서)뿐이다. */
+.grid-hint {
+  margin: 16px 0 0;
+  font-size: var(--t-small-size);
+  line-height: var(--t-small-lh);
+  color: var(--c-body);
+}
+.grid-hint b {
+  font-weight: 600;
+  color: var(--c-fg);
+}
+/* 포인터가 없는 화면에서는 드래그 설명이 거짓말이 된다. QR 랜딩이 주 진입점이므로
+ * 여기서는 아무 말도 하지 않는다(모바일 격자에는 QR 안내가 따로 있다). */
+@media (hover: none), (max-width: 767px) {
+  .grid-hint {
+    display: none;
+  }
+}
+
 /* ---------- 날짜 스테퍼 (주간·월간 공유) ----------
  * 이전/다음은 하나의 결정을 반으로 나눈 것이므로 보더를 공유하는 2분할 pill 로
  * 묶는다. "이번 주"/"이번 달"은 성격이 다른 별도 액션(현재로 점프)이라 분리한다. */
@@ -218,7 +204,7 @@
   height: 100%;
   border: none;
   background: none;
-  color: var(--c-secondary);
+  color: var(--c-body);
   font-size: var(--t-body-size);
   line-height: 1;
   cursor: pointer;
@@ -342,12 +328,20 @@
   display: inline-flex;
   align-items: center;
   height: var(--h-action);
-  padding: 0 10px;
-  /* 맥 앱의 필터 칩은 pill 이 아니라 라운드 사각형이다 — pill 은 배지·태그의 문법 */
+  padding: 0 16px;
+  /* 필터 칩은 pill 이 아니라 라운드 사각형이다 — pill 은 배지 전용(§7) */
   border-radius: var(--r-md);
-  border: 1px solid var(--c-border);
-  background: var(--c-surface);
-  color: var(--c-secondary);
+  /*
+   * 보더 없이 채움으로만 켜짐/꺼짐을 낸다.
+   *
+   * 예전엔 꺼진 칩이 "흰 배경 + 회색 보더", 켜진 칩이 "Weak 채움 + 파란 보더" 였다.
+   * Toss 의 Weak 쌍은 어디서든 보더가 없고(§4 Secondary·Sidebar·Badge), 흰 판 위에
+   * 보더 칩이 네 개 늘어서면 그 선들이 격자보다 먼저 읽힌다 — 컨트롤은 물러나
+   * 있어야 한다(§12-1). 꺼짐은 조용한 보조면, 켜짐은 Weak 채움.
+   */
+  border: none;
+  background: var(--c-surface-muted);
+  color: var(--c-body);
   font-size: var(--t-small-size);
   cursor: pointer;
   white-space: nowrap;
@@ -372,9 +366,8 @@
 
 .grid-deptchip.is-active,
 .grid-roomchip.is-active {
-  border-color: var(--c-action-border);
-  background: var(--c-action-tint);
-  color: var(--c-action);
+  background: var(--c-action-weak-bg);
+  color: var(--c-action-weak-fg);
   font-weight: 600;
 }
 
@@ -459,34 +452,6 @@
   gap: 2px;
 }
 
-@supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
-  .grid-corner,
-  .grid-room-header {
-    background: var(--glass-bg);
-    border-bottom: 1px solid var(--glass-edge);
-    box-shadow: var(--glass-rim);
-  }
-
-  /*
-   * 회의실 헤더에도 blur 를 건다.
-   *
-   * 원래는 코너에만 걸었다 — 헤더가 방 수만큼 반복되는 셀이라 레이어가 방 수에
-   * 비례해 늘어난다는 이유였다(그때는 방이 3개). 방이 2개로 줄어 총 레이어가
-   * 코너 + 헤더 2 + 시간축 = 4개이므로 감당할 수 있고, **이 화면에서 유리가 실제로
-   * 보이는 자리는 여기뿐이다** — pane 모드라 페이지가 안 움직이니 앱바 뒤로는
-   * 아무것도 지나가지 않지만, 격자를 스크롤하면 이벤트 블록이 이 헤더 밑을 지난다.
-   * 방을 다시 늘리면 이 결정을 재검토할 것.
-   */
-  .grid-corner,
-  .grid-room-header {
-    backdrop-filter: var(--glass-blur);
-    -webkit-backdrop-filter: var(--glass-blur);
-  }
-
-  .grid-corner {
-    border-right: 1px solid var(--glass-edge);
-  }
-}
 
 .grid-room-header__name {
   font-weight: 600;
@@ -496,11 +461,12 @@
 /*
  * 유리 위 보조 텍스트 보정.
  * 회의실 정원/층 캡션과 시간축 라벨은 반투명 sticky 크롬 위에 놓인다.
- * --c-muted(4.54:1) 는 반투명 위에서 그 아래로 떨어지므로 --c-secondary(7.48:1) 로 올린다.
+ * --c-muted 는 캔버스 위에서 이미 4.54:1(AA 하한 4.5 바로 위)이라 반투명 위에서는
+ * 그 아래로 떨어진다. 유리 위 보조 텍스트는 --c-secondary(캔버스 위 7.09:1)로 올린다.
  */
 .grid-room-header .t-muted,
 .grid-axis .grid-axis__label {
-  color: var(--c-secondary);
+  color: var(--c-body);
 }
 
 .grid-axis {
@@ -512,15 +478,6 @@
   width: var(--grid-axis-w);
 }
 
-@supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
-  .grid-axis {
-    background: var(--glass-bg);
-    backdrop-filter: var(--glass-blur);
-    -webkit-backdrop-filter: var(--glass-blur);
-    border-right: 1px solid var(--glass-edge);
-    box-shadow: inset 1px 0 0 var(--glass-border);
-  }
-}
 
 /* ---------- 콘텐츠 레이어: 슬롯·이벤트·선택 영역은 불투명하게 둔다 ----------
  * 24슬롯 x N방의 조밀한 데이터 위에 blur 를 걸면 주최자 이름 가독성과
@@ -539,6 +496,42 @@
 
 .grid-slot--half {
   border-bottom: 1px solid var(--c-surface-muted);
+}
+
+/*
+ * 주간 뷰의 빈 칸은 버튼이다(눌러서 예약). <button> 기본 생김새를 지우고 격자 칸으로
+ * 되돌린다 — 배경·보더를 남기면 칸마다 버튼이 보여 격자보다 먼저 읽힌다(DESIGN.md §12-1).
+ * hover 에서만 조용한 보조면으로 "누를 수 있음" 을 알린다.
+ */
+.grid-slot--clickable {
+  display: block;
+  width: 100%;
+  padding: 0;
+  background: none;
+  border-left: none;
+  border-right: none;
+  border-top: none;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  transition: background-color 150ms cubic-bezier(0, 0, 0.2, 1);
+}
+
+@media (hover: hover) {
+  .grid-slot--clickable:hover {
+    background: var(--c-surface-muted);
+  }
+}
+
+.grid-slot--clickable:focus-visible {
+  outline: none;
+  box-shadow: var(--shadow-focus);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .grid-slot--clickable {
+    transition: none;
+  }
 }
 
 .grid-axis__cell {
@@ -591,17 +584,26 @@
   z-index: 1;
 }
 
+/*
+ * 이벤트 블록 — **꽉 찬 사각.**
+ *
+ * 예전엔 radius 12px + 좌우 2px 여백 + 3px 패딩이라 블록이 격자 위에 떠 있는
+ * 카드처럼 보였다. 그래서 좌측 색 막대가 구조가 아니라 장식으로 읽혔다
+ * ("좌측 보더 강조 안티패턴"). 캘린더 레퍼런스(Clockwise)의 이벤트는 셀을
+ * 가득 채운 사각이고, 색 막대는 그 사각의 왼쪽 변이다.
+ */
 .grid-event {
   position: absolute;
-  left: 2px;
-  right: 2px;
+  left: 0;
+  right: 1px;
   overflow: hidden;
   border-radius: var(--r-event);
   /* 왼쪽 3px 는 색 막대 자리 — 캘린더 이벤트의 표준 형태다 */
-  padding: 3px 6px 3px 9px;
+  padding: 1px 4px 1px 6px;
   border-left: 3px solid transparent;
   cursor: pointer;
-  transition: background-color var(--dur-cell) var(--ease-out), transform var(--dur-hover) var(--ease-out);
+  /* transform 은 넣지 않는다 — 24px 블록이 커지면 옆 블록과 겹쳐 보인다 */
+  transition: background-color var(--dur-cell) var(--ease-out);
 }
 /*
  * 내 예약은 격자에서 직접 옮길 수 있다 — 잡을 수 있다는 것이 커서로 보여야 한다.
@@ -613,37 +615,58 @@
 .grid-event--editable.is-editing {
   cursor: grabbing;
   /* 들려 있는 동안만 그림자를 준다. 격자 셀에 상시 그림자를 깔면 밀도가 무너진다(DESIGN.md §6). */
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.16);
+  outline: 2px solid var(--c-action);
+  outline-offset: -2px;
   z-index: 2;
 }
 
-/* 아래 끝 길이 조절 손잡이. 8px 는 마우스로 조준 가능한 최소치이고,
- * 블록이 28px 짜리 한 슬롯일 때도 본문(옮기기)을 다 덮지 않는다. */
+/*
+ * 아래 끝 길이 조절 손잡이.
+ *
+ * **상시 보인다.** 예전엔 hover 할 때만 그립이 나타났고 히트 영역이 8px 였다 —
+ * 기능은 정상 동작했는데 그 자리에 뭔가 잡을 것이 있다는 걸 알고 있어야만 쓸 수
+ * 있었다. 알아야만 쓸 수 있는 기능은 사실상 없는 기능이다(DESIGN.md §12-1).
+ *
+ * 히트 영역 12px: 44px 슬롯 하나짜리 블록에서도 본문(옮기기) 영역이 32px 남는다.
+ */
 .grid-event__resize {
   position: absolute;
   left: 0;
   right: 0;
   bottom: 0;
-  height: 8px;
+  /* 6px — 24px 슬롯의 1/4. 12px 이었을 때는 한 슬롯짜리 블록의 절반을 덮어
+   * 본문(옮기기)을 잡을 자리가 남지 않았다. */
+  height: 6px;
   cursor: ns-resize;
 }
-.grid-event--editable:hover .grid-event__resize::after {
+.grid-event--editable .grid-event__resize::after {
   content: "";
   position: absolute;
   left: 50%;
-  bottom: 3px;
+  bottom: 2px;
   width: 24px;
   height: 2px;
   margin-left: -12px;
   border-radius: 2px;
   background: var(--c-action);
-  opacity: 0.5;
+  /* 평소엔 조용히, 손을 올리면 또렷하게 — 있다는 것만 알리고 시선을 끌지 않는다 */
+  opacity: 0.4;
+  transition: opacity var(--dur-hover) var(--ease-out);
+}
+.grid-event--editable:hover .grid-event__resize::after,
+.grid-event--editable.is-editing .grid-event__resize::after {
+  opacity: 1;
 }
 
-/* 누를 때 반응 — 이 앱에서 가장 자주 눌리는 요소인데 지금까지 아무 반응이 없었다.
- * 블록이 이미 좁아 0.97 은 흔들려 보인다. transform 은 absolute 배치에 영향을 주지 않는다. */
+/*
+ * 누를 때 **스케일을 주지 않는다.**
+ *
+ * scale(0.98) 을 걸어 뒀었다. 24px 슬롯에서는 블록이 줄었다 커지면서 위아래
+ * 이웃과 어긋나 보인다 — 캘린더에서 이벤트는 시간을 나타내는 도형이므로
+ * 크기가 흔들리면 "시간이 흔들린다" 로 읽힌다. 색으로만 반응한다.
+ */
 .grid-event:active {
-  transform: scale(0.98);
+  background: var(--c-action-weak-bg-hover);
 }
 
 /* 내 예약 — 화면당 하나뿐인 유채색 액센트 */
@@ -662,6 +685,7 @@
 .grid-event__name {
   font-size: var(--t-grid-size);
   line-height: var(--t-grid-lh);
+  /* 24px 슬롯에는 이름+시각이 두 줄로 안 들어간다 — 한 줄로 붙인다 */
   font-weight: 600;
   color: var(--c-fg);
   overflow: hidden;
@@ -672,7 +696,7 @@
 .grid-event__time {
   font-size: var(--t-cap-size);
   line-height: var(--t-grid-lh);
-  color: var(--c-secondary);
+  color: var(--c-body);
   flex: none;
   white-space: nowrap;
 }
@@ -709,8 +733,24 @@
   min-width: 0;
 }
 
+/*
+ * 현재시각 오버레이.
+ *
+ * `.grid-table` 이 display:grid 라서, 이 요소를 그냥 자식으로 두면 **그리드
+ * 아이템**이 되어 다음 빈 칸(= 시간축 열의 새 행)에 배치된다. 실제로 그렇게
+ * 되어 있었다: 폭 52px(시간축 폭), 격자 맨 아래(y=895)에 그려져 화면에서
+ * 사실상 보이지 않았다.
+ *
+ * 슬롯 영역 전체(2행 x 전체 열)에 겹쳐 깔고, 높이 0 의 기준선으로 쓴다.
+ * 그러면 안쪽 선의 top 이 곧 "슬롯 영역 위에서부터의 거리" 가 된다.
+ */
 .grid-now {
+  grid-row: 2;
+  grid-column: 1 / -1;
   position: relative;
+  height: 0;
+  /* 이벤트 블록(드래그 중 z-index 3)보다 위 — 시각 표시가 가려지면 의미가 없다 */
+  z-index: 4;
   pointer-events: none;
 }
 
@@ -721,7 +761,8 @@
  */
 .grid-now__line {
   position: absolute;
-  left: 0;
+  /* 시간축 칸은 비우고 회의실 열 위에만 긋는다 — 축 위를 덮으면 눈금을 가린다 */
+  left: var(--grid-axis-w);
   right: 0;
   height: 1px;
   background: var(--c-now);
@@ -772,7 +813,7 @@
   white-space: nowrap;
 }
 .grid-selection__dur {
-  color: var(--c-secondary);
+  color: var(--c-body);
   white-space: nowrap;
 }
 
@@ -902,7 +943,7 @@
   background: var(--c-surface-muted);
   font-size: var(--t-cap-size);
   line-height: 16px;
-  color: var(--c-secondary);
+  color: var(--c-body);
   text-align: left;
 }
 .grid-month__chip--mine {
@@ -920,7 +961,7 @@
   text-align: center;
   border-radius: 3px;
   background: var(--c-surface);
-  color: var(--c-secondary);
+  color: var(--c-body);
   font-weight: 600;
 }
 .grid-month__chip--mine .grid-month__chip-room {
@@ -940,11 +981,9 @@
   font-weight: 500;
 }
 .grid-month__more {
-  color: var(--c-muted);
+  color: var(--c-body);
   padding-left: 5px;
 }
-
-
 
 
 /* ---------- 모바일 (<768px): 격자 대신 하루 단위 세로 리스트 ---------- */
@@ -999,39 +1038,6 @@
   }
 }
 
-/* ---------- 유리 접근성 폴백 ----------
- * 투명도를 낮추라는 시스템 설정이거나 고대비 모드에서는 sticky 크롬 3종의
- * 유리 효과를 끄고 불투명 배경으로 되돌린다. .grid-scroll 의 앰비언트 톤도 동일. */
-@media (prefers-reduced-transparency: reduce), (prefers-contrast: more) {
-  .grid-scroll {
-    background: var(--c-canvas);
-  }
-
-  .grid-corner,
-  .grid-room-header {
-    background: var(--c-surface);
-    backdrop-filter: none;
-    -webkit-backdrop-filter: none;
-    border-bottom: 1px solid var(--c-border);
-    box-shadow: none;
-  }
-
-  .grid-corner {
-    border-right: 1px solid var(--c-border);
-  }
-
-  .grid-axis {
-    background: var(--c-canvas);
-    backdrop-filter: none;
-    -webkit-backdrop-filter: none;
-    border-right: 1px solid var(--c-border);
-    box-shadow: none;
-  }
-
-  .grid-axis__label {
-    background: var(--c-canvas);
-  }
-}
 
 /* omd:feel MOTION 🟢 — 모션을 줄여달라고 한 사용자에게는 누를 때의 이동을 없앤다.
  * 색 전환(.grid-month__cell:active 의 배경 단차)은 이동이 아니므로 그대로 둔다. */
@@ -1042,4 +1048,356 @@
   .grid-viewswitch__btn:active {
     transform: none;
   }
+}
+
+/* ==================== 일정 뷰 (목록) ====================
+ * 격자가 답하지 못하는 질문을 담당하는 화면. 격자와 달리 시간을 픽셀로 그리지
+ * 않으므로 슬롯·좌표 규칙이 적용되지 않는다 — 평범한 목록이다.
+ *
+ * 유리·그림자 없음(DESIGN.md §6). 깊이는 흰 면 + #E5E8EB 헤어라인으로만 낸다. */
+.agenda {
+  margin-top: 16px;
+  /* 격자 화면은 pane 모드라 셸이 스크롤을 잠근다. 목록은 이 판이 스크롤러가 된다 —
+   * 화면당 스크롤러 하나 규칙(§5)을 그대로 지킨다. */
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+  flex: 1;
+}
+
+.agenda__toolbar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  margin-bottom: 16px;
+}
+
+.agenda__hint {
+  margin: 0;
+  font-size: var(--t-small-size);
+  line-height: var(--t-small-lh);
+  color: var(--c-body);
+}
+
+/* 묶는 기준 토글 — 뷰 전환과 같은 세그먼티드지만 위계가 한 단 아래다 */
+.grid-viewswitch--sm .grid-viewswitch__btn {
+  height: var(--h-action-compact);
+  padding: 0 16px;
+}
+
+/* 읽기 영역 제한(§5) — 1440px 에서 한 줄이 통째로 늘어나면 시간과 인원이 멀어진다 */
+.agenda__list {
+  max-width: 720px;
+  background: var(--c-surface);
+  border: 1px solid var(--c-border);
+  border-radius: var(--r-lg);
+  overflow: hidden;
+}
+
+.agenda-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  width: 100%;
+  padding: 16px;
+  border: none;
+  background: var(--c-surface);
+  text-align: left;
+  cursor: pointer;
+  font-family: var(--font-sans);
+  transition: background-color var(--dur-hover) var(--ease-out);
+}
+.agenda-row + .agenda-row {
+  border-top: 1px solid var(--c-border);
+}
+.agenda-row:hover {
+  background: var(--c-surface-muted);
+}
+.agenda-row:active {
+  /* 누를 때 반응. 행이 넓어 0.97 은 크게 흔들려 보인다 */
+  transform: scale(0.995);
+}
+.agenda-row:focus-visible {
+  outline: none;
+  box-shadow: var(--shadow-focus);
+}
+/* 내 예약 — 화면당 하나의 유채색 액센트를 "내 것" 에 배정(§12-3).
+ * 격자 이벤트 블록과 같은 언어: Weak 채움 + 좌측 막대. */
+.agenda-row--mine {
+  background: var(--c-mine-bg);
+  box-shadow: inset 4px 0 0 var(--c-mine-border);
+}
+.agenda-row--mine:hover {
+  background: var(--c-action-weak-bg-hover);
+}
+
+.agenda-row__time {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  width: 56px;
+}
+.agenda-row__start {
+  font-size: var(--t-body-size);
+  line-height: var(--t-body-lh);
+  font-weight: 600;
+  color: var(--c-fg);
+}
+.agenda-row__end {
+  font-size: var(--t-small-size);
+  line-height: var(--t-small-lh);
+  color: var(--c-body);
+}
+
+.agenda-row__body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.agenda-row__head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.agenda-row__who {
+  font-size: var(--t-body-size);
+  line-height: var(--t-body-lh);
+  font-weight: 600;
+  color: var(--c-fg);
+}
+.agenda-row__meta {
+  font-size: var(--t-small-size);
+  line-height: var(--t-small-lh);
+  color: var(--c-body);
+}
+
+/* 누를 수 있다는 표시. 행 전체가 버튼인데 아무 표시가 없으면 읽기 전용 표로 보인다. */
+.agenda-row__go {
+  flex: none;
+  font-size: 20px;
+  line-height: 1;
+  color: var(--c-muted);
+}
+
+.agenda__rooms {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+.agenda__room-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin: 0 0 8px;
+  font-size: var(--t-section-size);
+  line-height: var(--t-section-lh);
+  font-weight: var(--t-section-w);
+}
+.agenda__room-name {
+  color: var(--c-fg);
+}
+.agenda__room-meta {
+  font-size: var(--t-small-size);
+  line-height: var(--t-small-lh);
+  font-weight: 400;
+  color: var(--c-body);
+}
+
+.agenda__empty {
+  margin: 0;
+  max-width: 720px;
+  padding: 24px 16px;
+  border: 1px solid var(--c-border);
+  border-radius: var(--r-lg);
+  font-size: var(--t-small-size);
+  line-height: var(--t-small-lh);
+  color: var(--c-body);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .agenda-row:active {
+    transform: none;
+  }
+}
+
+/* 모바일 목록의 예약 시각 — Muted(3.04:1)에서 Body(7.11:1)로 올렸다.
+ * 시각은 "이 방이 지금 되나" 를 판단하는 근거 정보라 §12-5 가 말하는
+ * "사용자가 읽어야 하는 보조 텍스트" 에 정확히 해당한다. */
+.grid-mobile__time {
+  color: var(--c-body);
+  font-variant-numeric: tabular-nums;
+}
+.grid-mobile__hint {
+  color: var(--c-body);
+}
+
+/* 좌측 색 막대 4px — DESIGN.md §4 Booking Grid. 3px 이었다. */
+.grid-event {
+  border-left-width: 4px;
+}
+
+/* ==================== 드래그 피드백 ====================
+ * "드래그가 되는 것처럼 느껴지지 않는다" 는 지적의 실체: 블록을 잡아도 화면이
+ * 거의 변하지 않았다. 잡았다는 것 · 어디로 가는지 · 지금 몇 시인지 셋을 보여준다. */
+
+/* 잡고 있는 동안 격자 전체의 커서를 바꾼다 — 손이 격자 밖으로 나가도 유지된다 */
+.grid-table.is-editing {
+  cursor: grabbing;
+  user-select: none;
+}
+
+/* 들려 있는 블록 — 크기는 그대로 두고 테두리로만 알린다(위 이유와 동일) */
+.grid-event--editable.is-editing {
+  z-index: 3;
+}
+
+/* 목적지 열을 옅게 칠한다. 회의실을 넘어가는 중이라는 걸 이것 말고는 알 방법이 없다. */
+.grid-col.is-drop-target {
+  background: var(--c-action-weak-bg);
+}
+
+
+
+/* ==================== 부서 필터 ====================
+ * 좁은 폭에서 칩이 줄바꿈되며 툴바가 세 줄로 터졌다(실측 ~440px 에서 세로 450px).
+ * 줄바꿈 대신 **가로 스크롤** 한 줄로 고정한다 — Toss 가 칩 목록에 쓰는 방식이고,
+ * 세로 예산을 먹지 않는다. */
+.grid-deptfilter {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.grid-deptfilter__label {
+  flex: none;
+  font-size: var(--t-small-size);
+  line-height: var(--t-small-lh);
+  color: var(--c-body);
+}
+.grid-deptchips {
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  scrollbar-width: none;
+  /* 스크롤 중 칩이 반쯤 잘려 멈추지 않게 */
+  scroll-snap-type: x proximity;
+  min-width: 0;
+}
+.grid-deptchips::-webkit-scrollbar {
+  display: none;
+}
+.grid-deptchip {
+  scroll-snap-align: start;
+  flex: none;
+}
+
+/* 좁은 폭에서는 툴바를 위계 순으로 쌓는다: 날짜 → 뷰 전환 → 필터.
+ * 지금 어느 날짜를 보고 있는지가 먼저고, 필터는 마지막이다. */
+@media (max-width: 1023px) {
+  .grid-controlbar__right {
+    flex-direction: column-reverse;
+    align-items: stretch;
+    gap: 8px;
+  }
+}
+
+/* ==================== 툴바 재구성 (Clockwise 형) ====================
+ * 레퍼런스 실측: 한 줄 · 컨트롤 ~28px · `‹ Today ›` 한 덩어리 · 날짜는 평문 라벨
+ * · 뷰 전환은 작은 세그먼티드 2~3개 · 필터는 드롭다운.
+ *
+ * 우리 툴바는 컨트롤 48px + 칩 4개 + 탭 4개 + 토글 2개였다. 격자 화면에서
+ * 세로 예산은 곧 "하루가 한 화면에 들어가는가" 이므로, 여기서만 크롬 높이를
+ * --h-toolbar(36px)로 낮춘다. 액션 버튼(48px)은 그대로다 — 툴바는 액션이 아니다. */
+.grid-controlbar .mr-btn,
+.grid-controlbar .grid-viewswitch__btn,
+.grid-controlbar .grid-datestepper,
+.grid-controlbar .grid-datepick,
+.grid-deptselect__input {
+  height: var(--h-toolbar);
+}
+.grid-controlbar .grid-datestepper__btn {
+  width: var(--h-toolbar);
+}
+.grid-controlbar .mr-btn {
+  padding: 0 14px;
+  font-size: var(--t-small-size);
+}
+.grid-controlbar .grid-viewswitch__btn {
+  padding: 0 14px;
+}
+.grid-viewswitch--sm .grid-viewswitch__btn {
+  height: calc(var(--h-toolbar) - 8px);
+  padding: 0 12px;
+}
+
+/* 날짜 라벨은 **평문**이다. 22px 굵은 제목이면 컨트롤보다 먼저 읽히는데,
+ * 이 화면에서 먼저 읽혀야 하는 것은 격자다(§12-1). */
+.grid-topbar__title {
+  font-size: var(--t-body-size);
+  line-height: var(--t-body-lh);
+  font-weight: 600;
+}
+
+/* 부서 드롭다운 — 네이티브 select 에 우리 지오메트리만 씌운다 */
+.grid-deptselect {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.grid-deptselect__label {
+  font-size: var(--t-small-size);
+  color: var(--c-body);
+}
+.grid-deptselect__input {
+  appearance: none;
+  border: 1px solid var(--c-border);
+  border-radius: var(--r-md);
+  background: var(--c-surface);
+  color: var(--c-fg);
+  font-family: var(--font-sans);
+  font-size: var(--t-small-size);
+  /* 오른쪽은 화살표 자리 */
+  padding: 0 28px 0 12px;
+  cursor: pointer;
+  background-image: linear-gradient(45deg, transparent 50%, var(--c-body) 50%),
+    linear-gradient(135deg, var(--c-body) 50%, transparent 50%);
+  background-position: calc(100% - 15px) center, calc(100% - 10px) center;
+  background-size: 5px 5px, 5px 5px;
+  background-repeat: no-repeat;
+}
+.grid-deptselect__input:focus-visible {
+  outline: none;
+  border-color: var(--c-action);
+  box-shadow: var(--shadow-focus);
+}
+
+/* 시간축 눈금 — 11px. 24px 슬롯에 13px 라벨은 정시선을 넘는다. */
+.grid-axis__label {
+  font-size: var(--t-axis-size);
+  line-height: var(--t-axis-lh);
+}
+
+/* 회의실 헤더를 한 줄로 — 이름과 층을 세로로 쌓으면 60px 을 먹고, 그 60px 이
+ * 그대로 "하루가 한 화면에 들어가는가" 를 좌우한다. Clockwise 의 날짜 헤더도
+ * 한 줄이다. 층 표시는 이름 옆에 보조색으로 붙인다. */
+.grid-room-header {
+  flex-direction: row;
+  align-items: baseline;
+  gap: 6px;
+  padding: 8px 12px;
+}
+.grid-room-header__name {
+  font-size: var(--t-small-size);
+  line-height: var(--t-small-lh);
+  font-weight: 600;
+}
+
+/* 툴바 우측 클러스터의 세로 정렬 — 세그먼티드 두 개가 높이가 달라
+ * (기간 36px / 표시 28px) 위아래로 어긋나 보였다. */
+.grid-controlbar__right {
+  align-items: center;
 }

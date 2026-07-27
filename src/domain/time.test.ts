@@ -46,6 +46,7 @@ function booking(startH: number, startM: number, endH: number, endM: number, ove
     attendeeCount: 2,
     conference: null,
     checkedInAt: null,
+    summary: null,
     isMine: false,
     ...over,
   };

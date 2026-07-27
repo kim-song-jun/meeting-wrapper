@@ -1,6 +1,16 @@
 import { useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
-import { Alert, Badge, Button, Card, Dialog, Field, Tabs } from "../components/ui";
+import {
+  Alert,
+  Badge,
+  Button,
+  ButtonWithReason,
+  Card,
+  Dialog,
+  Field,
+  Tabs,
+  TextAreaField,
+} from "../components/ui";
 import type { TabItem } from "../components/ui";
 import { roomById } from "../app/config";
 import { repo } from "../data";
@@ -11,9 +21,17 @@ import "../styles/mine.css";
 
 const MINE_TABS: TabItem[] = [
   { id: "mine", label: "내 예약" },
+  { id: "past", label: "지난 예약" },
   { id: "all", label: "전체 예약" },
   { id: "settings", label: "설정" },
 ];
+
+/**
+ * 지난 예약을 한 번에 몇 건까지 가져올지. 지난 것은 끝없이 쌓이므로 화면이 감당할
+ * 만큼만 읽는다. "더 보기" 는 두지 않았다 — 회의 기록을 뒤로 넘겨가며 찾는 화면이
+ * 아니라 방금 끝난 회의에 한 줄 남기는 화면이다.
+ */
+const PAST_LIMIT = 30;
 
 function startOfDay(d: Date): Date {
   return new Date(d.getFullYear(), d.getMonth(), d.getDate());
@@ -90,6 +108,7 @@ export function MyBookingsScreen() {
       <Tabs items={tabs} active={effectiveTab} onChange={setActive} />
       <div className="mine-section">
         {effectiveTab === "mine" ? <MineTab /> : null}
+        {effectiveTab === "past" ? <PastTab /> : null}
         {effectiveTab === "all" && user.isAdmin ? <AllTab /> : null}
         {effectiveTab === "settings" ? <SettingsTab /> : null}
       </div>
@@ -141,6 +160,8 @@ function MineTab() {
               <BookingItem
                 key={b.id}
                 booking={b}
+                now={now}
+                onChanged={state.reload}
                 onCancel={() => setCancelTarget({ booking: b, isAdminAction: false })}
               />
             ))}
@@ -162,10 +183,45 @@ function MineTab() {
   );
 }
 
-function BookingItem({ booking, onCancel }: { booking: Booking; onCancel: () => void }) {
+function BookingItem({
+  booking,
+  now,
+  onChanged,
+  onCancel,
+}: {
+  booking: Booking;
+  now: Date;
+  onChanged: () => void;
+  onCancel: () => void;
+}) {
   const room = roomById(booking.roomId);
   const durationMin = (booking.end.getTime() - booking.start.getTime()) / MINUTE;
   const link = conferenceUrl(booking);
+
+  const [checkedInAt, setCheckedInAt] = useState<Date | null>(booking.checkedInAt);
+  const [checkingIn, setCheckingIn] = useState(false);
+  const [checkInError, setCheckInError] = useState<string | null>(null);
+  const started = now.getTime() >= booking.start.getTime();
+
+  /*
+   * 체크인은 QR 랜딩과 격자 상세에만 있었다. 이 화면은 "내 오늘 일정" 을 보는 곳이라
+   * 회의 직전에 여는 경우가 많은데, 여기서만 체크인이 안 되면 QR 을 찾으러 가야 했다.
+   */
+  async function checkIn() {
+    setCheckingIn(true);
+    setCheckInError(null);
+    try {
+      await repo.checkIn(booking.id);
+      setCheckedInAt(new Date());
+      onChanged();
+    } catch (e: unknown) {
+      setCheckInError(
+        e instanceof Error ? e.message : "체크인 중 문제가 생겼어요. 잠시 후 다시 시도해 주세요.",
+      );
+    } finally {
+      setCheckingIn(false);
+    }
+  }
 
   return (
     <div className="mine-item">
@@ -181,13 +237,160 @@ function BookingItem({ booking, onCancel }: { booking: Booking; onCancel: () => 
             {link}
           </a>
         ) : null}
+        {checkedInAt ? (
+          <span className="mine-item__checkedin t-small">체크인 완료 · {hhmm(checkedInAt)}</span>
+        ) : null}
+        {checkInError ? (
+          <div style={{ marginTop: 8 }}>
+            <Alert>{checkInError}</Alert>
+          </div>
+        ) : null}
       </div>
       <div className="mine-item__actions">
+        {checkedInAt ? null : (
+          /* 시작 전에는 누를 수 없다. 숨기지 않고 언제부터 되는지 적는다 (DESIGN.md §4·§10). */
+          <ButtonWithReason
+            variant="secondary"
+            onClick={checkIn}
+            disabled={!started || checkingIn}
+            reason={!started ? hhmm(booking.start) + " 부터 체크인할 수 있어요" : null}
+          >
+            {checkingIn ? "체크인하는 중…" : "체크인하기"}
+          </ButtonWithReason>
+        )}
         {/* "취소" 단독은 예약 모달의 "닫기" 뜻과 혼동된다. 무엇을 지우는지 밝힌다. */}
-        <Button variant="secondary" onClick={onCancel}>
+        <Button variant="danger" onClick={onCancel}>
           예약 취소
         </Button>
       </div>
+    </div>
+  );
+}
+
+/* ---------------- 지난 예약 ---------------- */
+
+/**
+ * 이미 끝난 내 회의. 여기서 하는 일은 하나다 — **무엇을 정했는지 한 줄 남기기.**
+ *
+ * 취소·체크인 버튼을 함께 두지 않는다. 끝난 회의에는 할 수 없는 동작이고,
+ * 회색으로 비활성만 걸어두면 화면 절반이 못 누르는 버튼이 된다.
+ */
+function PastTab() {
+  const state = useAsync(() => repo.listMinePast(PAST_LIMIT), []);
+
+  if (state.loading) return <p className="mr-state">불러오는 중…</p>;
+  if (state.error) {
+    return <LoadError what="지난 예약" error={state.error} onRetry={state.reload} />;
+  }
+  const bookings = state.data ?? [];
+
+  if (bookings.length === 0) {
+    return <p className="mine-empty">아직 끝난 회의가 없어요.</p>;
+  }
+
+  return (
+    <>
+      <p className="mine-admin-note">
+        회의에서 정한 것을 남겨두면 초대받은 분들의 캘린더에서도 그대로 보여요. 최근 {PAST_LIMIT}건까지
+        보여드려요.
+      </p>
+      <div className="mine-list">
+        {bookings.map((b) => (
+          <PastBookingItem key={b.id} booking={b} />
+        ))}
+      </div>
+    </>
+  );
+}
+
+function PastBookingItem({ booking }: { booking: Booking }) {
+  const room = roomById(booking.roomId);
+  const durationMin = (booking.end.getTime() - booking.start.getTime()) / MINUTE;
+
+  const [summary, setSummary] = useState<string | null>(booking.summary);
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(booking.summary ?? "");
+  const [saving, setSaving] = useState(false);
+  const [failure, setFailure] = useState<string | null>(null);
+
+  const dirty = draft.trim() !== (summary ?? "");
+
+  async function save() {
+    setSaving(true);
+    setFailure(null);
+    try {
+      await repo.saveSummary(booking.id, draft);
+      const trimmed = draft.trim();
+      setSummary(trimmed.length > 0 ? trimmed : null);
+      setEditing(false);
+    } catch (e: unknown) {
+      setFailure(e instanceof Error ? e.message : "저장 중 문제가 생겼어요. 잠시 후 다시 시도해 주세요.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const dateLabel =
+    String(booking.start.getMonth() + 1) + "월 " + String(booking.start.getDate()) + "일";
+
+  return (
+    <div className="mine-item mine-item--past">
+      <div className="mine-item__main">
+        <span className="mine-item__room">{room?.name ?? booking.roomId}</span>
+        <span className="mine-item__meta t-num">
+          {dateLabel} {hhmm(booking.start)}–{hhmm(booking.end)} ({humanDuration(durationMin)})
+          {booking.attendeeCount > 0 ? " · 초대 " + String(booking.attendeeCount) + "명" : null}
+        </span>
+        {booking.checkedInAt === null ? (
+          <span className="mine-item__meta">체크인하지 않은 회의예요</span>
+        ) : null}
+
+        {editing ? (
+          <div className="mine-summary-edit">
+            <TextAreaField
+              label="회의 요약"
+              placeholder="무엇을 정했는지 한두 줄로 남겨주세요"
+              value={draft}
+              rows={3}
+              maxLength={500}
+              onChange={(e) => setDraft(e.target.value)}
+              hint={"초대받은 " + String(booking.attendeeCount) + "명의 캘린더에도 함께 보여요"}
+            />
+            {failure ? (
+              <div style={{ marginTop: 12 }}>
+                <Alert>{failure}</Alert>
+              </div>
+            ) : null}
+            <div className="mine-summary-actions">
+              <Button onClick={save} disabled={saving || !dirty}>
+                {saving ? "저장하는 중…" : "요약 저장하기"}
+              </Button>
+              <Button
+                variant="secondary"
+                disabled={saving}
+                onClick={() => {
+                  setDraft(summary ?? "");
+                  setFailure(null);
+                  setEditing(false);
+                }}
+              >
+                그만두기
+              </Button>
+              {!saving && !dirty ? <span className="mr-reason">바뀐 내용이 없어요</span> : null}
+            </div>
+          </div>
+        ) : summary ? (
+          <p className="mine-summary t-body">{summary}</p>
+        ) : null}
+      </div>
+
+      {editing ? null : (
+        <div className="mine-item__actions">
+          <Button variant="secondary" onClick={() => setEditing(true)}>
+            {summary ? "요약 고치기" : "회의 요약 남기기"}
+          </Button>
+        </div>
+      )}
     </div>
   );
 }
@@ -239,14 +442,17 @@ function CancelDialog({
     <Dialog
       title="예약 취소"
       onClose={onClose}
+      /* 파괴적 확정 버튼을 안전한 기본 동작에서 떨어뜨린다 (DESIGN.md §4) */
+      actionsLayout="split"
       actions={
         <>
           {/* "닫기" 가 아니라 "유지" — 무엇이 남는지를 말한다. GridScreen 과 같은 라벨 */}
-          <Button variant="secondary" onClick={onClose} disabled={busy}>
+          {/* 안전한 쪽(유지)이 주 액션이다. 파괴적인 쪽은 빨간 글자로만 둔다. */}
+          <Button onClick={onClose} disabled={busy}>
             유지
           </Button>
-          <Button onClick={confirmCancel} disabled={busy}>
-            {busy ? "취소하는 중…" : "취소 확정"}
+          <Button variant="danger" onClick={confirmCancel} disabled={busy}>
+            {busy ? "취소하는 중…" : "예약 취소하기"}
           </Button>
         </>
       }
@@ -340,7 +546,7 @@ function AdminBookingItem({ booking, onCancel }: { booking: Booking; onCancel: (
       </div>
       <div className="mine-item__actions">
         {/* "취소" 단독은 예약 모달의 "닫기" 뜻과 혼동된다. 무엇을 지우는지 밝힌다. */}
-        <Button variant="secondary" onClick={onCancel}>
+        <Button variant="danger" onClick={onCancel}>
           예약 취소
         </Button>
       </div>
@@ -425,8 +631,16 @@ function SettingsForm({ initial }: { initial: UserPrefs }) {
 
       <div className="mine-settings-actions">
         <Button onClick={save} disabled={!valid || !dirty || saving}>
-          {saving ? "저장하는 중…" : "저장"}
+          {saving ? "저장하는 중…" : "이 링크로 저장하기"}
         </Button>
+        {/*
+         * 비활성 사유는 항상 눈에 보여야 한다 (DESIGN.md §4·§10 — 툴팁 금지).
+         * 저장 중일 때는 버튼 레이블이 이미 사유를 말하므로 겹쳐 적지 않는다.
+         */}
+        {!saving && !valid ? <span className="mr-reason">위 링크를 확인해 주세요</span> : null}
+        {!saving && valid && !dirty ? (
+          <span className="mr-reason">바뀐 내용이 없어요</span>
+        ) : null}
         {saved ? <span className="mine-settings-success">저장했어요</span> : null}
       </div>
     </Card>

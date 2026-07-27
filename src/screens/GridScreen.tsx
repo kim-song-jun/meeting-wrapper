@@ -144,41 +144,212 @@ function useIsNarrow(): boolean {
 
 /* ---------------- 뷰 전환 ---------------- */
 
-type ViewMode = "day" | "week" | "month";
+type ViewMode = "day" | "agenda" | "week" | "month";
 
-const VIEW_TABS: readonly { id: ViewMode; label: string }[] = [
-  { id: "day", label: "일간" },
-  { id: "week", label: "주간" },
-  { id: "month", label: "월간" },
+/*
+ * 기간 전환은 **일 · 주 · 월 세 개**다.
+ *
+ * 예전엔 "일간 / 일정 / 주간 / 월간" 네 개였는데, 그중 "일정" 만 기간이 아니라
+ * *표시 방식*이라 축이 섞였다 — 거기에 시간순/회의실별 토글이 하나 더 붙어
+ * 계층이 2단이 됐다("탭들이 이상한 계층을 표현한다").
+ * 캘린더 레퍼런스(Clockwise)는 Day|Week 둘, Jobber 는 드롭다운 하나다.
+ *
+ * 그래서 축을 분리한다: **기간**(일/주/월)과, 일 기간 안에서의 **표시**(격자/목록).
+ */
+const RANGE_TABS: readonly { id: "day" | "week" | "month"; label: string }[] = [
+  { id: "day", label: "일" },
+  { id: "week", label: "주" },
+  { id: "month", label: "월" },
+];
+
+/** 일 기간의 표시 방식. 격자 = 장소별 비교, 목록 = 일정별 훑기. */
+const DAY_MODES: readonly { id: "day" | "agenda"; label: string }[] = [
+  { id: "day", label: "격자" },
+  { id: "agenda", label: "목록" },
 ];
 
 /**
- * 일간·주간·월간은 상호 배타적인 3개 뷰다 — 언더라인 탭(공용 Tabs 컴포넌트,
+ * 일정 뷰의 묶는 기준.
+ *
+ * 격자(일간)는 "언제가 비었나" 를 보는 화면이라 회의실이 열이고 시간이 축이다.
+ * 그런데 "오늘 무슨 회의가 있나" 를 알고 싶을 때 격자는 답을 주지 못한다 —
+ * 눈으로 두 열을 번갈아 훑으며 시간순으로 재조립해야 한다. 그래서 목록을 따로 둔다.
+ *
+ * 그 목록을 무엇으로 묶느냐가 이 토글이다:
+ *   time — 시간순. 방을 섞어서 "다음에 무슨 일이 있나" 를 본다
+ *   room — 회의실별. "이 방은 오늘 어떻게 쓰이나" 를 본다
+ */
+type AgendaGroup = "time" | "room";
+
+const AGENDA_GROUPS: readonly { id: AgendaGroup; label: string }[] = [
+  { id: "time", label: "시간순" },
+  { id: "room", label: "회의실별" },
+];
+
+/**
+ * 일간·일정·주간·월간은 상호 배타적인 4개 뷰다 — 언더라인 탭(공용 Tabs 컴포넌트,
  * MyBookingsScreen 과 공유)보다 하나의 폐곡선 안에 묶인 segmented control 이
  * "지금 무엇을 보고 있나"를 더 즉시 읽히게 한다. components.css 의 공유 Tabs
  * 를 건드리지 않기 위해 이 화면 전용 마크업/스타일을 grid.css 안에서 새로 정의한다.
  */
-function GridViewSwitch({
+function Segmented<T extends string>({
+  items,
   active,
   onChange,
+  label,
+  small,
 }: {
-  active: ViewMode;
-  onChange: (id: ViewMode) => void;
+  items: readonly { id: T; label: string }[];
+  active: T;
+  onChange: (id: T) => void;
+  label: string;
+  small?: boolean;
 }) {
   return (
-    <div className="grid-viewswitch" role="tablist" aria-label="보기 전환">
-      {VIEW_TABS.map((t) => (
+    <div
+      className={cx("grid-viewswitch", small && "grid-viewswitch--sm")}
+      role="tablist"
+      aria-label={label}
+    >
+      {items.map((it) => (
         <button
-          key={t.id}
+          key={it.id}
           type="button"
           role="tab"
-          className={cx("grid-viewswitch__btn", t.id === active && "is-active")}
-          aria-selected={t.id === active}
-          onClick={() => onChange(t.id)}
+          className={cx("grid-viewswitch__btn", it.id === active && "is-active")}
+          aria-selected={it.id === active}
+          onClick={() => onChange(it.id)}
         >
-          {t.label}
+          {it.label}
         </button>
       ))}
+    </div>
+  );
+}
+
+
+/* ---------------- 일정 뷰 (목록) ---------------- */
+
+/**
+ * 하루의 예약을 목록으로 본다. 격자가 답하지 못하는 질문("오늘 무슨 회의가
+ * 있나", "이 방은 오늘 어떻게 쓰이나")을 담당한다.
+ *
+ * 격자와 같은 데이터·같은 필터를 쓴다 — 별도 조회를 만들지 않는다. 두 화면이
+ * 다른 결과를 보이면 어느 쪽이 맞는지 사용자가 판단해야 한다.
+ *
+ * 행은 전부 버튼이다. 눌러서 상세를 열고, 거기서 시간 변경·취소를 한다 —
+ * 격자에서 블록을 누르는 것과 같은 동작이라 배울 것이 하나도 늘지 않는다.
+ */
+function AgendaView({
+  bookings,
+  group,
+  onGroupChange,
+  visibleRooms,
+  loading,
+  now,
+  onSelectBooking,
+}: {
+  bookings: readonly Booking[];
+  group: AgendaGroup;
+  onGroupChange: (g: AgendaGroup) => void;
+  visibleRooms: readonly Room[];
+  loading: boolean;
+  now: Date;
+  onSelectBooking: (b: Booking) => void;
+}) {
+  const sorted = useMemo(
+    () => [...bookings].sort((a, b) => a.start.getTime() - b.start.getTime()),
+    [bookings],
+  );
+
+  const byRoom = useMemo(() => {
+    const map = new Map<string, Booking[]>();
+    for (const room of visibleRooms) map.set(room.id, []);
+    for (const b of sorted) map.get(b.roomId)?.push(b);
+    return map;
+  }, [sorted, visibleRooms]);
+
+  const row = (b: Booking, showRoom: boolean) => {
+    const room = roomById(b.roomId);
+    const minutes = (b.end.getTime() - b.start.getTime()) / MINUTE;
+    return (
+      <button
+        key={b.id}
+        type="button"
+        className={cx("agenda-row", b.isMine && "agenda-row--mine")}
+        onClick={() => onSelectBooking(b)}
+      >
+        <span className="agenda-row__time t-num">
+          <span className="agenda-row__start">{hhmm(b.start)}</span>
+          <span className="agenda-row__end">{hhmm(b.end)}</span>
+        </span>
+        <span className="agenda-row__body">
+          <span className="agenda-row__head">
+            <span className="agenda-row__who">{b.organizerName}</span>
+            {b.isMine ? <Badge tone="mine">내 예약</Badge> : null}
+            {isNoShow(b, now, POLICY.checkInGraceMinutes) ? <Badge tone="attn">미체크인</Badge> : null}
+          </span>
+          <span className="agenda-row__meta">
+            {showRoom ? (room?.name ?? b.roomId) + " · " : ""}
+            {humanDuration(minutes)} · 인원 {b.headcount}명
+            {b.organizerDepartment ? " · " + b.organizerDepartment : ""}
+          </span>
+        </span>
+        {/* 누를 수 있다는 것을 남겨 둔다 — 행 전체가 버튼인데 아무 표시가 없으면
+            읽기 전용 표처럼 보인다. */}
+        <span className="agenda-row__go" aria-hidden="true">
+          ›
+        </span>
+      </button>
+    );
+  };
+
+  return (
+    <div className="agenda">
+      <div className="agenda__toolbar">
+        <Segmented items={AGENDA_GROUPS} active={group} onChange={onGroupChange} label="묶는 기준" small />
+        {/*
+          목록 보기에는 **새 예약을 만드는 길이 없다** — 이 화면은 있는 일정을 시간순으로
+          읽는 곳이고, 없는 시간을 가리킬 좌표가 없다(격자에는 빈 슬롯이 있지만 목록에는
+          빈 줄이 없다). 그 사실을 적어두지 않으면 "여기선 예약이 안 되나?" 로 남는다 —
+          되는 경로를 함께 알려준다(DESIGN.md §10).
+        */}
+        <p className="agenda__hint">
+          일정을 누르면 시간을 바꾸거나 취소할 수 있어요. 새로 예약하려면 <b>격자</b> 보기에서 빈 시간을
+          끌어주세요.
+        </p>
+      </div>
+
+      {loading ? (
+        <p className="mr-state">불러오는 중…</p>
+      ) : group === "time" ? (
+        sorted.length === 0 ? (
+          <p className="agenda__empty">이 날에는 예약이 없어요. 일간 보기에서 빈 시간을 끌어 예약할 수 있어요.</p>
+        ) : (
+          <div className="agenda__list">{sorted.map((b) => row(b, true))}</div>
+        )
+      ) : (
+        <div className="agenda__rooms">
+          {visibleRooms.map((room) => {
+            const items = byRoom.get(room.id) ?? [];
+            return (
+              <section key={room.id} className="agenda__room">
+                <h2 className="agenda__room-head">
+                  <span className="agenda__room-name">{room.name}</span>
+                  <span className="agenda__room-meta">
+                    {room.floor} · 예약 {items.length}건
+                  </span>
+                </h2>
+                {items.length === 0 ? (
+                  <p className="agenda__empty">이 방은 이 날 비어있어요.</p>
+                ) : (
+                  <div className="agenda__list">{items.map((b) => row(b, false))}</div>
+                )}
+              </section>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
@@ -234,10 +405,28 @@ function DateStepper({
 
 /* ---------------- drag selection ---------------- */
 
+/**
+ * 빈 구간을 끌어 새 예약을 만드는 중의 상태.
+ *
+ * 커서 y 를 슬롯으로 바꾸는 방식은 EditDragState 와 **같다**(window mousemove + colTop).
+ * 예전엔 슬롯의 mouseenter 에 기댔는데, 남의 예약 블록이 슬롯을 덮고 있어서 블록 위를
+ * 지나는 동안 mouseenter 가 아예 안 떴다 — 선택이 멈췄다가 블록을 지나면 다시 늘어났고,
+ * 그게 "드래그가 걸린다" 로 읽혔다.
+ */
 interface DragState {
   roomId: string;
   anchor: number;
   current: number;
+  /** 이 열(.grid-col)의 화면상 top. 커서 y → 슬롯 변환에 쓴다 */
+  colTop: number;
+  /**
+   * 지금 잡을 수 있는 **빈 구간**의 양끝(둘 다 포함). 이웃 예약이 벽이다.
+   *
+   * 겹치는 구간을 애초에 만들 수 없게 하려고 둔다. 겹침을 허용하고 나중에 막으면
+   * 사용자는 제목·참석자까지 다 채운 뒤 저장 버튼에서 거절당한다.
+   */
+  minSlot: number;
+  maxSlot: number;
 }
 
 /**
@@ -252,8 +441,11 @@ interface EditDragState {
   mode: "move" | "resize";
   startSlot: number;
   endSlot: number;
-  /** move 일 때 블록 안 어디를 잡았는지 (슬롯 단위) — 잡은 지점이 커서를 따라오게 한다 */
-  grabOffset: number;
+  /**
+   * move 일 때 블록 안 어디를 잡았는지 (**px**). 잡은 지점이 커서를 따라오게 한다.
+   * 슬롯 단위로 반올림해 두면 첫 이동에서 블록이 한 슬롯 튀어 오른다.
+   */
+  grabOffsetPx: number;
   /** 저장 실패 시 되돌릴 원래 구간 */
   originStartSlot: number;
   originEndSlot: number;
@@ -266,12 +458,22 @@ interface EditDragState {
    * 그래서 window mousemove + 열 좌표로 직접 계산한다.
    */
   colTop: number;
+  /**
+   * 지금 커서가 놓인 열의 회의실. 시작할 때는 roomId 와 같고, 커서가 옆 열로
+   * 넘어가면 바뀐다 — 이게 "회의실 간 이동" 이다.
+   *
+   * 열 판정은 mousemove 때마다 실제 열 요소의 좌표를 재서 한다. 시작 시점에
+   * 좌표를 캐시하지 않는 이유: 사이드바 회의실 토글로 열이 사라지거나 창 폭이
+   * 바뀌면 캐시가 조용히 틀려지고, 그러면 엉뚱한 방으로 옮겨진다.
+   */
+  targetRoomId: string;
 }
 
 /* ================================================================== */
 
 export function GridScreen() {
   const [view, setView] = useState<ViewMode>("day");
+  const [agendaGroup, setAgendaGroup] = useState<AgendaGroup>("time");
 
   /*
    * 사이드바에서 끈 회의실은 격자에서 빠진다(macOS 캘린더의 캘린더 목록과 같은 동작).
@@ -294,6 +496,15 @@ export function GridScreen() {
   }, []);
 
   const bookingsState = useAsync<Booking[]>(() => repo.listByDay(selectedDate), [dayKey]);
+  /*
+   * **첫 로드에만** 스켈레톤을 띄운다.
+   *
+   * 예전엔 loading 이 true 이기만 하면 이벤트를 전부 지우고 스켈레톤을 그렸다.
+   * 그런데 예약을 옮긴 뒤 reload() 를 부르면 그 순간에도 loading 이 true 가 되어,
+   * 방금 옮긴 블록을 포함한 하루치가 통째로 사라졌다가 다시 나타났다.
+   * useAsync 는 재조회 중에도 이전 data 를 들고 있으므로 그대로 그리면 된다.
+   */
+  const firstLoad = bookingsState.data === null;
   const prefsState = useAsync<UserPrefs>(() => repo.getPrefs(), []);
 
   const slotPx = useMemo(() => readCssPx("--grid-slot-h", 28), []);
@@ -350,12 +561,22 @@ export function GridScreen() {
       new Intl.DateTimeFormat("ko-KR", { month: "long", day: "numeric" }).format(weekEnd),
     [weekStart, weekEnd],
   );
+  /*
+   * 주간도 **모든 방**을 한 번에 가져온다. 예전엔 고른 방 하나만 조회했는데
+   * (listByRoomRange), 그러면 부서 칩이 뷰에 따라 달라졌다 — 일간에는 "기획팀" 이
+   * 있는데 주간으로 넘어가면 사라진다. 그 부서의 예약이 마침 다른 방에 있었기
+   * 때문이고, 사용자에겐 필터 목록이 이유 없이 바뀌는 것으로 보인다.
+   *
+   * 방 전환도 이제 재조회가 아니라 필터링이라 즉시 바뀐다. 회의실이 둘뿐이라
+   * 한 번 더 가져오는 비용은 사실상 없다.
+   */
   const weekState = useAsync<Booking[]>(
-    () =>
-      view === "week" && weekRoomId
-        ? repo.listByRoomRange(weekRoomId, weekStart, weekEnd)
-        : Promise.resolve([]),
-    [view, weekRoomId, weekStart.getTime(), weekEnd.getTime()],
+    () => (view === "week" ? repo.listByRange(weekStart, weekEnd) : Promise.resolve([])),
+    [view, weekStart.getTime(), weekEnd.getTime()],
+  );
+  const weekRoomBookings = useMemo(
+    () => (weekState.data ?? []).filter((b) => b.roomId === weekRoomId),
+    [weekState.data, weekRoomId],
   );
 
   // 인원 필터로 현재 고른 방이 후보에서 빠지면 남은 후보 중 첫 방으로 옮긴다.
@@ -384,7 +605,8 @@ export function GridScreen() {
 
   /* ---- 부서 목록: 현재 뷰에 실제로 로드된 예약에서만 distinct 로 뽑는다 ---- */
   const activeBookings = useMemo(() => {
-    if (view === "day") return bookingsState.data ?? [];
+    // 일정 뷰는 일간과 같은 하루 데이터를 쓴다
+    if (view === "day" || view === "agenda") return bookingsState.data ?? [];
     if (view === "week") return weekState.data ?? [];
     return monthState.data ?? [];
   }, [view, bookingsState.data, weekState.data, monthState.data]);
@@ -426,10 +648,18 @@ export function GridScreen() {
   /* ---- 내 예약 드래그 수정 (일간 뷰 전용) ---- */
   const [edit, setEdit] = useState<EditDragState | null>(null);
   const editRef = useRef<EditDragState | null>(null);
+  /*
+   * 마우스를 **놓았는지**. edit 상태만으로는 구분이 안 된다.
+   *
+   * 저장이 끝날 때까지 프리뷰(edit)를 일부러 살려두도록 바꾼 뒤로(블록이 원위치로
+   * 튀는 것을 막기 위해), mousemove 핸들러가 그 프리뷰를 계속 갱신했다 —
+   * 손을 뗐는데도 블록이 커서를 따라다녔다. 놓는 순간 이 플래그를 세워
+   * "화면에는 남아 있지만 더 이상 따라오지 않는" 상태로 만든다.
+   */
+  const editReleasedRef = useRef(false);
   useEffect(() => {
     editRef.current = edit;
   }, [edit]);
-  const [editBusy, setEditBusy] = useState(false);
   /*
    * 드래그로 옮기거나 늘린 직후의 click 을 한 번 삼킨다.
    * mouseup 은 같은 요소에서 click 으로 이어지므로, 그냥 두면 옮기고 손을 뗄 때마다
@@ -438,42 +668,89 @@ export function GridScreen() {
   const swallowClickRef = useRef(false);
   const [editError, setEditError] = useState<string | null>(null);
 
-  function startDrag(roomId: string, slot: number) {
-    setDrag({ roomId, anchor: slot, current: slot });
-  }
-  function continueDrag(roomId: string, slot: number) {
-    setDrag((d) => (d && d.roomId === roomId ? { ...d, current: slot } : d));
+  /**
+   * 이 방에서 `slot` 을 품고 있는 빈 구간의 양끝(둘 다 포함). 슬롯이 이미 예약돼
+   * 있으면 null.
+   *
+   * **부서 필터로 가려진 예약도 벽으로 센다.** 화면에 안 보이는 예약 위에서 선택이
+   * 멈추는 것은 분명 어색하지만, 반대로 두면 필터를 걸어둔 사람만 저장 단계에서
+   * 조용히 거절당한다 — 벽은 눈에 안 보여도 실재한다.
+   */
+  function freeRangeAround(roomId: string, slot: number): { min: number; max: number } | null {
+    let min = 0;
+    let max = slotCount - 1;
+    for (const b of bookingsByRoom.get(roomId) ?? []) {
+      const s = slotIndexOf(b.start, dayStart, POLICY.slotMinutes);
+      const e = slotIndexOf(b.end, dayStart, POLICY.slotMinutes); // [s, e) 반열림
+      if (s <= slot && slot < e) return null; // 이미 예약된 자리
+      if (e <= slot) min = Math.max(min, e);
+      else max = Math.min(max, s - 1);
+    }
+    return { min, max };
   }
 
-  function beginEdit(booking: Booking, mode: "move" | "resize", grabSlot: number, colTop: number) {
+  function startDrag(roomId: string, slot: number, colTop: number) {
+    const range = freeRangeAround(roomId, slot);
+    if (!range) return;
+    setDrag({ roomId, anchor: slot, current: slot, colTop, minSlot: range.min, maxSlot: range.max });
+  }
+
+  function beginEdit(
+    booking: Booking,
+    mode: "move" | "resize",
+    grabOffsetPx: number,
+    colTop: number,
+  ) {
     const startSlot = slotIndexOf(booking.start, dayStart, POLICY.slotMinutes);
     const endSlot = slotIndexOf(booking.end, dayStart, POLICY.slotMinutes);
     setEditError(null);
+    editReleasedRef.current = false;
     setEdit({
       bookingId: booking.id,
       roomId: booking.roomId,
       mode,
       startSlot,
       endSlot,
-      grabOffset: Math.max(0, grabSlot - startSlot),
+      grabOffsetPx,
       originStartSlot: startSlot,
       originEndSlot: endSlot,
       colTop,
+      targetRoomId: booking.roomId,
     });
   }
 
+  /**
+   * 커서 x 좌표가 어느 회의실 열 위인지. 열 밖(시간축·여백)이면 null.
+   *
+   * DOM 을 직접 재는 이유: 열 폭은 CSS grid 가 정하고(1fr), 사이드바 토글로
+   * 열 개수가 바뀐다. JS 에 폭을 따로 계산해 두면 두 값이 갈라져 엉뚱한 방으로
+   * 옮겨진다 — placeInGrid 를 단일 좌표 소스로 두는 것과 같은 이유다.
+   */
+  function roomIdAtClientX(clientX: number): string | null {
+    const cols = document.querySelectorAll<HTMLElement>(".grid-col[data-room-id]");
+    for (const col of cols) {
+      const r = col.getBoundingClientRect();
+      if (clientX >= r.left && clientX <= r.right) return col.dataset.roomId ?? null;
+    }
+    return null;
+  }
+
   async function commitEdit(e: EditDragState) {
+    const roomChanged = e.targetRoomId !== e.roomId;
     // 움직이지 않았으면 저장하지 않는다 — 클릭 한 번이 왕복 요청이 되지 않게.
-    if (e.startSlot === e.originStartSlot && e.endSlot === e.originEndSlot) {
+    if (e.startSlot === e.originStartSlot && e.endSlot === e.originEndSlot && !roomChanged) {
       setEdit(null);
       return;
     }
     const newStart = slotToDate(e.startSlot);
     const newEnd = slotToDate(e.endSlot);
-    setEditBusy(true);
     try {
-      // 저장 직전 재조회 후 도메인 규칙으로 먼저 판단한다(1·2차 방어).
-      const fresh = await repo.listByRoom(e.roomId, newStart);
+      /*
+       * 저장 직전 재조회 후 도메인 규칙으로 먼저 판단한다(1·2차 방어).
+       * **목적지 방**을 조회한다 — 방을 옮길 때 원래 방으로 검사하면 정작
+       * 가려는 방의 충돌을 못 본다.
+       */
+      const fresh = await repo.listByRoom(e.targetRoomId, newStart);
       const target = fresh.find((b) => b.id === e.bookingId);
       const verdict = canReschedule(
         target ?? { ...(fresh[0] as Booking), id: e.bookingId },
@@ -488,7 +765,12 @@ export function GridScreen() {
         setEdit(null);
         return;
       }
-      const result = await repo.reschedule(e.bookingId, newStart, newEnd);
+      const result = await repo.reschedule(
+        e.bookingId,
+        newStart,
+        newEnd,
+        roomChanged ? e.targetRoomId : undefined,
+      );
       if (!result.ok) {
         setEditError(
           result.reason === "blocked"
@@ -499,9 +781,18 @@ export function GridScreen() {
     } catch (err: unknown) {
       setEditError(err instanceof Error ? err.message : "옮기지 못했어요. 잠시 후 다시 시도해 주세요.");
     } finally {
-      setEditBusy(false);
+      /*
+       * **프리뷰를 먼저 지우지 않는다.**
+       *
+       * 예전엔 setEdit(null) 을 여기서 바로 부르고 reload() 를 걸었다. 그러면
+       * 블록이 (1) 놓는 순간 원래 자리로 튀고 (2) 새 데이터가 오면 다시 옮긴
+       * 자리로 튀었다 — 두 번 움직이는 그 왕복이 "애니메이션처럼 줄었다 늘었다" 다.
+       *
+       * 재조회를 먼저 걸고, 새 데이터가 반영된 뒤(await) 프리뷰를 놓는다.
+       * 그러면 블록은 놓인 자리에 그대로 있다가 조용히 진짜 데이터로 바뀐다.
+       */
+      await bookingsState.reloadAsync();
       setEdit(null);
-      bookingsState.reload();
     }
   }
 
@@ -517,6 +808,7 @@ export function GridScreen() {
     function onMouseUp() {
       const e = editRef.current;
       if (e) {
+        editReleasedRef.current = true;
         if (e.startSlot !== e.originStartSlot || e.endSlot !== e.originEndSlot) {
           swallowClickRef.current = true;
         }
@@ -528,6 +820,7 @@ export function GridScreen() {
     function onKeyDown(e: KeyboardEvent) {
       if (e.key !== "Escape") return;
       if (editRef.current) {
+        editReleasedRef.current = true;
         setEdit(null); // 되돌린다 — 저장하지 않는다
         return;
       }
@@ -542,8 +835,26 @@ export function GridScreen() {
      */
     function onMouseMove(ev: MouseEvent) {
       const e = editRef.current;
-      if (!e) return;
+      if (!e) {
+        /*
+         * 새 예약 선택 중. 커서를 빈 구간 안에 가둔다 — 다음 예약에 닿으면 거기서 멈추고
+         * 더 늘어나지 않는다(Google Calendar·Clockwise 와 같은 동작).
+         */
+        const d = dragRef.current;
+        if (!d) return;
+        const raw = Math.floor((ev.clientY - d.colTop) / slotPx);
+        const slot = Math.min(d.maxSlot, Math.max(d.minSlot, raw));
+        setDrag((cur) => (cur && cur.current !== slot ? { ...cur, current: slot } : cur));
+        return;
+      }
+      if (editReleasedRef.current) return;
       const slot = Math.floor((ev.clientY - e.colTop) / slotPx);
+      /*
+       * 커서가 어느 회의실 열 위에 있나. 길이 조절(resize)은 방을 바꾸지 않는다 —
+       * 아래 끝을 끌다가 옆으로 손이 흔들렸을 때 방이 바뀌면 사고다.
+       */
+      const roomUnderCursor =
+        e.mode === "move" ? roomIdAtClientX(ev.clientX) : null;
       setEdit((cur) => {
         if (!cur) return cur;
         if (cur.mode === "resize") {
@@ -551,8 +862,18 @@ export function GridScreen() {
           return endSlot === cur.endSlot ? cur : { ...cur, endSlot };
         }
         const length = cur.endSlot - cur.startSlot;
-        const startSlot = Math.min(Math.max(0, slot - cur.grabOffset), slotCount - length);
-        return startSlot === cur.startSlot ? cur : { ...cur, startSlot, endSlot: startSlot + length };
+        /*
+         * 블록 위쪽 끝의 px 위치 = 커서 y - 잡은 지점 offset. 그걸 한 번만
+         * 반올림해 슬롯으로 바꾼다. 이렇게 해야 "잡은 자리가 손을 따라온다".
+         */
+        const topPx = ev.clientY - cur.colTop - cur.grabOffsetPx;
+        const startSlot = Math.min(
+          Math.max(0, Math.round(topPx / slotPx)),
+          slotCount - length,
+        );
+        const targetRoomId = roomUnderCursor ?? cur.targetRoomId;
+        if (startSlot === cur.startSlot && targetRoomId === cur.targetRoomId) return cur;
+        return { ...cur, startSlot, endSlot: startSlot + length, targetRoomId };
       });
     }
 
@@ -633,7 +954,9 @@ export function GridScreen() {
         */}
 
         {visibleRooms.length > 0 ? (
-          view === "day" ? (
+          /* 일정 뷰는 일간과 같은 하루를 본다 — 날짜 컨트롤도 같은 것을 쓴다.
+             뷰를 바꿀 때 날짜 이동 UI 가 자리를 옮기면 그것부터 다시 찾게 된다. */
+          view === "day" || view === "agenda" ? (
             <div className="grid-toolbar mr-row">
               <Button variant="secondary" onClick={() => setSelectedDate(startOfDay(new Date()))}>
                 오늘
@@ -700,43 +1023,67 @@ export function GridScreen() {
         ) : null}
 
         <div className="grid-controlbar__right">
-          <div className="grid-filterbar mr-row">
-            {departments.length > 0 ? (
-              <div className="grid-deptchips" role="group" aria-label="부서 필터">
-                <button
-                  type="button"
-                  className={cx("grid-deptchip", deptFilter === null && "is-active")}
-                  aria-pressed={deptFilter === null}
-                  onClick={() => setDeptFilter(null)}
-                >
-                  전체
-                </button>
-                {departments.map((d) => {
-                  const on = deptFilter === d;
-                  return (
-                    <button
-                      key={d}
-                      type="button"
-                      className={cx("grid-deptchip", on && "is-active")}
-                      aria-pressed={on}
-                      /* 켜진 칩을 다시 누르면 꺼진다 — 해제하려고 "전체" 를 찾아가지
-                         않아도 되고, 별도 "필터 N개 · 해제" 링크도 필요 없어진다.
-                         해제 방법이 둘이면 어느 쪽이 무엇을 지우는지 헷갈린다. */
-                      onClick={() => setDeptFilter(on ? null : d)}
-                    >
-                      {d}
-                      <span className="grid-deptchip__clear" aria-hidden="true">
-                        {on ? "×" : ""}
-                      </span>
-                    </button>
-                  );
-                })}
-              </div>
-            ) : null}
-          </div>
-          <GridViewSwitch active={view} onChange={setView} />
+          {/*
+            부서 필터는 **드롭다운**이다. 칩 네 개를 인라인으로 늘어놓으면 좁은
+            폭에서 줄바꿈되며 툴바가 두세 줄로 터진다(440px 에서 실측 194px).
+            Jobber 는 필터를 드롭다운 버튼 하나로 접고 켜진 개수만 배지로 보여준다.
+
+            네이티브 <select> 를 쓰는 이유: 부서는 하나만 고르는 값이고,
+            키보드·모바일 동작을 브라우저가 이미 정확히 해준다. 커스텀 팝오버를
+            만들면 포커스 트랩·외부 클릭·Esc 를 우리가 다시 구현해야 한다.
+          */}
+          {departments.length > 0 ? (
+            <label className="grid-deptselect">
+              <span className="grid-deptselect__label">부서</span>
+              <select
+                className="grid-deptselect__input"
+                value={deptFilter ?? ""}
+                onChange={(e) => setDeptFilter(e.target.value === "" ? null : e.target.value)}
+              >
+                <option value="">전체</option>
+                {departments.map((d) => (
+                  <option key={d} value={d}>
+                    {d}
+                  </option>
+                ))}
+              </select>
+            </label>
+          ) : null}
+          {view === "day" || view === "agenda" ? (
+            <Segmented
+              items={DAY_MODES}
+              active={view === "agenda" ? "agenda" : "day"}
+              onChange={setView}
+              label="표시 방식"
+              small
+            />
+          ) : null}
+          <Segmented
+            items={RANGE_TABS}
+            active={view === "agenda" ? "day" : view}
+            onChange={(id) => setView(id === "day" && view === "agenda" ? "agenda" : id)}
+            label="기간 전환"
+          />
         </div>
       </div>
+
+      {/*
+       * 처음 보는 사람에게 무엇을 하면 되는지 한 줄로 알려준다.
+       *
+       * 이 화면은 격자만 보여주고 조작 방법을 아무 데도 적어두지 않았다 — 빈 시간을
+       * 끌면 예약이 된다는 걸 알아내려면 그냥 해봐야 했다. DESIGN.md §12-1
+       * ("처음 보는 사람이 읽고 바로 무엇을 할지 알 수 있게")의 정면 위반이다.
+       *
+       * 온보딩 투어나 닫기 버튼이 달린 배너를 만들지 않는다: 한 줄이면 되는 설명에
+       * 상태(닫았는지 여부)를 저장하기 시작하면 그것부터 고장 난다.
+       * 일간 뷰에만 둔다 — 드래그로 예약·이동이 되는 뷰가 여기뿐이다.
+       */}
+      {view === "day" && visibleRooms.length > 0 ? (
+        <p className="grid-hint">
+          비어있는 시간을 <b>끌어서</b> 예약하고, 내 예약은 <b>끌어서 옮기거나</b> 아래 끝을 잡아
+          시간을 바꿀 수 있어요.
+        </p>
+      ) : null}
 
       {prefsState.error ? (
         <div style={{ marginTop: 16 }}>
@@ -758,7 +1105,12 @@ export function GridScreen() {
         </div>
       ) : null}
 
-      {editBusy ? <p className="mr-state">옮기는 중…</p> : null}
+      {/*
+        "옮기는 중…" 문단을 격자 위에 끼워 넣었었다. 그 한 줄이 나타났다 사라지면서
+        아래 격자 전체를 밀었다 당겼다 했다 — "화면이 줄었다 늘었다" 의 정체다.
+        저장 중이라는 사실은 블록이 제자리에 그대로 있는 것으로 이미 보이고,
+        실패하면 아래 Alert 가 사유를 말한다. 레이아웃을 흔드는 상태 표시는 두지 않는다.
+      */}
 
       {deptFilterEmptied ? (
         <div style={{ marginTop: 16 }}>
@@ -797,12 +1149,12 @@ export function GridScreen() {
            */}
           <div className="grid-desktop" style={{ marginTop: 16 }}>
             <div className="grid-scroll">
-              <div className={cx("grid-table", drag && "is-dragging")} style={{ gridTemplateColumns }}>
+              <div className={cx("grid-table", drag && "is-dragging", edit && "is-editing")} style={{ gridTemplateColumns }}>
                 <div className="grid-corner" />
 
                 {visibleRooms.map((room) => (
                   <div key={room.id} className="grid-room-header">
-                    {bookingsState.loading ? (
+                    {firstLoad ? (
                       <>
                         <span className="grid-skeleton-bar" aria-hidden="true" />
                         <span className="grid-skeleton-bar grid-skeleton-bar--sm" aria-hidden="true" />
@@ -835,7 +1187,7 @@ export function GridScreen() {
                 </div>
 
                 {visibleRooms.map((room) => {
-                  const roomBookings = bookingsState.loading
+                  const base = firstLoad
                     ? []
                     : (bookingsByRoom.get(room.id) ?? []).filter(
                         (b) =>
@@ -843,8 +1195,38 @@ export function GridScreen() {
                           b.end.getTime() > dayStart.getTime() &&
                           b.start.getTime() < dayEnd.getTime(),
                       );
+                  /*
+                   * 방을 옮기는 중이면 블록을 **목적지 열에 그린다.**
+                   * 원래 열에 남겨두면 커서는 옆 열에 있는데 블록은 제자리에 있어
+                   * "드래그가 안 먹는다" 로 읽힌다 — 실제로 그렇게 보였다.
+                   */
+                  const movingAway =
+                    edit !== null && edit.mode === "move" && edit.targetRoomId !== room.id;
+                  const movingHere =
+                    edit !== null &&
+                    edit.mode === "move" &&
+                    edit.targetRoomId === room.id &&
+                    edit.roomId !== room.id;
+                  const incoming = movingHere
+                    ? (bookingsState.data ?? []).filter((b) => b.id === edit.bookingId)
+                    : [];
+                  const roomBookings = [
+                    ...(movingAway ? base.filter((b) => b.id !== edit.bookingId) : base),
+                    ...incoming,
+                  ];
                   return (
-                    <div key={room.id} className="grid-col">
+                    <div
+                      key={room.id}
+                      className={cx(
+                        "grid-col",
+                        edit !== null &&
+                          edit.mode === "move" &&
+                          edit.targetRoomId === room.id &&
+                          edit.roomId !== room.id &&
+                          "is-drop-target",
+                      )}
+                      data-room-id={room.id}
+                    >
                       {slotIndices.map((i) => (
                         <div
                           key={i}
@@ -853,17 +1235,15 @@ export function GridScreen() {
                             slotIsHourBoundary(i, POLICY.slotMinutes) ? "grid-slot--hour" : "grid-slot--half",
                           )}
                           onMouseDown={(e) => {
-                            if (bookingsState.loading) return;
+                            if (firstLoad) return;
                             e.preventDefault();
-                            startDrag(room.id, i);
-                          }}
-                          onMouseEnter={() => {
-                            if (!bookingsState.loading) continueDrag(room.id, i);
+                            const col = e.currentTarget.parentElement;
+                            startDrag(room.id, i, col ? col.getBoundingClientRect().top : 0);
                           }}
                         />
                       ))}
 
-                      {!bookingsState.loading && drag && drag.roomId === room.id ? (
+                      {!firstLoad && drag && drag.roomId === room.id ? (
                         <div className="grid-selection" style={selectionStyle(drag)}>
                           <span className="grid-selection__label t-num">
                             {selectionLabel(drag).text}
@@ -914,9 +1294,8 @@ export function GridScreen() {
                               }
                               setDetailBooking(bk);
                             }}
-                            onBeginEdit={(bk, mode, grabOffsetSlots, colTop) => {
-                              const startSlot = slotIndexOf(bk.start, dayStart, POLICY.slotMinutes);
-                              beginEdit(bk, mode, startSlot + grabOffsetSlots, colTop);
+                            onBeginEdit={(bk, mode, grabOffsetPx, colTop) => {
+                              beginEdit(bk, mode, grabOffsetPx, colTop);
                             }}
                             editing={beingEdited}
                           />
@@ -926,7 +1305,7 @@ export function GridScreen() {
                   );
                 })}
 
-                {showNowLine && !bookingsState.loading ? (
+                {showNowLine && !firstLoad ? (
                   <div className="grid-now" aria-hidden="true">
                     <div className="grid-now__line" style={{ top: nowTop }} />
                   </div>
@@ -936,12 +1315,12 @@ export function GridScreen() {
           </div>
 
           <div className="grid-mobile">
-            <p className="t-cap t-muted grid-mobile__hint">
+            <p className="t-cap grid-mobile__hint">
               모바일에서는 회의실 문에 붙은 QR 코드가 예약의 시작점이에요. QR을 스캔하면 그 자리에서 바로
               예약·체크인할 수 있어요.
             </p>
             {visibleRooms.map((room) => {
-              const roomBookings = bookingsState.loading
+              const roomBookings = firstLoad
                 ? []
                 : (bookingsByRoom.get(room.id) ?? []).filter(matchesDept);
               return (
@@ -952,7 +1331,7 @@ export function GridScreen() {
                       {room.floor}
                     </span>
                   </header>
-                  {bookingsState.loading ? (
+                  {firstLoad ? (
                     <div className="grid-skeleton-card" aria-hidden="true" />
                   ) : roomBookings.length === 0 ? (
                     <p className="t-small t-muted">오늘 예약이 없어요</p>
@@ -962,7 +1341,7 @@ export function GridScreen() {
                         <Card key={b.id} mine={b.isMine}>
                           <div className="mr-row" style={{ justifyContent: "space-between" }}>
                             <span className="t-small grid-mobile__organizer">{b.organizerName}</span>
-                            <span className="t-small t-num t-muted">
+                            <span className="t-small t-num grid-mobile__time">
                               {hhmm(b.start)}–{hhmm(b.end)}
                             </span>
                           </div>
@@ -980,13 +1359,23 @@ export function GridScreen() {
             })}
           </div>
         </div>
+      ) : view === "agenda" ? (
+        <AgendaView
+          bookings={(bookingsState.data ?? []).filter(matchesDept)}
+          group={agendaGroup}
+          onGroupChange={setAgendaGroup}
+          visibleRooms={visibleRooms}
+          loading={firstLoad}
+          now={now}
+          onSelectBooking={setDetailBooking}
+        />
       ) : view === "week" ? (
         <WeekView
           visibleRooms={visibleRooms}
           weekRoomId={weekRoomId}
           onRoomChange={setWeekRoomId}
           weekStart={weekStart}
-          bookings={weekState.data ?? []}
+          bookings={weekRoomBookings}
           loading={weekState.loading}
           error={weekState.error}
           onReload={weekState.reload}
@@ -994,6 +1383,7 @@ export function GridScreen() {
           slotPx={slotPx}
           now={now}
           onSelectBooking={setDetailBooking}
+          onCreate={(start, end) => setDialogRange({ roomId: weekRoomId, start, end })}
         />
       ) : (
         <MonthView
@@ -1036,6 +1426,11 @@ export function GridScreen() {
           onClose={() => setDetailBooking(null)}
           onChanged={() => {
             setDetailBooking(null);
+            bookingsState.reload();
+            weekState.reload();
+            monthState.reload();
+          }}
+          onRefresh={() => {
             bookingsState.reload();
             weekState.reload();
             monthState.reload();
@@ -1086,7 +1481,7 @@ function GridEventBlock({
   onBeginEdit?: (
     booking: Booking,
     mode: "move" | "resize",
-    grabOffsetSlots: number,
+    grabOffsetPx: number,
     colTop: number,
   ) => void;
   /** 지금 이 블록을 끌고 있는지 — 커서·그림자로 "들려 있음" 을 표시한다 */
@@ -1114,14 +1509,16 @@ function GridEventBlock({
               e.stopPropagation();
               e.preventDefault();
               /*
-               * 블록 안에서 잡은 지점을 슬롯 단위로 넘긴다. 0 으로 고정하면 블록 머리가
-               * 커서 위치로 순간이동해, 가운데를 잡았는데 위로 튀어 오른다.
-               * placement 로 슬롯 높이를 역산한다(별도 prop 을 늘리지 않는다).
+               * 잡은 지점을 **px 로** 넘긴다.
+               *
+               * 예전엔 여기서 슬롯 단위로 내림(floor)했다. 그러면 슬롯 한가운데를
+               * 잡아도 "슬롯 맨 위를 잡은 것" 으로 취급돼, 첫 mousemove 에서
+               * 블록이 최대 한 슬롯만큼 튀어 올랐다 — "처음 잡고 움직이는 게
+               * 어색하다" 의 정체다. 반올림은 최종 슬롯을 정할 때 한 번만 한다.
                */
-              const slotH = placement.slots > 0 ? placement.height / placement.slots : 1;
-              const grabOffsetSlots = Math.max(0, Math.floor(e.nativeEvent.offsetY / slotH));
+              const grabOffsetPx = Math.max(0, e.nativeEvent.offsetY);
               const col = e.currentTarget.parentElement;
-              onBeginEdit(booking, "move", grabOffsetSlots, col ? col.getBoundingClientRect().top : 0);
+              onBeginEdit(booking, "move", grabOffsetPx, col ? col.getBoundingClientRect().top : 0);
             }
           : undefined
       }
@@ -1195,6 +1592,7 @@ function WeekView({
   slotPx,
   now,
   onSelectBooking,
+  onCreate,
 }: {
   visibleRooms: readonly Room[];
   weekRoomId: string;
@@ -1208,6 +1606,12 @@ function WeekView({
   slotPx: number;
   now: Date;
   onSelectBooking: (b: Booking) => void;
+  /**
+   * 빈 칸을 눌러 새 예약을 만든다. 주간 뷰는 하루 폭이 좁아 **드래그 선택을 두지 않는다**
+   * — 대신 한 칸(30분)을 눌러 시작하고, 길이는 다이얼로그에서 정한다. 이게 없던 동안
+   * 주간 뷰에서는 빈 칸을 아무리 끌거나 눌러도 아무 일도 일어나지 않았다.
+   */
+  onCreate: (start: Date, end: Date) => void;
 }) {
   const slotCount = gridSlotCount(POLICY);
   const slotIndices = useMemo(() => Array.from({ length: slotCount }, (_, i) => i), [slotCount]);
@@ -1263,6 +1667,18 @@ function WeekView({
           </Alert>
         </div>
       ) : null}
+
+      {/*
+       * 주간 뷰는 드래그 수정이 꺼져 있다 — 하루 폭이 좁아 옮길 곳을 조준하기
+       * 어렵기 때문이다(의도된 제약). 그런데 그 사실을 아무 데도 적어두지 않아서,
+       * 일간에서 끌어 옮기는 걸 배운 사람이 주간에서 시도하면 "고장났다" 로 읽혔다.
+       * 비활성 컨트롤의 사유를 상시 노출한다는 규칙(§10)이 뷰 단위에도 적용된다.
+       * 그래서 **되는 경로를 함께** 알려준다.
+       */}
+      <p className="grid-hint">
+        빈 칸을 <b>누르면</b> 그 시간으로 예약할 수 있어요. 주간 보기에서는 <b>끌어서</b> 선택하거나
+        옮길 수 없어요 — 일정을 눌러 시간을 바꾸거나, 일간 보기에서 끌어 옮길 수 있어요.
+      </p>
 
       {/* .grid-scroll 은 항상 마운트한다 — 로딩 중에만 사라지면 pane 모드의
        * flex:1 sizing 이 꺼졌다 켜지며 스크롤 위치와 페이지 높이가 튄다(day 뷰와 동일 이유). */}
@@ -1322,15 +1738,29 @@ function WeekView({
                 );
             return (
               <div key={i} className="grid-col">
-                {slotIndices.map((s) => (
-                  <div
-                    key={s}
-                    className={cx(
-                      "grid-slot",
-                      slotIsHourBoundary(s, POLICY.slotMinutes) ? "grid-slot--hour" : "grid-slot--half",
-                    )}
-                  />
-                ))}
+                {slotIndices.map((s) => {
+                  const slotStart = new Date(dStart.getTime() + s * POLICY.slotMinutes * MINUTE);
+                  return (
+                    <button
+                      key={s}
+                      type="button"
+                      className={cx(
+                        "grid-slot",
+                        "grid-slot--clickable",
+                        slotIsHourBoundary(s, POLICY.slotMinutes) ? "grid-slot--hour" : "grid-slot--half",
+                      )}
+                      aria-label={
+                        new Intl.DateTimeFormat("ko-KR", { month: "numeric", day: "numeric" }).format(day) +
+                        " " +
+                        hhmm(slotStart) +
+                        " 예약하기"
+                      }
+                      onClick={() =>
+                        onCreate(slotStart, new Date(slotStart.getTime() + POLICY.slotMinutes * MINUTE))
+                      }
+                    />
+                  );
+                })}
 
                 {dayBookings.map((b) => {
                   const clippedStart = b.start.getTime() < dStart.getTime() ? dStart : b.start;
@@ -1498,6 +1928,7 @@ function EventDetail({
   now,
   onClose,
   onChanged,
+  onRefresh,
   onCancelRequested,
 }: {
   booking: Booking;
@@ -1505,10 +1936,13 @@ function EventDetail({
   now: Date;
   onClose: () => void;
   onChanged: () => void;
+  /** 다이얼로그를 닫지 않고 목록만 새로 읽는다 (체크인처럼 창을 유지해야 하는 동작) */
+  onRefresh: () => void;
   onCancelRequested: (booking: Booking) => void;
 }) {
-  const [busyKind, setBusyKind] = useState<"extend" | "shorten" | null>(null);
+  const [busyKind, setBusyKind] = useState<"extend" | "shorten" | "checkin" | null>(null);
   const [extendReason, setExtendReason] = useState<string | null>(null);
+  const [checkedInAt, setCheckedInAt] = useState<Date | null>(booking.checkedInAt);
   const [actionError, setActionError] = useState<string | null>(null);
 
   /*
@@ -1520,8 +1954,11 @@ function EventDetail({
   const isNarrow = useIsNarrow();
   const extendVariant = isNarrow ? "secondary" : "compact-quiet";
 
-  const noShow = isNoShow(booking, now, POLICY.checkInGraceMinutes);
+  // 방금 이 창에서 체크인했다면 배지도 함께 내려간다 — booking 은 갱신되지 않는 스냅샷이다.
+  const noShow = isNoShow({ ...booking, checkedInAt }, now, POLICY.checkInGraceMinutes);
   const canShortenNow = canShorten(booking, POLICY.extendStepMinutes, POLICY.slotMinutes);
+  const meetingStarted = now.getTime() >= booking.start.getTime();
+  const meetingEnded = now.getTime() >= booking.end.getTime();
   const durationMin = (booking.end.getTime() - booking.start.getTime()) / MINUTE;
 
   async function handleExtend() {
@@ -1552,6 +1989,35 @@ function EventDetail({
       onChanged();
     } catch (e: unknown) {
       setActionError(e instanceof Error ? e.message : "연장 중 문제가 생겼어요. 잠시 후 다시 시도해 주세요.");
+    } finally {
+      setBusyKind(null);
+    }
+  }
+
+  /*
+   * 체크인은 지금까지 QR 랜딩에만 있었다. 문 앞에 서 있는 사람에게는 그게 맞지만,
+   * 자리에서 노트북으로 회의에 참석하는 경우(화상회의·다른 층)에는 체크인할 길이
+   * 아예 없어서 "미체크인" 배지가 계속 붙어 있었다. 같은 repo.checkIn 을 이 화면에서도 부른다.
+   */
+  async function handleCheckIn() {
+    setBusyKind("checkin");
+    setActionError(null);
+    try {
+      await repo.checkIn(booking.id);
+      /*
+       * 체크인은 **다이얼로그를 닫지 않는다.** 연장·단축과 달리 눈에 보이는 변화가
+       * 격자에 거의 없어서(막대 길이가 안 바뀐다), 창이 그냥 사라지면 됐는지 알 수 없다.
+       * 완료 시각을 그 자리에 남기고, 목록만 조용히 새로 읽는다.
+       *
+       * booking 은 부모가 넘긴 스냅샷이라 재조회로 갱신되지 않는다 — 그래서 성공한
+       * 쓰기의 결과를 여기서 들고 있는다.
+       */
+      setCheckedInAt(new Date());
+      onRefresh();
+    } catch (e: unknown) {
+      setActionError(
+        e instanceof Error ? e.message : "체크인 중 문제가 생겼어요. 잠시 후 다시 시도해 주세요.",
+      );
     } finally {
       setBusyKind(null);
     }
@@ -1591,12 +2057,13 @@ function EventDetail({
       subtitle={subtitle}
       onClose={onClose}
       /* 파괴적 동작(예약 취소)을 안전한 기본 동작(닫기)에서 떨어뜨린다.
-         둘 다 아웃라인으로 붙여두면 "닫기"인 줄 알고 예약을 지운다. */
+         같은 생김새로 나란히 두면 "닫기"인 줄 알고 예약을 지운다 —
+         빨강(글자)과 거리를 둘 다 쓴다(DESIGN.md §4). */
       actionsLayout={booking.isMine ? "split" : "end"}
       actions={
         <>
           {booking.isMine ? (
-            <Button variant="secondary" onClick={() => onCancelRequested(booking)}>
+            <Button variant="danger" onClick={() => onCancelRequested(booking)}>
               예약 취소
             </Button>
           ) : null}
@@ -1639,6 +2106,23 @@ function EventDetail({
         ) : (
           <p className="t-small t-muted">화상회의 링크가 없어요</p>
         )}
+
+        {booking.isMine && !meetingEnded ? (
+          checkedInAt ? (
+            <p className="t-small">체크인 완료 · {hhmm(checkedInAt)}</p>
+          ) : (
+            /* 시작 전에는 누를 수 없다. 숨기지 않고 **언제부터 되는지**를 적는다 —
+               비활성 컨트롤은 사유를 상시 노출한다(DESIGN.md §4·§10). */
+            <ButtonWithReason
+              variant="secondary"
+              onClick={handleCheckIn}
+              disabled={!meetingStarted || busyKind !== null}
+              reason={!meetingStarted ? hhmm(booking.start) + " 부터 체크인할 수 있어요" : null}
+            >
+              {busyKind === "checkin" ? "체크인하는 중…" : "체크인하기"}
+            </ButtonWithReason>
+          )
+        ) : null}
 
         {booking.isMine ? (
           <div className="mr-row" style={{ marginTop: 8 }}>
@@ -1717,13 +2201,20 @@ function CancelConfirmDialog({
     <Dialog
       title="예약 취소"
       onClose={onClose}
+      /* 파괴적 확정 버튼을 안전한 기본 동작에서 떨어뜨린다 (DESIGN.md §4) */
+      actionsLayout="split"
       actions={
         <>
-          <Button variant="secondary" onClick={onClose} disabled={busy}>
+          {/* 안전한 쪽(유지)이 주 액션이다. 파괴적인 쪽은 빨간 글자로만 둔다. */}
+          <Button onClick={onClose} disabled={busy}>
             유지
           </Button>
-          <Button onClick={() => void run(() => repo.cancel(booking.id))} disabled={busy}>
-            {busy ? "취소하는 중…" : isSeries ? "이 회차만 취소" : "취소 확정"}
+          <Button
+            variant="danger"
+            onClick={() => void run(() => repo.cancel(booking.id))}
+            disabled={busy}
+          >
+            {busy ? "취소하는 중…" : isSeries ? "이 회차만 취소하기" : "예약 취소하기"}
           </Button>
         </>
       }

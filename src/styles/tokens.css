@@ -1,219 +1,240 @@
 /*
- * molroom design tokens — Apple 디자인에서 파생.
+ * molroom design tokens — **Toss 에서 파생.**
  *
- * 출처: DESIGN_DEPRECATED.md 에 박제된 apple.com / Apple Store / HIG 실측 토큰
- *       (oh-my-design apple 레퍼런스). MolCube 에서는 로고만 가져온다.
+ * 출처: oh-my-design `toss` 레퍼런스 실측본 (TDS Mobile 공식 문서 + toss.im 라이브
+ *       computed style, 2026-07-11 검증). MolCube 에서는 로고만 가져온다.
+ *
+ * 이전 판본(Apple/macOS 앱 문법)은 DESIGN_DEPRECATED_APPLE_APP.md 에 보존돼 있다.
  *
  * 증거 등급을 반드시 유지할 것:
- *   [apple]  apple.com / HIG 에서 실측된 값. 임의로 바꾸지 말 것.
+ *   [toss]   TDS 공식 문서 / toss.im 라이브에서 실측된 값. 임의로 바꾸지 말 것.
  *   [logo]   MolCube 로고에서 온 값. 워드마크·파비콘 전용, UI 에 풀지 않는다.
- *   [local]  molroom 로컬 확장. Apple 레퍼런스에 없는 값.
- *   [a11y]   접근성 때문에 레퍼런스에서 의도적으로 벗어난 값. 사유가 함께 적혀 있다.
+ *   [local]  molroom 로컬 확장. **Toss 레퍼런스가 침묵하는 자리** — 근거를 함께 적는다.
+ *   [a11y]   접근성 때문에 레퍼런스에서 의도적으로 벗어난 값.
  *
  * 값을 바꾸기 전에 DESIGN.md 를 먼저 읽는다.
  */
 
 :root {
   /* ================= 로고 (장식 전용) =================
-   * 얼굴은 Apple 이지만 로고는 우리 것이다. 이 네 값은 워드마크와 파비콘의
-   * 아이소메트릭 큐브에만 쓴다 — UI 색으로 풀면 Apple 팔레트와 충돌한다. */
+   * 얼굴은 Toss 지만 로고는 우리 것이다. 이 네 값은 워드마크와 파비콘의
+   * 아이소메트릭 큐브에만 쓴다 — UI 색으로 풀면 Toss 파랑과 충돌한다. */
   --c-brand: #202362;        /* [logo] 로고 외곽선 인디고. 워드마크 텍스트 */
   --c-brand-blue: #4279BC;   /* [logo] 로고 파란 면 */
   --c-brand-mint: #73FEDD;   /* [logo] 로고 민트 면 */
   --c-brand-amber: #FFC006;  /* [logo] 로고 노란 면 */
 
-  /* ================= 액션 (macOS 시스템 블루 계열) =================
+  /* ================= 액션 (Toss 파랑) =================
    *
-   * macOS/iOS 의 systemBlue 는 #007AFF 다. 흰 텍스트 대비가 **4.02:1** 로 WCAG AA
-   * 본문 기준(4.5:1)에 못 미친다 — Apple 자신은 쓰지만 우리는 접근성이 먼저다(§12).
-   * 눈으로 구별되지 않을 만큼만 어둡게 내린 #006CE0(4.97:1)을 쓴다.
+   * 사용자 결정에 따라 **Toss 실측값을 보정 없이 쓴다.** 대비 미달은 DESIGN.md
+   * §12-5 에 측정값과 되돌릴 조건까지 기록해 두었다 — 지우지 말 것.
+   *   #3182F6 + 흰 텍스트 16px/600 = 3.71:1 (AA 본문 4.5:1 미달)
+   *   #2272EB = 4.49:1 (0.01 부족)
+   *
+   * 완화 장치: 채움 파랑은 화면당 하나로 아끼고, 그 밖의 "파란 것" 은 Weak 쌍으로
+   * 낸다 — Weak 는 4.82:1 로 안전하다.
    */
-  --c-accent-reference: #007AFF; /* [apple] systemBlue 원값. 참조용 — 흰 텍스트를 얹지 말 것(4.02:1) */
-  --c-action: #006CE0;        /* [a11y] systemBlue 를 AA 까지 내린 값. 흰 텍스트 4.97:1 */
-  --c-action-hover: #0057B8;  /* [local] hover/눌림. 흰 텍스트 6.55:1 */
-  --c-action-tint: #E8F1FC;   /* [local] 선택 상태의 옅은 채움 */
-  --c-action-border: #B0D2F5; /* [local] tint 와 같은 계열의 경계 */
-  --c-on-action: #ffffff;     /* [apple] */
+  --c-action: #3182F6;        /* [toss] TDS interaction blue */
+  --c-action-hover: #2272EB;  /* [toss] TDS 문서의 강한 파랑 */
+  --c-action-weak-bg: #E8F3FF;/* [toss] toss.im 라이트 CTA 배경 */
+  --c-action-weak-fg: #1B64DA;/* [toss] 그 위 텍스트. 4.82:1 */
+  /* [local] Weak 의 hover. Toss 는 hover 를 실측 번들에 남기지 않았다("hover not
+   * captured"). 새 hex 를 발명하는 대신 **문서화된 두 값을 섞어서** 만든다 —
+   * Weak 배경에 채움 파랑을 12% 섞은 것. 흰색으로 빠지면 "비활성됐나" 로 읽힌다. */
+  --c-action-weak-bg-hover: color-mix(in srgb, var(--c-action) 12%, var(--c-action-weak-bg));
+  --c-on-action: #FFFFFF;     /* [toss] */
 
-  --c-link: #006CE0;          /* [a11y] 액션과 같은 값 — 앱 UI 는 마케팅 페이지처럼 링크색을 따로 두지 않는다 */
-  --c-link-on-dark: #4DA3FF;  /* [local] 다크 표면 위 */
+  /* 앱 UI 는 링크색을 따로 두지 않는다 — 액션과 같은 파랑이다.
+   * 단 **문장 안의 링크**는 Weak 텍스트(4.82:1)를 쓴다: 흰 배경 위 #3182F6 은
+   * 3.71:1 이라 글자로 쓰면 위태롭고, 채움 배경 위에서만 안전하다. */
+  --c-link: #1B64DA;          /* [toss] weak foreground */
+  --c-link-on-dark: #6BA6FF;  /* [local] 다크 표면 위 */
 
-  /* ================= 중립 (macOS 창) =================
-   * 맥 앱의 창은 두 면으로 나뉜다: 반투명 사이드바(systemGray6 계열)와 흰 콘텐츠.
-   * 캔버스가 콘텐츠보다 어둡고, 그 위에 흰 판이 얹힌다. */
-  --c-canvas: #F2F2F7;        /* [apple] systemGray6 — 사이드바·창 배경 */
-  --c-surface: #ffffff;       /* [apple] 콘텐츠 면 */
-  --c-surface-muted: #E5E5EA; /* [apple] systemGray5 — 세그먼티드 트랙, 비활성 채움 */
-  --c-border: #D8D8DC;        /* [apple] separator */
-  --c-border-strong: #C7C7CC; /* [apple] systemGray4 — 정시선처럼 한 단 진한 선 */
+  /* ================= 중립 (Toss) =================
+   * Apple 판본은 회색 캔버스 위에 흰 판을 얹었다. Toss 는 반대다 —
+   * **흰 바닥에서 시작하고** 회색은 "조용한 보조면" 으로 필요한 자리에만 쓴다. */
+  --c-canvas: #FFFFFF;        /* [toss] 기본 배경 */
+  --c-surface: #FFFFFF;       /* [toss] 콘텐츠 면 */
+  --c-surface-muted: #F2F4F6; /* [toss] quiet neutral layer — 보조면·세그먼티드 트랙·비활성 채움 */
+  --c-border: #E5E8EB;        /* [toss] divider / outline */
+  --c-border-strong: #D1D6DB; /* [local] 한 단 진한 선이 필요한 자리. Toss 는 이 단계를 문서화하지 않는다 */
 
-  --c-fg: #1D1D1F;            /* [apple] foreground. canvas 위 15.46:1 */
-  --c-secondary: #515154;     /* [apple] HIG 보조 중립. canvas 위 7.27:1 */
-  --c-muted: #6E6E73;         /* [apple] HIG muted. canvas 위 4.66:1 */
+  /*
+   * Foreground / Body / Muted.
+   *
+   * Apple 판본의 secondary 자리를 **Body(#4E5968)** 가 대신한다. 이름이 아니라
+   * 역할이 커졌다 — Toss 에서 이 색은 "흐린 글자" 가 아니라 본문을 강조하는 색이다.
+   *
+   * **Muted(#8B95A1)는 문장에 쓰지 말 것.** 흰 배경 위 3.04:1 이다(DESIGN.md §12-5).
+   * 시간 눈금·플레이스홀더처럼 못 읽어도 치명적이지 않은 자리에만 둔다.
+   * 사용자가 읽어야 하는 보조 텍스트는 전부 Body 로 올린다.
+   */
+  --c-fg: #191F28;            /* [toss] 가장 강한 텍스트. 흰 배경 위 16.56:1 */
+  --c-body: #4E5968;          /* [toss] 본문·중립 액션 텍스트. 흰 배경 위 7.11:1 */
+  --c-muted: #8B95A1;         /* [toss] 보조 텍스트. 흰 배경 위 3.04:1 — 문장 금지 */
 
-  --c-stage: #000000;         /* [apple] brand / dark canvas */
-  --c-backdrop: rgba(0, 0, 0, 0.48); /* [local] Apple 오버레이 스크림 관행(#000 ~32-48%) */
+  --c-stage: #191F28;         /* [local] 다크 표면 */
+  --c-backdrop: rgba(0, 0, 0, 0.48); /* [local] 오버레이 스크림. blur 없음 */
+
+  /* 되돌릴 수 없는 동작 전용. 예약 **상태**에는 쓰지 않는다 —
+   * 예약된 방은 오류가 아니다(Apple 판본에서 물려받은 규칙). */
+  --c-danger: #E42939;        /* [toss] TDS destructive/error. 흰 배경 위 4.49:1 */
+  /* [local] 파괴적 버튼의 hover. Toss 는 danger 의 배경 쌍을 문서화하지 않았으므로
+   * 새 hex 를 만들지 않고 documented danger 를 흰색에 8% 섞는다. */
+  --c-danger-weak-bg: color-mix(in srgb, var(--c-danger) 8%, #FFFFFF);
 
   /* ================= 예약 상태 =================
-   * 비어있음: 색을 주지 않는다(--c-canvas 그대로). 부재는 강조가 아니다.
-   * 남의 예약: 색을 주지 않는다(--c-surface). 정상 상태다.
-   */
-  --c-mine-bg: #E8F1FC;      /* [local] action tint */
-  --c-mine-fg: #0066CC;      /* [apple] link blue. tint 위 4.88:1 */
-  --c-mine-border: #B0D2F5;  /* [local] */
+   * 비어있음: 색을 주지 않는다(흰 격자 판 그대로). 부재는 강조가 아니다. */
+  --c-mine-bg: #E8F3FF;      /* [toss] weak background */
+  --c-mine-fg: #1B64DA;      /* [toss] weak foreground. tint 위 4.82:1 */
+  --c-mine-border: #3182F6;  /* [toss] 좌측 막대 — 채움 파랑을 여기 한 자리에 쓴다 */
 
-  /* Apple 레퍼런스에는 경고색이 없다 — 시스템 오렌지를 AA 까지 어둡게 잡아 만든다 */
+  --c-other-bg: #F2F4F6;     /* [toss] 남의 예약 — 정상 상태. 무채색 채움 */
+  --c-other-border: #E5E8EB; /* [toss] */
+
+  /* Toss 레퍼런스에 경고색이 없다. Apple 판본에서 만들어 대비를 검증한 값을
+   * 그대로 물려받는다(tint 위 6.05:1) — 새로 발명하지 않았다. */
   --c-attn-bg: #FFF3E5;      /* [local] */
   --c-attn-fg: #8F4B00;      /* [local] tint 위 6.05:1 */
 
-  /* 예약 상태에는 빨강을 쓰지 않는다 — 예약된 방은 오류가 아니다.
-   * 단 "지금 몇 시인가" 를 가리키는 현재시각 선은 상태색이 아니라 시간 표시이고,
-   * 캘린더 앱의 보편적 관행이다(iOS/macOS 캘린더의 빨간 선). 그 한 자리에만 쓴다. */
-  --c-now: #FF3B30;          /* [apple] iOS system red. 현재시각 선 전용 */
+  /* "지금 몇 시인가" 를 가리키는 현재시각 선. 상태색이 아니라 시간 표시이고
+   * 캘린더 앱의 보편적 관행이다. Toss 의 danger 를 이 한 자리에 빌려 쓴다. */
+  --c-now: #E42939;          /* [toss] */
 
   /* ================= 타이포그래피 =================
-   * Apple 은 SF Pro 를 쓰지만 웹에 배포되는 폰트가 아니다. Apple 기기에서는
-   * -apple-system 이 SF Pro 를 그대로 집고, 그 밖에서는 한글 대응을 위해
-   * Pretendard 로 떨어진다 — 광학적으로 SF 에 가장 가까운 국문 폰트다.
-   */
-  --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display",
-               "Pretendard Variable", Pretendard, system-ui, "Apple SD Gothic Neo", sans-serif;
-  --font-mono: ui-monospace, "SF Mono", SFMono-Regular, "IBM Plex Mono", Menlo, monospace;
-
-  /*
-   * 타입 스케일 — **데스크톱은 macOS 앱 밀도, 모바일은 iOS 밀도**다.
    *
-   * 맥 앱의 본문은 13px 다(SF Pro Text). 마케팅 페이지의 17px 를 앱 UI 에 쓰면
-   * 컨트롤이 부풀고 한 화면에 들어가는 정보가 줄어 "웹사이트" 로 읽힌다.
-   * iOS 는 반대로 17px 가 본문이고 입력은 16px 이상이어야 자동 확대가 안 난다 —
-   * 그래서 파일 아래 @media (max-width: 767px) 에서 값을 iOS 쪽으로 되돌린다.
-   * DESIGN.md §8 "데스크톱과 모바일은 축소 관계가 아니라 서로 다른 작업" 의 연장이다.
+   * Toss Product Sans 는 **공개 재배포 권리가 확인되지 않았다**(레퍼런스:
+   * "No general redistribution right is asserted"). 그래서 폰트 파일을 번들에
+   * 넣지 않는다 — 사내 라이선스가 확인되면 그때 로컬 폰트로 추가한다.
+   * 그때까지 실제로 보이는 폰트는 Pretendard 다(한글에서 광학적으로 가장 가깝다).
    */
-  --t-display-size: 28px; --t-display-lh: 34px; --t-display-w: 600; /* [apple] large title */
-  --t-title-size: 22px;   --t-title-lh: 26px;   --t-title-w: 600;   /* [apple] title */
-  --t-section-size: 17px; --t-section-lh: 22px; --t-section-w: 600; /* [apple] headline */
-  --t-body-size: 13px;    --t-body-lh: 18px;    --t-body-w: 400;    /* [apple] body (맥 앱) */
-  --t-small-size: 12px;   --t-small-lh: 16px;   --t-small-w: 400;   /* [apple] subheadline */
-  --t-cap-size: 11px;     --t-cap-lh: 14px;     --t-cap-w: 400;     /* [apple] caption */
-  --t-label-w: 500;                                                  /* [local] */
-  --t-grid-size: 12px;    --t-grid-lh: 15px;                         /* [local] 격자 이벤트 — 28px 슬롯 안에 이름+시간이 들어가야 한다 */
+  --font-sans: "Toss Product Sans", "Pretendard Variable", Pretendard,
+               -apple-system, BlinkMacSystemFont, system-ui, "Apple SD Gothic Neo", sans-serif;
+  /* [local] Toss 레퍼런스에 canonical 모노스페이스가 없다. 시간축은 자릿수가
+   * 흔들리면 읽히지 않으므로 시스템 모노를 계속 쓴다. */
+  --font-mono: ui-monospace, SFMono-Regular, "SF Mono", "IBM Plex Mono", Menlo, monospace;
 
   /*
-   * 자간 — apple.com 의 타이포그래피 클래스는 크기별로 음의 트래킹을 준다.
-   * "자간을 조정하지 않는다"(MolCube 판본에서 물려받은 규칙)를 그대로 두면
-   * Apple 특유의 조밀함이 나오지 않는다. 큰 글자일수록 덜 조인다.
-   * 한글(Pretendard)에서도 같은 값을 적용하고 실화면에서 확인했다.
-   */
-  /* 작은 글자는 덜 조인다 — 13px 에 -0.022em 를 주면 한글이 붙어 읽기 어려워진다.
-   * (모바일 17px 로 커지는 구간에서는 아래 미디어쿼리가 값을 되돌린다.) */
-  --ls-display: -0.012em;  /* [apple] 28px */
-  --ls-title: -0.01em;     /* [apple] 22px */
-  --ls-section: -0.008em;  /* [apple] 17px */
-  --ls-body: -0.004em;     /* [apple] 13px */
-  --ls-small: -0.003em;    /* [apple] 12px */
-  --ls-cap: 0em;           /* [apple] 11px — 이 크기에서는 조이지 않는다 */
-
-  /* ================= 지오메트리 (macOS 앱) =================
-   * 맥 앱의 버튼은 pill 이 아니라 라운드 사각형이다(7px). pill 은 apple.com 마케팅
-   * CTA 와 배지·칩의 문법이다 — 앱 컨트롤에 쓰면 웹사이트처럼 보인다. */
-  --r-sm: 7px;    /* [apple] 버튼·세그먼트 */
-  --r-md: 6px;    /* [apple] 입력·작은 컨트롤 */
-  --r-lg: 10px;   /* [apple] 패널·카드 */
-  --r-xl: 12px;   /* [apple] 다이얼로그 */
-  --r-pill: 980px;/* [apple] 배지·칩 전용 */
-  --r-event: 5px; /* [local] 격자 이벤트 블록 */
-
-  /*
-   * 컨트롤 높이 — 데스크톱은 맥 앱의 28px(regular control), 모바일은 44px(터치 하한).
-   * 44px 은 손가락 하한이지 포인터의 기본값이 아니다.
-   */
-  --h-action: 28px;         /* [apple] regular control */
-  --h-action-compact: 22px; /* [apple] small control */
-  --h-input: 28px;          /* [apple] text field */
-  --h-tab: 28px;            /* [apple] 세그먼티드 컨트롤 */
-  --h-badge: 18px;          /* [local] 13px 본문에 맞춰 낮춤 */
-  --h-sidebar-row: 28px;    /* [apple] 사이드바 행 */
-
-  --pad-action: 0 12px;            /* [apple] 높이로 정렬하므로 세로 패딩은 두지 않는다 */
-  --pad-action-compact: 0 8px;     /* [apple] */
-  --pad-content: 12px;             /* [local] 13px 본문 기준 */
-
-  --w-sidebar: 220px;              /* [apple] 맥 앱 사이드바 기본 폭 */
-
-  /* ================= 그림자 ================= */
-  --shadow-focus: 0 0 0 4px rgba(0, 113, 227, 0.35); /* [local] Apple 포커스 링 관행 */
-  --shadow-modal: 0 8px 32px rgba(0, 0, 0, 0.12);    /* [local] */
-  --shadow-soft: 0 4px 24px rgba(0, 0, 0, 0.06);     /* [local] */
-
-  /* ================= 유리 재질 (Liquid Glass) =================
+   * 타입 스케일 — TDS 문서 계층 실측값.
    *
-   * Apple HIG: "Controls and navigation occupy a translucent functional layer
-   * above content; they should not become a decorative glass effect spread
-   * across the content layer."
+   * **데스크톱과 모바일이 같다.** Apple 판본은 두 표면에 다른 스케일을 줬지만
+   * (13px ↔ 17px), Toss 는 애초에 모바일 값이 기준이고 16px 본문은 포인터에서도
+   * 부풀어 보이지 않는다. 표면마다 값을 갈라 두면 유지할 것만 두 배가 된다.
    *
-   * 그래서 유리는 **크롬에만** 쓴다 — 앱바, 다이얼로그, 하단 시트, 상태 카드,
-   * 격자의 sticky 헤더/시간축. 예약 격자의 셀과 이벤트는 불투명하게 둔다.
-   * 24슬롯 x N방의 조밀한 데이터가 반투명해지면 읽기가 무너지고,
-   * 셀마다 blur 를 걸면 모바일에서 프레임이 떨어진다.
+   * 부수 효과: 16px 이 이미 Safari 자동확대 하한이라 그 문제가 사라진다.
+   */
+  --t-display-size: 36px; --t-display-lh: 54px; --t-display-w: 700; /* [toss] H1 */
+  --t-title-size: 24px;   --t-title-lh: 36px;   --t-title-w: 600;   /* [toss] H3 */
+  --t-section-size: 22px; --t-section-lh: 33px; --t-section-w: 600; /* [toss] H4 */
+  --t-body-size: 16px;    --t-body-lh: 24px;    --t-body-w: 400;    /* [toss] dominant visible role */
+  --t-small-size: 14px;   --t-small-lh: 21px;   --t-small-w: 400;   /* [toss] secondary visible role */
+  --t-cap-size: 13px;     --t-cap-lh: 18px;     --t-cap-w: 400;     /* [local] 레퍼런스 미문서 — 힌트 */
+  --t-label-w: 600;                                                  /* [toss] 버튼 굵기 */
+  /*
+   * 격자 이벤트·시간축은 **캘린더 레퍼런스 실측**을 따른다(Toss 는 캘린더가 없다).
+   * Clockwise 실측: 이벤트 텍스트 9~10px, 시간 눈금도 그 급. 우리는 한글이라
+   * 한 단 올려 12px/11px 로 둔다 — 14px 는 24px 슬롯에 두 줄이 안 들어간다.
+   */
+  --t-grid-size: 12px;    --t-grid-lh: 14px;                         /* [local] 격자 이벤트 */
+  --t-axis-size: 11px;    --t-axis-lh: 14px;                         /* [local] 시간축 눈금 */
+
+  /*
+   * 자간 — **조정하지 않는다.**
    *
-   * 모든 유리 표면은 @supports 로 불투명 폴백을 갖는다. 유리는 장식이지
-   * 기능이 아니므로, 안 되는 브라우저에서 깨지면 안 된다.
+   * Apple 판본에는 크기별 음의 트래킹(-0.022em ~ -0.008em)이 있었고 그게 Apple
+   * 특유의 조밀함을 만들었다. Toss 레퍼런스는 자간을 문서화하지 않는다 — 넣으면
+   * 우리가 발명하는 것이다. 토큰은 남겨 둔다: 값이 0 이라는 것 자체가 결정이고,
+   * 되돌려야 할 때 한 줄로 바꿀 수 있다.
    */
-  --glass-bg: rgba(255, 255, 255, 0.6);         /* [local] 기본 크롬. 0.72 는 뒤가 거의 안 비쳐 유리로 안 읽혔다 */
-  --glass-bg-strong: rgba(255, 255, 255, 0.86); /* [local] 다이얼로그 — 본문이 얹히므로 더 불투명 */
-  --glass-bg-tint: rgba(232, 241, 252, 0.78);   /* [local] 내 예약 카드. action tint 기반 */
-  --glass-blur: saturate(180%) blur(24px);      /* [local] 조사한 프로스티 기준값(16~20px)보다 한 단 위 — 반투명도를 낮춘 만큼 흐림을 올린다 */
-  --glass-blur-strong: saturate(180%) blur(32px);
-  /*
-   * rim — 굴절을 포기한 대신(docs/liquid-glass-reference.md) 유리로 읽히게 하는 것은
-   * 이 가장자리다. 광원이 위에 하나이므로 위는 밝고 아래는 어둡다 — 대칭으로 두면
-   * 그냥 반투명 판으로 보인다.
-   */
-  --glass-border: rgba(255, 255, 255, 0.8);     /* [local] 위쪽 하이라이트 */
-  --glass-border-bottom: rgba(0, 0, 0, 0.05);   /* [local] 아래쪽 그늘 — 위와 비대칭 */
-  --glass-edge: rgba(23, 23, 23, 0.06);         /* [local] 바깥 경계 */
-  --glass-rim: inset 0 1px 0 var(--glass-border), inset 0 -1px 0 var(--glass-border-bottom);
-  --glass-shadow: 0 4px 24px rgba(7, 27, 51, 0.06);
+  --ls-display: 0;  /* [toss] */
+  --ls-title: 0;    /* [toss] */
+  --ls-section: 0;  /* [toss] */
+  --ls-body: 0;     /* [toss] */
+  --ls-small: 0;    /* [toss] */
+  --ls-cap: 0;      /* [toss] */
 
-  /* 유리가 유리로 보이려면 뒤에 blur 할 것이 있어야 한다.
-   * 로고 색(민트·앰버)은 여기에 풀지 않는다 — 로고는 워드마크 자리에만 둔다.
-   * 두 값 모두 Apple 블루에서 왔다: 밝은 쪽은 액션(#0071e3), 깊은 쪽은 링크(#0066cc).
-   * 알파를 올리지 말 것 — 올리면 유리 위 텍스트 대비가 떨어진다. */
-  /*
-   * 알파를 0.10/0.08 에서 올렸다. 유리가 유리로 보이려면 뒤에 blur 할 것이
-   * 있어야 하는데, 너무 옅으면 흐릴 것이 없어서 크롬이 그냥 흰 판으로 보인다.
-   * 유리 위 텍스트는 --c-secondary 로 올려 두었고(components.css) 여기서 더
-   * 올리면 그 대비가 위험해진다 — 이 값이 상한이다.
-   */
-  --ambient-blue: rgba(0, 113, 227, 0.16);
-  --ambient-blue-deep: rgba(0, 102, 204, 0.13);
+  /* ================= 지오메트리 =================
+   * TDS 버튼 사이즈 스케일: small 32px/8px · medium 38px/10px ·
+   * large 48px/14px · xlarge 56px/16px. 데스크톱은 large, 모바일은 xlarge 를 쓴다.
+   *
+   * **TDS 16px radius 와 toss.im 마케팅 7px radius 를 평균내지 말 것**(레퍼런스 §7).
+   * 우리는 제품 UI 이므로 TDS 쪽 값만 쓴다. */
+  --r-sm: 14px;   /* [toss] 버튼 (large) */
+  --r-md: 12px;   /* [local] 입력 — TDS 는 변형만 문서화하고 수치를 주지 않는다 */
+  --r-lg: 16px;   /* [local] 카드·패널 */
+  --r-xl: 20px;   /* [local] 다이얼로그 */
+  --r-pill: 980px;/* [local] 배지 전용 */
+  /* 이벤트 블록 4px — Clockwise 실측 2px 에 한 단 얹은 값. 12px 이었을 때는 블록이
+   * 카드처럼 보여서 좌측 색 막대가 구조가 아니라 장식으로 읽혔다. */
+  --r-event: 4px; /* [local] 격자 이벤트 블록 */
+  --r-seg: 10px;  /* [toss] 세그먼티드 조각 (medium) */
 
-  /* ================= 예약 격자 (local) ================= */
+  --h-action: 48px;         /* [toss] TDS large */
+  --h-action-compact: 38px; /* [toss] TDS medium */
+  --h-input: 48px;          /* [toss] */
+  --h-tab: 48px;            /* [local] 탭은 TDS 미문서 — 액션 높이에 맞춘다 */
+  --h-badge: 24px;          /* [local] 14px 본문에 맞춘 값 */
+  --h-sidebar-row: 48px;    /* [local] 액션 높이와 같게 */
+
+  --pad-action: 0 20px;            /* [toss] xlarge padding */
+  --pad-action-compact: 0 16px;    /* [toss] */
+  --pad-content: 16px;             /* [toss] spacing 스케일 */
+
+  --w-sidebar: 240px;              /* [local] 16px 본문 + 48px 행이 들어가는 폭 */
+
+  /* ================= 그림자 =================
+   * Toss 레퍼런스는 canonical 그림자 토큰을 승격하지 않았다 — 깊이는 평면 색
+   * 레이어링(흰 면 / #F2F4F6 보조면 / #E5E8EB 선)으로 낸다. 예외는 둘뿐이고
+   * 둘 다 [local] 이다: 다이얼로그(떠 있음을 색으로 표현할 수 없다)와 포커스 링. */
+  --shadow-focus: 0 0 0 4px rgba(49, 130, 246, 0.30); /* [local] */
+  --shadow-modal: 0 8px 32px rgba(25, 31, 40, 0.16);  /* [local] */
+
+  /* ================= 예약 격자 (local) =================
+   * 슬롯 44px — 08:00~20:00 이 1056px 이라 한 화면을 넘어간다. 의도된 대가다:
+   * 훑는 속도보다 읽는 확실함을 산다(DESIGN.md §1). */
   --grid-slot-min: 30;
-  --grid-slot-h: 28px;
-  --grid-col-min: 132px;
-  --grid-axis-w: 64px;
+  /*
+   * 30분 24px = 시간당 48px.
+   *
+   * 44px(시간당 88px)이었다. 그러면 08:00~20:00 이 1056px 이라 어떤 화면에도
+   * 안 들어가고 격자가 늘 스크롤했다 — "스크롤이 자꾸 생긴다" 의 원인.
+   * 캘린더 레퍼런스 실측(Clockwise ~32px/시간)보다는 여유를 두되, 하루가 한
+   * 화면에 들어가는 선까지 내린다: 24 x 24슬롯 = **576px**.
+   *
+   * 이 값은 Toss 밀도(컨트롤 48px)와 다르다. 그래야 하는 이유: Toss 레퍼런스에는
+   * 캘린더가 없고, 시간 격자는 "한 번에 하루를 본다" 가 존재 이유다. 브랜드
+   * 밀도를 격자 본문에 적용하면 그 존재 이유가 사라진다(DESIGN.md §4).
+   */
+  --grid-slot-h: 24px;
+  --grid-col-min: 160px;
+  --grid-axis-w: 52px;
+
+  /* 툴바 컨트롤 — 격자 화면의 크롬. 액션 버튼(48px)보다 낮다.
+   * Clockwise 실측 ~28px, 우리는 포인터·터치 양쪽을 고려해 36px. [local] */
+  --h-toolbar: 36px;
+
+  /* ================= 간격 =================
+   * Toss 실측 클러스터: 4 · 6 · 8 · 16 · 24 · 32.
+   * **12px 과 20px 은 이 스케일에 없다** — Apple 판본의 12px 리듬을 옮기지 말 것.
+   * (--pad-action 의 20px 은 예외: TDS 버튼 패딩 실측값이다.) */
+  --sp-1: 4px;
+  --sp-2: 8px;
+  --sp-3: 16px;
+  --sp-4: 24px;
+  --sp-5: 32px;
+  --sp-tight: 6px;
 
   /* ================= 모션 =================
-   * omd:feel MOTION. 전역 duration 하나로 통일하지 않고 이동 면적/거리에 비례해 나눈다 🟢.
-   * 전부 50ms 그리드에 양자화 🟢 (220ms/333ms 같은 애매한 값 금지).
-   * [brand] molcube-web 의 fade-in-down 0.3s ease-out / fade-out-up 0.2s ease-in 을
-   * 근거로 삼아 역할별 duration/ease 로 재정렬했다 — 색은 손대지 않는다.
-   */
+   * Toss 레퍼런스는 모션을 문서화하지 않는다. 전부 [local] 이고, Apple 판본에서
+   * omd:feel 규칙으로 검증한 값을 물려받는다 — 모션은 브랜드 표식이라기보다
+   * 지각의 문제다. 전부 50ms 그리드에 양자화. */
+  --ease-out: cubic-bezier(0, 0, 0.2, 1);     /* [local] enter/사용자 트리거 */
+  --ease-in: cubic-bezier(0.4, 0, 1, 1);      /* [local] exit/accelerate */
+  --ease-inout: cubic-bezier(0.4, 0, 0.2, 1); /* [local] 이미 보이는 요소의 morph */
 
-  /* ease 는 역할별로 분리한다 🟡 */
-  --ease-out: cubic-bezier(0, 0, 0.2, 1);   /* [brand] enter/사용자 트리거. molcube fade-in-down 과 동일 */
-  --ease-in: cubic-bezier(0.4, 0, 1, 1);    /* [local] exit/accelerate. enter 에는 쓰지 않는다 */
-  --ease-inout: cubic-bezier(0.4, 0, 0.2, 1); /* [local] 이미 보이는 요소의 morph(리사이즈 등) 전용 */
-
-  /* duration 은 이동 면적 크기 순: hover(색만) < overlay/modal(큰 표면).
-   * 닫힘(exit) duration 토큰은 두지 않는다 — Dialog 는 부모가 조건부 렌더로 즉시
-   * 언마운트하므로 닫힘 애니메이션이 존재하지 않는다. 애니메이션 없는 전환에
-   * "exit ≈ 0.8 x enter" 를 적용할 대상이 없다. 닫힘 연출을 넣으려면 모든 호출부의
-   * 닫기 경로를 Dialog 가 가로채도록 바꿔야 하고, 그때 토큰을 함께 되살린다. */
-  --dur-hover: 150ms;      /* [local] omd:feel 🟡 hover/색 전환 상한 150ms */
-  --dur-dialog-in: 300ms;  /* [brand] molcube fade-in-down 0.3s 과 일치. omd:feel 🟡 overlay/modal ~300ms */
-  --dur-cell: 150ms;       /* [local] omd:feel 🟡 버튼/격자 셀 hover 배경색 전환 — hover 카테고리(150ms) */
+  --dur-hover: 150ms;      /* [local] hover/색 전환 상한 */
+  --dur-dialog-in: 300ms;  /* [local] overlay/modal */
+  --dur-cell: 150ms;       /* [local] 버튼/격자 셀 배경색 전환 */
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -225,31 +246,20 @@
 }
 
 /*
- * 모바일(<768px)은 iOS 문법으로 되돌린다.
+ * 모바일(<768px).
  *
- * 맥 앱의 13px/28px 은 포인터 전제다. 손가락에는 iOS 본문 17px 와 44px 타깃이 맞고,
- * 특히 입력 필드는 16px 미만이면 Safari 가 자동 확대해 QR 예약 흐름이 깨진다.
+ * Apple 판본은 여기서 타입 스케일까지 갈아탔지만(macOS → iOS), Toss 는 하나의
+ * 문법을 쓴다. 바뀌는 것은 **지오메트리 몇 개**뿐이다: 컨트롤이 TDS large(48px)
+ * 에서 xlarge(56px)로 올라가고 radius 가 14 → 16px 이 된다.
  */
 @media (max-width: 767px) {
   :root {
-    --t-display-size: 34px; --t-display-lh: 40px;  /* [apple] iOS large title */
-    --t-title-size: 22px;   --t-title-lh: 28px;
-    --t-section-size: 17px; --t-section-lh: 22px;
-    --t-body-size: 17px;    --t-body-lh: 22px;     /* [apple] iOS body */
-    --t-small-size: 15px;   --t-small-lh: 20px;    /* [apple] iOS subheadline */
-    --t-cap-size: 13px;     --t-cap-lh: 18px;      /* [apple] iOS footnote */
-
-    --ls-body: -0.02em;
-    --ls-small: -0.014em;
-    --ls-cap: -0.006em;
-
-    --h-action: 44px;         /* [apple] iOS 최소 터치 타깃 */
-    --h-action-compact: 36px;
-    --h-input: 44px;
-    --h-tab: 44px;
-    --h-badge: 22px;
-    --pad-action: 0 20px;
-    --pad-content: 16px;
-    --t-grid-size: 13px;    --t-grid-lh: 16px;
+    --h-action: 56px;         /* [toss] TDS xlarge — 문서상 모바일 기본 사이즈 */
+    --h-action-compact: 48px; /* [toss] TDS large */
+    --h-input: 56px;          /* [toss] */
+    --h-tab: 56px;
+    --r-sm: 16px;             /* [toss] xlarge radius */
+    --r-md: 14px;
+    --pad-content: 20px;      /* [local] 손가락 폭에서 16px 은 답답하다 */
   }
 }

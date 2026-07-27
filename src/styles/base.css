@@ -35,48 +35,15 @@ body {
 }
 
 /*
- * 앰비언트 배경층 — 유리가 유리로 보이려면 뒤에 blur 할 것이 있어야 한다.
- * --c-canvas 위에 로고 3색을 아주 옅게 깐다. 구석에 크게 퍼뜨려 중앙 콘텐츠
- * 영역(텍스트가 놓이는 곳)은 거의 비워 둔다.
- * prefers-reduced-transparency / prefers-contrast: more 에서는 숨긴다.
+ * 앰비언트 배경층은 두지 않는다.
+ *
+ * Apple 판본에는 캔버스 위에 옅은 파란 radial 그라디언트 셋이 깔려 있었다.
+ * 목적은 장식이 아니라 **유리 뒤에 흐릴 것을 만드는 것**이었다 — 반투명 표면은
+ * 뒤에 아무것도 없으면 보이지 않는 합성 레이어일 뿐이기 때문이다.
+ *
+ * Toss 로 옮기면서 유리를 전부 걷어냈으므로(DESIGN.md §6) 흐릴 대상도 필요 없다.
+ * 배경은 흰색 하나로 끝낸다 — Toss 는 흰 바닥에서 시작한다(§1).
  */
-body::before {
-  content: "";
-  position: fixed;
-  inset: 0;
-  z-index: -1;
-  pointer-events: none;
-  background:
-    radial-gradient(720px 560px at -10% -10%, var(--ambient-blue-deep), transparent 60%),
-    radial-gradient(680px 540px at 110% -5%, var(--ambient-blue), transparent 60%),
-    radial-gradient(760px 600px at 50% 120%, var(--ambient-blue-deep), transparent 60%);
-}
-
-/*
- * 모바일에서는 반경을 줄인다.
- * 720px 짜리 그라디언트를 390px 뷰포트에 깔면 구석에서 시작해도 화면 전체를 덮어,
- * QR 랜딩의 회의실 이름처럼 카드 밖 캔버스 위에 바로 놓인 텍스트 뒤가 물든다.
- */
-@media (max-width: 767px) {
-  body::before {
-    background:
-      radial-gradient(300px 240px at -20% -6%, var(--ambient-blue-deep), transparent 65%),
-      radial-gradient(280px 220px at 120% -3%, var(--ambient-blue), transparent 65%),
-      radial-gradient(340px 260px at 50% 115%, var(--ambient-blue-deep), transparent 65%);
-  }
-}
-
-@media (prefers-reduced-transparency: reduce) {
-  body::before {
-    display: none;
-  }
-}
-
-@media (prefers-contrast: more) {
-  body::before {
-    display: none;
-  }
-}
 
 h1,
 h2,

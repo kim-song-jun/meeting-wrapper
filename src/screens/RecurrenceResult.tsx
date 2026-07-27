@@ -42,7 +42,7 @@ export function RecurrenceResult({ totalRequested, booked, rejected, onConfirm }
         "회는 이미 사용 중입니다.";
 
   return (
-    <Dialog title="반복 예약 결과" onClose={onConfirm} actions={<Button onClick={onConfirm}>확인</Button>}>
+    <Dialog title="반복 예약 결과" onClose={onConfirm} actions={<Button onClick={onConfirm}>닫기</Button>}>
       <div className="mr-form">
         <Alert>{summary}</Alert>
 

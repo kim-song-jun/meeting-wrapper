@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { Alert, Badge, Button, ButtonWithReason, Card } from "../components/ui";
 import { BookingDialog } from "./BookingDialog";
+import { BrandMark } from "../auth/BrandMark";
 import { useAsync } from "../app/useAsync";
 import { repo } from "../data";
 import { ROOMS, POLICY, roomById } from "../app/config";
@@ -76,6 +77,12 @@ function extendReasonText(result: ExtendResult): string {
 function LandingHeader() {
   return (
     <header className="mr-landing__header">
+      {/*
+       * 로고 큐브를 여기 둔다. QR 랜딩은 "즉석에서 잡는 사람"(§13)이 가장 자주
+       * 보는 화면인데, 정작 브랜드 앵커가 글자뿐이었다 — 정체성을 로고 한 자리에
+       * 모은다는 규칙(§12-8)이 이 화면에서만 빠져 있었다.
+       */}
+      <BrandMark size={18} className="mr-landing__mark" />
       <span className="mr-landing__brand">MolRoom</span>
     </header>
   );
@@ -273,7 +280,7 @@ export function RoomLandingScreen() {
             <div className="mr-landing__section">
               {state.kind === "free" ? (
                 <>
-                  <Card glass>
+                  <Card>
                     <div className="mr-landing__statusline">
                       <span className="mr-landing__dot" data-tone="free" />
                       <span className="t-body">지금 비어있음</span>
@@ -281,9 +288,8 @@ export function RoomLandingScreen() {
                     <p className="t-small t-muted mr-landing__sub">{nextLabel}</p>
                   </Card>
                   <div className="mr-landing__presets">
-                    {/* 채움 버튼은 하나만. DESIGN.md §12-2(화면당 유채색 액센트 하나)와
-                        §4(Apple 실측 패턴 = 채움 + 아웃라인 짝)를 따른다.
-                        나머지 프리셋은 아웃라인으로 두되 높이는 44px 를 유지한다. */}
+                    {/* 채움 버튼은 하나만(§12-3). 나머지 프리셋은 **Weak 채움**이다 —
+                        Toss 의 두 번째 액션은 아웃라인이 아니다(§4). 높이는 전부 동일. */}
                     {freePresets.map((p, i) => (
                       <Button
                         key={p.label}
@@ -298,7 +304,7 @@ export function RoomLandingScreen() {
                 </>
               ) : state.kind === "busy" ? (
                 <>
-                  <Card glass>
+                  <Card>
                     <div className="mr-landing__statusline">
                       <span className="mr-landing__dot" data-tone="busy" />
                       <span className="t-body">
@@ -306,7 +312,7 @@ export function RoomLandingScreen() {
                       </span>
                     </div>
                   </Card>
-                  <Card glass className="mr-landing__gapcard">
+                  <Card className="mr-landing__gapcard">
                     {gap ? (
                       <>
                         <p className="t-small mr-landing__gaplabel">다음 빈 시간</p>
@@ -314,11 +320,16 @@ export function RoomLandingScreen() {
                           {hhmm(gap.start)}–{hhmm(gap.end)}
                         </p>
                         <div className="mr-landing__gapaction">
-                          <Button
-                            variant="secondary"
-                            block
-                            onClick={() => setDraft(suggestedSlot(gap))}
-                          >
+                          {/*
+                           * BUSY 상태에서도 이 버튼이 **주 액션**이다.
+                           *
+                           * 원래 Weak 채움(secondary)이었다. "사용 중인 방을 파랗게 권하는 건
+                           * 과하다" 는 판단이었는데, 실제 화면에서 보면 이 화면에 액션이
+                           * 이것뿐이라 사용자가 누를 것이 무엇인지 한 번 더 찾게 된다.
+                           * 화면당 채움 하나(§12-3)는 "채움을 아껴라" 는 뜻이고,
+                           * 유일한 액션을 흐리게 두라는 뜻이 아니다.
+                           */}
+                          <Button block onClick={() => setDraft(suggestedSlot(gap))}>
                             {hhmm(gap.start)}에 예약하기
                           </Button>
                         </div>
@@ -329,7 +340,7 @@ export function RoomLandingScreen() {
                   </Card>
                 </>
               ) : (
-                <Card mine glass>
+                <Card mine>
                   <div className="mr-landing__mine-head">
                     <span className="mr-landing__dot" data-tone="busy" />
                     <span className="t-body">
@@ -344,7 +355,7 @@ export function RoomLandingScreen() {
                       </p>
                     ) : (
                       <Button block onClick={handleCheckIn} disabled={checkingIn}>
-                        {checkingIn ? "체크인하는 중…" : "체크인"}
+                        {checkingIn ? "체크인하는 중…" : "체크인하기"}
                       </Button>
                     )}
 
@@ -358,7 +369,7 @@ export function RoomLandingScreen() {
                         {extending ? "연장하는 중…" : "+" + String(POLICY.extendStepMinutes) + "분 연장"}
                       </ButtonWithReason>
                       <Button variant="secondary" onClick={handleEndNow} disabled={ending}>
-                        {ending ? "종료하는 중…" : "지금 종료"}
+                        {ending ? "종료하는 중…" : "지금 종료하기"}
                       </Button>
                     </div>
 
@@ -379,7 +390,7 @@ export function RoomLandingScreen() {
                     <li key={b.id} className="mr-landing__item">
                       <span className="mr-landing__item-main">
                         <span className="t-body mr-landing__item-name">{b.organizerName}</span>
-                        <span className="t-small t-muted t-num">
+                        <span className="t-small t-num mr-landing__item-time">
                           {hhmm(b.start)}–{hhmm(b.end)}
                         </span>
                       </span>

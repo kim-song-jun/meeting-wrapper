@@ -29,7 +29,7 @@
 .mine-room-heading {
   font-size: var(--t-small-size);
   line-height: var(--t-small-lh);
-  color: var(--c-secondary);
+  color: var(--c-body);
   font-weight: 600;
   margin-bottom: 12px;
 }
@@ -74,7 +74,7 @@
 }
 
 .mine-item__meta {
-  color: var(--c-muted);
+  color: var(--c-body);
   font-size: var(--t-small-size);
   line-height: var(--t-small-lh);
 }
@@ -90,11 +90,52 @@
 .mine-item__actions {
   display: flex;
   align-items: center;
+  gap: 8px;
   flex-shrink: 0;
 }
 
+/* 체크인 완료는 상태 표시다. Weak 텍스트색으로 "내 것" 계열임을 알리되 배지는 쓰지 않는다
+   — 배지는 격자에서 "미체크인"(주의) 하나로 아껴 쓴다(DESIGN.md §4 Badge). */
+.mine-item__checkedin {
+  color: var(--c-action-weak-fg);
+}
+
+/*
+ * 지난 예약 항목은 세로로 자란다(요약 본문·편집기가 들어온다). 기본 .mine-item 은
+ * 가로 한 줄 배치라 align-items:center 로 버튼이 세로 가운데에 걸리는데,
+ * 본문이 길어지면 버튼만 허공에 뜬다. 위쪽으로 맞춘다.
+ */
+.mine-item--past {
+  align-items: flex-start;
+}
+
+.mine-item--past .mine-item__main {
+  flex: 1 1 320px;
+}
+
+/* 회의 요약 본문. 읽는 글이므로 Body(7.11:1) — Muted 는 문장에 쓰지 않는다(§12-5). */
+.mine-summary {
+  margin-top: 8px;
+  color: var(--c-body);
+  white-space: pre-wrap;
+  text-wrap: pretty;
+}
+
+.mine-summary-edit {
+  margin-top: 8px;
+  width: 100%;
+}
+
+.mine-summary-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 16px;
+}
+
 .mine-empty {
-  color: var(--c-muted);
+  color: var(--c-body);
   font-size: var(--t-body-size);
   line-height: var(--t-body-lh);
 }
@@ -103,7 +144,7 @@
 }
 
 .mine-admin-note {
-  color: var(--c-muted);
+  color: var(--c-body);
   font-size: var(--t-small-size);
   line-height: var(--t-small-lh);
   margin-bottom: 16px;
@@ -114,7 +155,7 @@
 }
 
 .mine-settings-note {
-  color: var(--c-muted);
+  color: var(--c-body);
   font-size: var(--t-cap-size);
   line-height: var(--t-cap-lh);
   margin-top: 8px;
@@ -133,9 +174,6 @@
   line-height: var(--t-small-lh);
 }
 
-/* 이 파일은 리스트 화면이라 유리를 쓰지 않는다 (mine-list 카드는 반복 항목,
- * 불투명 유지). 캔버스색을 다시 칠하는 선언이 없어 앰비언트 배경을 가리지
- * 않는다 — 확인만 하고 손대지 않음. 탭 바 유리는 components.css 소관. */
-@media (prefers-reduced-transparency: reduce), (prefers-contrast: more) {
-  /* 이 파일에 backdrop-filter 선언이 없어 끌 것이 없다. 문서화 목적의 no-op. */
-}
+/* 이 파일은 리스트 화면이라 유리를 쓰지 않는다 (mine-list 는 반복 항목이므로
+ * 불투명 유지). 그래서 prefers-reduced-transparency 로 끌 것도 없다 —
+ * 사이드바·앱바·다이얼로그의 유리는 screens.css / components.css 소관이다. */

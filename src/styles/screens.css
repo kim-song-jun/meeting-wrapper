@@ -52,35 +52,15 @@
   display: flex;
   align-items: center;
   gap: 24px;
-  padding: 0 20px;
+  padding: 0 16px;
   height: 56px;
   background: var(--c-surface);
-  border-bottom: 1px solid var(--glass-edge);
-  box-shadow: var(--glass-shadow);
+  border-bottom: 1px solid var(--c-border);
   position: sticky;
   top: 0;
   z-index: 10;
 }
 
-@supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
-  .mr-appbar {
-    background: var(--glass-bg);
-    backdrop-filter: var(--glass-blur);
-    -webkit-backdrop-filter: var(--glass-blur);
-    border-bottom-color: var(--glass-edge);
-    box-shadow: var(--glass-shadow), var(--glass-rim);
-  }
-}
-
-@media (prefers-reduced-transparency: reduce), (prefers-contrast: more) {
-  .mr-appbar {
-    background: var(--c-surface);
-    backdrop-filter: none;
-    -webkit-backdrop-filter: none;
-    border-bottom-color: var(--c-border);
-    box-shadow: none;
-  }
-}
 
 .mr-appbar__brand {
   display: flex;
@@ -105,7 +85,7 @@
 
 .mr-appbar__nav {
   display: flex;
-  gap: 20px;
+  gap: 24px;
   flex: 1;
 }
 
@@ -113,11 +93,11 @@
 .mr-appbar__account {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 16px;
 }
 
 .mr-appbar__email {
-  color: var(--c-muted);
+  color: var(--c-body);
   white-space: nowrap;
 }
 
@@ -144,7 +124,7 @@
 }
 
 .mr-navlink {
-  color: var(--c-muted);
+  color: var(--c-body);
   text-decoration: none;
   font-family: var(--font-sans);
   font-size: var(--t-small-size);
@@ -162,7 +142,7 @@
 
 .mr-main {
   flex: 1;
-  padding: 24px 20px 64px;
+  padding: 24px 16px 48px;
   max-width: 1280px;
   width: 100%;
   margin: 0 auto;
@@ -178,7 +158,7 @@
 .mr-state {
   padding: 48px 0;
   text-align: center;
-  color: var(--c-muted);
+  color: var(--c-body);
   font-size: var(--t-small-size);
 }
 
@@ -209,8 +189,8 @@
   .mr-sidebar {
     display: flex;
     flex-direction: column;
-    gap: 18px;
-    padding: 14px 10px;
+    gap: 24px;
+    padding: 16px 8px;
     background: var(--c-canvas);
     border-right: 1px solid var(--c-border);
     height: 100dvh;
@@ -221,7 +201,7 @@
   }
 
   .mr-main {
-    padding: 14px 16px 16px;
+    padding: 16px;
     max-width: none;
   }
 
@@ -238,31 +218,12 @@
   }
 }
 
-@supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
-  @media (min-width: 1024px) {
-    .mr-sidebar {
-      background: rgba(242, 242, 247, 0.72);
-      backdrop-filter: var(--glass-blur);
-      -webkit-backdrop-filter: var(--glass-blur);
-      border-right: 1px solid var(--glass-edge);
-    }
-  }
-}
-
-@media (prefers-reduced-transparency: reduce), (prefers-contrast: more) {
-  .mr-sidebar {
-    background: var(--c-canvas);
-    backdrop-filter: none;
-    -webkit-backdrop-filter: none;
-    border-right: 1px solid var(--c-border);
-  }
-}
 
 .mr-sidebar__brand {
   display: flex;
   align-items: center;
-  gap: 7px;
-  padding: 0 6px;
+  gap: 8px;
+  padding: 0 8px;
   font-size: var(--t-section-size);
   line-height: var(--t-section-lh);
   font-weight: 600;
@@ -279,16 +240,16 @@
 .mr-sidebar__section {
   display: flex;
   flex-direction: column;
-  gap: 1px;
+  gap: 2px;
 }
 
 .mr-sidebar__heading {
   margin: 0 0 4px;
-  padding: 0 6px;
+  padding: 0 8px;
   font-size: var(--t-cap-size);
   line-height: var(--t-cap-lh);
   font-weight: 600;
-  color: var(--c-muted);
+  color: var(--c-body);
 }
 
 /* 사이드바 행 — 선택된 항목은 채운 파란 알약이 아니라 옅은 채움이다(맥 앱 관행).
@@ -299,7 +260,7 @@
   align-items: center;
   gap: 8px;
   min-height: var(--h-sidebar-row);
-  padding: 0 6px;
+  padding: 0 8px;
   border-radius: var(--r-md);
   font-size: var(--t-body-size);
   color: var(--c-fg);
@@ -312,7 +273,7 @@
   background: var(--c-surface-muted);
 }
 .mr-sidebar__item.active {
-  background: var(--c-action-tint);
+  background: var(--c-action-weak-bg);
   color: var(--c-action);
   font-weight: 600;
 }
@@ -340,11 +301,11 @@
   display: flex;
   flex-direction: column;
   gap: 4px;
-  padding: 8px 6px 0;
+  padding: 16px 8px 0;
   border-top: 1px solid var(--c-border);
 }
 .mr-sidebar__user {
-  color: var(--c-muted);
+  color: var(--c-body);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;

@@ -95,9 +95,64 @@ CSS.supports("backdrop-filter", "url(#lg)")
 - `CSS.supports` 가 문법만 검사한다는 함정을 지적받아 위에 주석으로 남겼다.
 - rim 비대칭 값(위 0.8 / 아래 0.05)은 그 제안을 그대로 채택했다.
 
+## 5. liquidGL 재조사 (2026-07-27) — 굴절의 **세 번째** 경로
+
+위 §3 은 굴절 경로를 둘로만 봤다: SVG displacement(Chromium 전용) 또는 없음.
+`naughtyduk/liquidGL` 은 셋째 경로다 — **WebGL 셰이더 + html2canvas 스냅샷**.
+WebGL 은 Safari 에서도 돌기 때문에 "Safari 라서 굴절을 못 한다" 는 전제 자체를 비켜간다.
+
+### 어떻게 동작하나
+
+WebGL 은 보안상 화면 픽셀을 직접 읽을 수 없다. 그래서 liquidGL 은 `html2canvas` 로
+페이지를 **캔버스에 한 번 그려** 텍스처로 만들고, 그 텍스처를 굴절시킨다.
+즉 유리가 굴절하는 것은 실시간 화면이 아니라 **스냅샷**이다.
+
+### 기본값 (이 수치가 유용하다)
+
+| 파라미터 | 기본값 | 뜻 |
+|---|---|---|
+| `refraction` | **0.01** | 판 전체의 굴절 — 거의 0 에 가깝다 |
+| `bevelDepth` | **0.08** | 가장자리에서만 굴절을 더한다 |
+| `bevelWidth` | **0.15** | 그 베벨 띠의 폭 = 짧은 변의 15% |
+| `frost` | **0** | **기본이 흐림 0 — 완전히 맑은 유리** |
+| `shadow` / `specular` | true | 소프트 그림자 + 움직이는 하이라이트 |
+
+### MolRoom 이 가져오는 것 / 가져오지 않는 것
+
+**런타임은 도입하지 않는다.** 이유는 Safari 가 아니라 **우리 화면의 성격**이다:
+
+- html2canvas 는 DOM 을 다시 그리는 라이브러리다. 우리 유리 뒤에 있는 것은
+  드래그·필터·날짜 이동·뷰 전환으로 **끊임없이 바뀌는 격자**다. 상태가 바뀔 때마다
+  전면 재스냅샷이 필요하고, 그 비용은 격자가 클수록 커진다.
+- README 표에 **CSS 애니메이션 굴절은 ❌** 로 명시돼 있다. 우리 전환은 전부 CSS 다.
+- 대상 요소가 `position: fixed` + 높은 z-index 여야 한다. 우리 사이드바·sticky
+  시간축은 그 형태가 아니다.
+- html2canvas 는 `backdrop-filter`·일부 그림자를 정확히 재현하지 못한다 —
+  유리를 그리려고 유리를 못 그리는 도구를 쓰는 셈이 된다.
+
+liquidGL 이 겨냥하는 것은 **정적인 히어로 위에 뜬 고정 내비게이션**이다.
+조밀하고 계속 갱신되는 데이터 격자는 정확히 그 반대편이다.
+
+**대신 수치를 가져온다.** 이 조사에서 가장 값진 발견은 `frost: 0` 이 기본이라는 것이다:
+
+> **iOS 26 의 Liquid Glass 는 "많이 흐린 유리" 가 아니다.**
+> 흐림은 오히려 줄고, **가장자리 베벨 · 스페큘러 하이라이트 · 그림자**로 유리를 만든다.
+> 두껍게 blur 를 먹인 반투명 판은 iOS 7~15 의 frosted glass 이지 Liquid Glass 가 아니다.
+
+우리가 쓰던 `blur(24px)` / `blur(32px)` 는 후자였다. 셋을 조정한다:
+1. **흐림을 낮춘다** — 뒤가 형태로 비쳐야 유리로 읽힌다. 완전히 뭉개면 그냥 회색 판이다.
+2. **베벨을 1px 선에서 띠로 넓힌다** — `bevelWidth 0.15` 의 번역. 위쪽 하이라이트를
+   1px inset 이 아니라 짧은 그라디언트 밴드로 준다.
+3. **그림자를 유리의 일부로 둔다** — `shadow: true` 가 기본인 이유. 떠 있어야 유리다.
+
+굴절(1·2번의 진짜 렌즈 왜곡)은 여전히 도입하지 않는다. 결정이 바뀌려면 Safari 가
+`backdrop-filter: url()` 를 지원하거나, 유리 뒤 콘텐츠가 정적인 화면이 생겨야 한다.
+
 ## 출처
 
 - [Meet Liquid Glass — WWDC25](https://developer.apple.com/videos/play/wwdc2025/219/)
+- [naughtyduk/liquidGL](https://github.com/naughtyduk/liquidGL) — WebGL + html2canvas 굴절. §5 수치의 출처
+- Figma Community: "Glassmorphism" 플러그인 / "Glassmorphic UI Kit for iOS 26" — 커뮤니티 페이지가 JS 렌더라 서버에서 본문을 받아오지 못했다. 여기 적힌 값 중 이 둘에서 온 것은 **없다**
 - [deepika-builds/liquid-glass](https://github.com/deepika-builds/liquid-glass) — 단일 파일 구현, 위 수치의 출처
 - [nikdelvin/liquid-glass](https://github.com/nikdelvin/liquid-glass) — CSS+SVG 재현, Safari 폴백 동작 확인
 - [Zettersten/skills](https://github.com/Zettersten/skills) — 굴절 물리(Snell·SDF)에서 템플릿까지

@@ -22,6 +22,26 @@ export interface BookingRepository {
   /** 내가 잡은 앞으로의 예약 */
   listMine(): Promise<Booking[]>;
 
+  /**
+   * 이미 끝난 내 예약. 최신순.
+   *
+   * listMine 과 나눠 둔 이유: 지난 것과 앞으로의 것은 화면에서 하는 일이 다르다
+   * (앞의 것은 취소·체크인, 지난 것은 기록을 남기는 곳). 한 목록으로 합치면
+   * "취소" 버튼이 이미 끝난 회의에도 붙는다. Google 어댑터에서도 timeMax/timeMin 이
+   * 반대로 걸리는 별개의 조회다.
+   *
+   * @param limit 최대 건수. 지난 예약은 끝없이 쌓이므로 화면이 감당할 만큼만 가져온다.
+   */
+  listMinePast(limit: number): Promise<Booking[]>;
+
+  /**
+   * 회의 요약을 저장한다. 빈 문자열이면 지운다(null 로 저장).
+   *
+   * 주최자만 쓸 수 있다 — 구현은 내 예약이 아니면 거절해야 한다. 남의 회의
+   * description 을 고치면 초대받은 모두의 캘린더가 바뀐다.
+   */
+  saveSummary(bookingId: string, summary: string): Promise<void>;
+
   create(draft: BookingDraft): Promise<CreateResult>;
 
   /**
@@ -30,10 +50,13 @@ export interface BookingRepository {
    */
   createRecurring(draft: BookingDraft): Promise<RecurringCreateResult>;
 
-  /** 여러 날에 걸친 한 회의실의 예약. 주간 뷰가 쓴다. */
-  listByRoomRange(roomId: string, from: Date, to: Date): Promise<Booking[]>;
-
-  /** 여러 날에 걸친 전체 회의실 예약. 월 개요가 쓴다. */
+  /**
+   * 여러 날에 걸친 전체 회의실 예약. 주간·월간 뷰가 쓴다.
+   *
+   * 방 하나만 가져오는 변형(listByRoomRange)은 두지 않는다. 화면이 방으로 좁히는
+   * 것은 필터링이지 조회가 아니고, 조회 단위를 방으로 나누면 "지금 화면에 어떤
+   * 부서가 있나" 같은 파생 정보가 뷰마다 달라진다(실제로 그렇게 갈라졌었다).
+   */
   listByRange(from: Date, to: Date): Promise<Booking[]>;
 
   /** 시리즈 전체 취소 */
@@ -44,12 +67,23 @@ export interface BookingRepository {
 
   /**
    * 시작·종료를 함께 바꾼다 (격자에서 드래그로 옮기거나 길이를 조절할 때).
+   * `newRoomId` 를 주면 **다른 회의실로** 옮긴다.
    *
    * changeEnd 와 나눠 둔 이유: 종료만 바꾸는 연장은 시작 시각을 신뢰할 수 있지만,
    * 옮기기는 시작도 움직여서 "지난 시간으로 이동" 같은 새 실패 경로가 생긴다.
    * 서버(캘린더) 쪽에서도 patch 필드가 달라진다.
+   *
+   * 방 이동을 이 메서드에 묶은 이유: Google 어댑터에서 이것은 단순한 필드 수정이
+   * 아니라 "원래 방 캘린더에서 빼고 새 방을 초대" 하는 동작이다. 화면이 취소 후
+   * 재생성으로 흉내내면 그 틈에 남이 그 시간을 잡을 수 있고, 두 번째 단계가
+   * 실패하면 예약이 사라진 채로 남는다.
    */
-  reschedule(bookingId: string, newStart: Date, newEnd: Date): Promise<ChangeResult>;
+  reschedule(
+    bookingId: string,
+    newStart: Date,
+    newEnd: Date,
+    newRoomId?: string,
+  ): Promise<ChangeResult>;
 
   cancel(bookingId: string): Promise<void>;
 

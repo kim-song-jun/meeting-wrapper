@@ -53,6 +53,14 @@ export interface Booking {
   conference: Conference | null;
   /** QR 체크인 시각. extendedProperties.shared.checkedInAt */
   checkedInAt: Date | null;
+  /**
+   * 회의가 끝난 뒤 주최자가 남기는 짧은 기록. 없으면 null.
+   *
+   * Google 어댑터에서는 이벤트 **description** 에 쓴다 — extendedProperties 가 아니라
+   * description 인 이유는, 초대받은 사람들이 자기 캘린더에서 그대로 읽을 수 있어야 하기
+   * 때문이다. MolRoom 을 열지 않는 사람이 이 제품의 사용자 대부분이다(DESIGN.md §13).
+   */
+  summary: string | null;
   isMine: boolean;
 }
 

@@ -9,23 +9,11 @@
   background: var(--c-canvas);
 }
 
-/* 앱바처럼 보이는 미니 헤더 — 유리(기능적 크롬). 불투명 폴백 우선. */
-.mr-landing__header {
-  display: flex;
-  align-items: center;
-  height: 44px;
-  padding: 0 20px;
-  background: var(--c-surface);
-  border-bottom: 1px solid var(--glass-edge);
-}
-@supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
-  .mr-landing__header {
-    background: var(--glass-bg);
-    -webkit-backdrop-filter: var(--glass-blur);
-    backdrop-filter: var(--glass-blur);
-    border-bottom: 1px solid var(--glass-edge);
-    box-shadow: var(--glass-rim);
-  }
+.mr-landing__mark {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  margin-right: 7px;
 }
 
 .mr-landing__brand {
@@ -53,7 +41,7 @@
 
 .mr-landing__meta {
   margin-top: 4px;
-  color: var(--c-muted);
+  color: var(--c-body);
 }
 
 /* 상태 카드는 이 화면의 결론이다 — 방 이름/메타 정보와 뚜렷하게 떨어뜨려
@@ -110,7 +98,7 @@
 }
 
 .mr-landing__gaplabel {
-  color: var(--c-muted);
+  color: var(--c-body);
 }
 
 .mr-landing__gaptime {
@@ -160,7 +148,7 @@
 
 .mr-landing__today-title {
   font-weight: 600;
-  color: var(--c-secondary);
+  color: var(--c-body);
   margin-bottom: 12px;
 }
 
@@ -210,7 +198,7 @@
   display: block;
   padding: 24px 0;
   text-align: center;
-  color: var(--c-muted);
+  color: var(--c-body);
 }
 
 .mr-landing__footer {
@@ -219,30 +207,12 @@
 }
 
 .mr-landing__gridlink {
-  color: var(--c-muted);
+  color: var(--c-body);
   text-decoration: none;
 }
 .mr-landing__gridlink:hover {
-  color: var(--c-secondary);
+  color: var(--c-body);
   text-decoration: underline;
-}
-
-/* ================= 접근성 폴백 ================= */
-@media (prefers-reduced-transparency: reduce), (prefers-contrast: more) {
-  .mr-landing__header {
-    background: var(--c-surface) !important;
-    -webkit-backdrop-filter: none !important;
-    backdrop-filter: none !important;
-    border-bottom: 1px solid var(--c-border) !important;
-    box-shadow: none !important;
-  }
-  .mr-card--glass {
-    background: var(--c-surface) !important;
-    border: 1px solid var(--c-border) !important;
-    -webkit-backdrop-filter: none !important;
-    backdrop-filter: none !important;
-    box-shadow: var(--shadow-soft) !important;
-  }
 }
 
 /* ---- 알 수 없는 회의실 ---- */
@@ -268,17 +238,21 @@
   text-decoration: none;
 }
 
-/* ---- 상태 카드 (Card 컴포넌트가 이 modifier 를 받아 쓴다) ----
- * QR 랜딩은 요소가 적어 유리가 가장 잘 사는 화면 — "지금 비었나" 단일 상태를
- * 담는 카드 하나에만 적용한다. className 부여는 tsx 쪽 책임, 여기서는 재질만. */
-/* .mr-card--glass 의 재질 정의는 components.css 한 곳에만 둔다.
- * 여기서 다시 정의하면 두 규칙의 승패가 번들 import 순서라는 우연에 걸린다. */
 
-/* 유리 위 텍스트는 --c-fg / --c-secondary 만. --c-muted 는 대비가 위험하다. */
-.mr-card--glass .mr-landing__meta,
-.mr-card--glass .mr-landing__gaplabel,
-.mr-card--glass .mr-landing__empty,
-.mr-card--glass .mr-landing__sub,
-.mr-card--glass .t-muted {
-  color: var(--c-secondary);
+/* 오늘 예약 목록의 시각 — Muted(3.04:1) 대신 Body(7.11:1).
+ * 복도에서 이 줄을 읽고 "몇 시에 비나" 를 판단한다(§12-5). */
+.mr-landing__item-time {
+  color: var(--c-body);
+  font-variant-numeric: tabular-nums;
+}
+
+/* 넓은 화면에서 QR 링크를 열었을 때 좌측에 붙어 1000px 이 텅 비어 보였다.
+ * 이 화면은 폰용이지만 데스크톱에서도 열리므로, 읽기 폭은 유지하고 가운데로 모은다. */
+@media (min-width: 768px) {
+  .mr-landing__main {
+    padding-top: 32px;
+  }
+  .mr-landing__header {
+    justify-content: center;
+  }
 }

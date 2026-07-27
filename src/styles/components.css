@@ -4,11 +4,7 @@
 /* ---------- Button ---------- */
 .mr-btn {
   display: inline-flex;
-  /*
-   * [a11y] Apple 의 CTA 는 17px/400 이지만 그건 SF Pro 가 있는 Apple 기기 기준이다.
-   * 우리는 Pretendard 로 떨어지는 환경(Windows·ClearType 포함)이 있고 배경 대비가
-   * 4.70:1 로 AA 하한에 가까워, 400 이면 흰 글자가 얇게 뭉갠다. 500 으로 올린다.
-   */
+  /* [toss] TDS 버튼은 600 이다. 크기는 토큰이 정한다(16px). */
   font-weight: var(--t-label-w);
   align-items: center;
   justify-content: center;
@@ -46,28 +42,29 @@
 .mr-btn--primary:hover:not(:disabled) {
   background: var(--c-action-hover);
 }
-/* apple.com marketing-outline: 투명 배경 + 링크 블루 텍스트/보더 pill */
+/*
+ * 두 번째 액션은 **Weak 채움**이다 — 아웃라인이 아니다.
+ *
+ * Apple 판본은 "투명 배경 + 파란 보더" 였다. Toss 의 두 번째 액션은 옅게 채운다
+ * (toss.im 실측: #E8F3FF 배경 + #1B64DA 텍스트). 보더가 없어 화면이 조용해지고,
+ * 4.82:1 이라 채움 파랑(3.71:1)보다 오히려 안전하다.
+ */
 .mr-btn--secondary {
-  background: transparent;
-  color: var(--c-link);
-  border: 1px solid var(--c-link);
+  background: var(--c-action-weak-bg);
+  color: var(--c-action-weak-fg);
+  border: none;
   border-radius: var(--r-sm);
   padding: var(--pad-action);
   height: var(--h-action);
   font-size: var(--t-body-size);
 }
-@supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
-  .mr-btn--secondary {
-    background: var(--glass-bg);
-  }
-}
 .mr-btn--secondary:hover:not(:disabled) {
-  background: var(--c-action-tint);
+  background: var(--c-action-weak-bg-hover);
 }
 .mr-btn--compact {
   background: var(--c-action);
   color: var(--c-on-action);
-  border-radius: var(--r-sm);
+  border-radius: var(--r-seg);
   padding: var(--pad-action-compact);
   height: var(--h-action-compact);
   font-size: var(--t-small-size);
@@ -75,18 +72,14 @@
 .mr-btn--compact:hover:not(:disabled) {
   background: var(--c-action-hover);
 }
+/* quiet — 본 액션에 딸린 조작(+15분 등). 보더 없이 Weak 채움만. */
 .mr-btn--compact.mr-btn--quiet {
-  background: var(--c-action-tint);
-  color: var(--c-action);
-  border: 1px solid var(--c-action-border);
-}
-@supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
-  .mr-btn--compact.mr-btn--quiet {
-    background: var(--glass-bg);
-  }
+  background: var(--c-action-weak-bg);
+  color: var(--c-action-weak-fg);
+  border: none;
 }
 .mr-btn--compact.mr-btn--quiet:hover:not(:disabled) {
-  background: transparent;
+  background: var(--c-action-weak-bg-hover);
 }
 
 /* 비활성은 opacity 로 흐리지 않는다. 사유는 버튼 옆 캡션으로 상시 노출한다. */
@@ -97,8 +90,8 @@
   border: 1px solid var(--c-border);
 }
 .mr-btn--secondary:disabled {
+  background: var(--c-surface-muted);
   color: var(--c-muted);
-  border-color: var(--c-border);
 }
 .mr-btn--block {
   width: 100%;
@@ -107,7 +100,7 @@
 .mr-reason {
   font-size: var(--t-small-size);
   line-height: var(--t-small-lh);
-  color: var(--c-muted);
+  color: var(--c-body);
   /* omd:feel TYPE 🟡 — 비활성 사유 문장이 한 단어만 남는 줄로 꺾이지 않게 */
   text-wrap: pretty;
 }
@@ -120,7 +113,7 @@
   display: block;
   font-size: var(--t-small-size);
   line-height: var(--t-small-lh);
-  color: var(--c-secondary);
+  color: var(--c-body);
   margin-bottom: 6px;
 }
 .mr-input {
@@ -131,10 +124,21 @@
   border: 1px solid var(--c-border);
   border-radius: var(--r-md);
   height: var(--h-input);
-  padding: 0 12px;
-  /* 본문 17px 그대로. 16px 미만이면 모바일 Safari 가 자동 확대해 QR 예약 흐름이 깨진다 */
+  padding: 0 16px;
+  /* 본문 16px — Toss 는 데스크톱·모바일이 같은 값이고, 16px 은 이미 모바일 Safari
+   * 자동확대 하한이다. 그 문제가 이 판본에서는 아예 생기지 않는다(DESIGN.md §3). */
   font-size: var(--t-body-size);
 }
+/* 여러 줄 입력. 세로로만 늘린다 — 가로로 늘어나면 읽기 폭 제한(§5)이 깨진다. */
+.mr-textarea {
+  height: auto;
+  min-height: 96px;
+  padding: 12px 16px;
+  line-height: var(--t-body-lh);
+  resize: vertical;
+  font-family: inherit;
+}
+
 .mr-input::placeholder {
   color: var(--c-muted);
 }
@@ -146,7 +150,7 @@
 .mr-field__hint {
   font-size: var(--t-cap-size);
   line-height: var(--t-cap-lh);
-  color: var(--c-muted);
+  color: var(--c-body);
   margin-top: 6px;
 }
 .mr-field__hint--warn {
@@ -237,70 +241,19 @@
   padding: var(--pad-content);
   border: 1px solid var(--c-border);
 }
-/*
- * 내 예약 카드는 blur 를 걸지 않는다. 리스트에서 반복되는 클래스라
- * (내 예약 탭의 모든 행, 모바일 격자의 모든 카드) 항목마다 blur 를 걸면
- * 레이어가 항목 수만큼 늘어난다. 틴트만으로 "내 것" 은 충분히 읽힌다.
- */
 .mr-card--mine {
   background: var(--c-mine-bg);
   border-color: var(--c-mine-border);
 }
-.mr-card--flat {
-  border: none;
-}
-
-/* QR 랜딩 상태 카드처럼 화면에 하나뿐인 자리용 — sparse 하게 쓸 것 */
-.mr-card--glass {
-  background: var(--c-surface);
-  border-radius: var(--r-lg);
-  padding: var(--pad-content);
-  border: 1px solid var(--glass-edge);
-  box-shadow: var(--glass-shadow);
-}
-@supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
-  .mr-card--glass {
-    background: var(--glass-bg-strong);
-    backdrop-filter: var(--glass-blur-strong);
-    -webkit-backdrop-filter: var(--glass-blur-strong);
-    box-shadow: var(--glass-rim), var(--glass-shadow);
-  }
-}
 
 /*
- * mine 과 glass 를 함께 받는 카드 (QR 랜딩의 "내 회의 진행 중").
- * 두 클래스는 specificity 가 같아서 나중에 선언된 쪽이 이긴다 —
- * class 속성에 적는 순서는 캐스케이드와 무관하다.
- * 복합 선택자로 명시해야 "내 것" 틴트가 살아남는다.
+ * `--flat` 과 `--glass` modifier 는 없앴다.
+ *
+ * `--glass` 는 유리 재질 전용이었고 유리를 걷어낸 뒤로는 `.mr-card` 와 완전히
+ * 같은 선언이 됐다 — 이름만 남은 별칭이다. 유리 위 텍스트 대비를 올리던
+ * 선택자 목록도 함께 지웠다: 이제 Muted 는 **애초에 문장에 쓰지 않으므로**
+ * (DESIGN.md §12-5) 표면별로 보정할 것이 없다.
  */
-.mr-card--glass.mr-card--mine {
-  background: var(--c-mine-bg);
-  border-color: var(--c-mine-border);
-}
-@supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
-  .mr-card--glass.mr-card--mine {
-    background: var(--glass-bg-tint);
-    backdrop-filter: var(--glass-blur-strong);
-    -webkit-backdrop-filter: var(--glass-blur-strong);
-    border-color: var(--c-mine-border);
-  }
-}
-
-/*
- * 유리 위 텍스트 보정.
- * --c-muted(#6E6E73) 는 불투명 흰 배경에서도 4.86:1 이라 반투명 위에서는 그 아래로 떨어진다.
- * 유리 표면 안의 보조 텍스트는 --c-secondary(7.86:1) 로 올린다.
- */
-.mr-appbar .mr-navlink,
-.mr-dialog .mr-dialog__sub,
-.mr-dialog .mr-reason,
-.mr-dialog .mr-field__hint,
-.mr-dialog .mr-stepper__note,
-.mr-card--glass .mr-reason,
-.mr-card--glass .t-muted,
-.mr-card--mine .mr-reason {
-  color: var(--c-secondary);
-}
 
 /* ---------- Badge ---------- */
 .mr-badge {
@@ -308,9 +261,9 @@
   align-items: center;
   height: var(--h-badge);
   border-radius: var(--r-pill);
-  padding: 0 8px;
-  font-size: var(--t-cap-size);
-  line-height: var(--t-cap-lh);
+  padding: 0 10px;
+  font-size: var(--t-small-size);
+  line-height: 1;
   white-space: nowrap;
 }
 .mr-badge--mine {
@@ -321,16 +274,8 @@
   background: var(--c-attn-bg);
   color: var(--c-attn-fg);
 }
-.mr-badge--neutral {
-  background: var(--c-canvas);
-  color: var(--c-secondary);
-}
-/* 얇은 유리 — 개수가 많으므로 blur 없이 반투명 배경만. 색 의미는 유지. */
-@supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
-  .mr-badge--neutral {
-    background: var(--glass-bg);
-  }
-}
+/* 중립(색 없는) 배지는 두지 않는다 — 배지는 "여기만 봐라" 는 신호이고, 그 신호를
+ * 쓰지 않는 배지는 자리만 차지한다(DESIGN.md §4). tone 은 mine / attn 둘 중 하나. */
 
 /* ---------- Tabs ---------- */
 .mr-tabs {
@@ -348,7 +293,7 @@
   margin-bottom: -1px;
   padding: 0;
   font-size: var(--t-body-size);
-  color: var(--c-muted);
+  color: var(--c-body);
   cursor: pointer;
   transition: color var(--dur-hover) var(--ease-out), border-color var(--dur-hover) var(--ease-out),
     transform var(--dur-hover) var(--ease-out);
@@ -383,15 +328,9 @@
    * 스크롤 체이닝을 여기서 한 번 더 막는다. */
   overscroll-behavior: contain;
 }
-@supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
-  .mr-backdrop {
-    backdrop-filter: blur(8px);
-    -webkit-backdrop-filter: blur(8px);
-  }
-}
 .mr-dialog {
   background: var(--c-surface);
-  /* DESIGN.md §4: 다이얼로그 radius 20px — 카드(18px)보다 한 단 큰 --r-xl */
+  /* DESIGN.md §4: 다이얼로그 20px — 카드(16px)보다 한 단 큰 --r-xl */
   border-radius: var(--r-xl);
   box-shadow: var(--shadow-modal);
   padding: 24px;
@@ -406,15 +345,20 @@
   overscroll-behavior: contain;
   scrollbar-gutter: stable;
 }
-@supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
-  .mr-dialog {
-    background: var(--glass-bg-strong);
-    backdrop-filter: var(--glass-blur-strong);
-    -webkit-backdrop-filter: var(--glass-blur-strong);
-    box-shadow: var(--glass-rim), var(--glass-shadow), var(--shadow-modal);
-    border: 1px solid var(--glass-edge);
-  }
+/*
+ * 다이얼로그가 열리면 컨테이너 자신이 포커스를 받는다(스크린리더가 제목부터 읽게
+ * 하는 표준 패턴). 그런데 Chrome 은 비입력 요소의 **프로그램적 포커스**도
+ * :focus-visible 로 판정해서, base.css 의 전역 하드 아웃라인이 패널 전체를
+ * 파란 테두리로 감쌌다 — 실화면에서 확인했다.
+ *
+ * 컨테이너에서만 링을 끈다. 배경이 어두워지고 판이 떠 있어 "지금 여기가 포커스" 는
+ * 이미 명백하고, 안쪽 컨트롤들의 포커스 링은 그대로 살아 있다.
+ */
+.mr-dialog:focus,
+.mr-dialog:focus-visible {
+  outline: none;
 }
+
 .mr-dialog__title {
   font-family: var(--font-sans);
   font-size: var(--t-title-size);
@@ -426,7 +370,7 @@
 .mr-dialog__sub {
   font-size: var(--t-small-size);
   line-height: var(--t-small-lh);
-  color: var(--c-muted);
+  color: var(--c-body);
   margin-top: 2px;
   /* omd:feel TYPE 🟡 — 날짜/시간/인원 등 숫자가 자주 섞이는 자리. 자릿수 흔들림 방지 */
   font-variant-numeric: tabular-nums;
@@ -440,9 +384,31 @@
 
 /* 파괴적 동작과 안전한 기본 동작이 한 줄에 있을 때.
  * 같은 생김새로 나란히 두면 "예약 취소"를 "닫기"인 줄 알고 누른다.
- * 색으로 구분할 빨강이 없으므로(DESIGN.md §2 unresolved) 거리로 분리한다. */
+ * 빨강(글자)과 거리를 **둘 다** 쓴다 — 색만으로는 색을 구별하지 못하는 사용자에게
+ * 아무 신호가 아니고, 거리만으로는 눈에 덜 걸린다. */
 .mr-dialog__actions--split {
   justify-content: space-between;
+}
+
+/* ---------- Destructive Action ----------
+ * 되돌릴 수 없는 동작. **채우지 않는다** — 빨간 채움 버튼은 실수로 누르기를
+ * 유도하고, #E42939 는 흰 텍스트 대비도 3.06:1 밖에 되지 않는다.
+ * 색은 글자에만 두고 배경은 비운다(DESIGN.md §4). */
+.mr-btn--danger {
+  background: transparent;
+  color: var(--c-danger);
+  border: none;
+  border-radius: var(--r-sm);
+  padding: var(--pad-action);
+  height: var(--h-action);
+  font-size: var(--t-body-size);
+}
+.mr-btn--danger:hover:not(:disabled) {
+  background: var(--c-danger-weak-bg);
+}
+.mr-btn--danger:disabled {
+  background: var(--c-surface-muted);
+  color: var(--c-muted);
 }
 
 @keyframes mr-fade {
@@ -503,15 +469,6 @@
   color: var(--c-mine-fg);
 }
 /* 반투명 배경만 — blur 없음 */
-@supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
-  .mr-alert {
-    background: color-mix(in srgb, var(--c-attn-bg) 85%, transparent);
-  }
-  .mr-alert--info {
-    background: var(--glass-bg-tint);
-  }
-}
-
 /* ---------- 인원 스테퍼 ----------
  * 새 컴포넌트를 발명하지 않고 Compact 버튼을 조합한다.
  * ± 로 조작해 QR 모바일에서 타이핑 없이 인원을 정할 수 있게 하는 것이 요점. */
@@ -536,7 +493,7 @@
 .mr-stepper__note {
   font-size: var(--t-small-size);
   line-height: var(--t-small-lh);
-  color: var(--c-muted);
+  color: var(--c-body);
 }
 
 /* ---------- 참석자 선택 ---------- */
@@ -560,7 +517,7 @@
   height: var(--h-action);
   padding: var(--pad-action);
   border-radius: var(--r-pill);
-  border: 1px solid var(--c-action-border);
+  border: 1px solid var(--c-action-weak-fg);
   background: transparent;
   color: var(--c-action);
   font-size: var(--t-small-size);
@@ -572,7 +529,7 @@
   transform: scale(0.97);
 }
 .mr-picker__teamcount {
-  color: var(--c-muted);
+  color: var(--c-body);
   font-variant-numeric: tabular-nums;
 }
 
@@ -615,7 +572,7 @@
 }
 .mr-picker__detail {
   font-size: var(--t-small-size);
-  color: var(--c-muted);
+  color: var(--c-body);
 }
 
 .mr-picker__chips {
@@ -640,11 +597,6 @@
   font-size: var(--t-small-size);
 }
 /* 얇은 유리 — 개수가 많으므로 blur 없이 반투명 배경만 */
-@supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
-  .mr-picker__chip {
-    background: var(--glass-bg-tint);
-  }
-}
 /*
  * ✕ 는 24x24 로 둔다 — WCAG 2.5.8 AA 최소(24px)는 충족하지만 DESIGN.md 의 44px 권장에는
  * 못 미친다. 히트 영역을 44x44 로 넓히면 28px 짜리 칩 밖으로 튀어나와 옆 칩의 ✕ 와
@@ -657,7 +609,7 @@
   border: none;
   border-radius: var(--r-pill);
   background: transparent;
-  color: var(--c-secondary);
+  color: var(--c-body);
   font-size: 16px;
   line-height: 1;
   cursor: pointer;
@@ -702,57 +654,6 @@
   flex-wrap: wrap;
 }
 
-/* ---------- 유리 재질 폴백 ----------
- * 투명 효과를 줄이거나(대비 낮은 사용자) 고대비를 요구하는 사용자에게는
- * 이 파일에서 유리를 쓴 모든 선택자를 불투명으로 되돌린다. */
-@media (prefers-reduced-transparency: reduce), (prefers-contrast: more) {
-  .mr-btn--secondary,
-  .mr-btn--compact.mr-btn--quiet {
-    background: var(--c-action-tint);
-    backdrop-filter: none;
-    -webkit-backdrop-filter: none;
-  }
-  .mr-card--mine {
-    background: var(--c-mine-bg);
-    backdrop-filter: none;
-    -webkit-backdrop-filter: none;
-    border-color: var(--c-mine-border);
-    box-shadow: none;
-  }
-  .mr-card--glass {
-    background: var(--c-surface);
-    backdrop-filter: none;
-    -webkit-backdrop-filter: none;
-    box-shadow: var(--shadow-modal);
-    border-color: var(--c-border);
-  }
-  .mr-badge--neutral {
-    background: var(--c-canvas);
-    backdrop-filter: none;
-    -webkit-backdrop-filter: none;
-  }
-  .mr-backdrop {
-    backdrop-filter: none;
-    -webkit-backdrop-filter: none;
-  }
-  .mr-dialog {
-    background: var(--c-surface);
-    backdrop-filter: none;
-    -webkit-backdrop-filter: none;
-    box-shadow: var(--shadow-modal);
-    border-color: var(--c-border);
-  }
-  .mr-alert {
-    background: var(--c-attn-bg);
-  }
-  .mr-alert--info {
-    background: var(--c-mine-bg);
-  }
-  .mr-picker__chip {
-    background: var(--c-mine-bg);
-  }
-}
-
 /* ---------- 반복 예약 실패 회차 목록 (RecurrenceResult) ----------
  * mr-picker__results 와 같은 불투명 표면 위 목록 패턴을 재사용한다.
  * 반복되는 항목이라 유리를 걸지 않는다 (DESIGN.md 유리 규칙). */
@@ -779,5 +680,5 @@
   border-top: 1px solid var(--c-border);
 }
 .mr-recur-fail__reason {
-  color: var(--c-muted);
+  color: var(--c-body);
 }

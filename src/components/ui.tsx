@@ -1,12 +1,17 @@
 import { useEffect, useRef, useState } from "react";
-import type { ButtonHTMLAttributes, InputHTMLAttributes, ReactNode } from "react";
+import type {
+  ButtonHTMLAttributes,
+  InputHTMLAttributes,
+  ReactNode,
+  TextareaHTMLAttributes,
+} from "react";
 
 const cx = (...parts: Array<string | false | null | undefined>): string =>
   parts.filter(Boolean).join(" ");
 
 /* ---------------- Button ---------------- */
 
-type ButtonVariant = "primary" | "secondary" | "compact" | "compact-quiet";
+type ButtonVariant = "primary" | "secondary" | "danger" | "compact" | "compact-quiet";
 
 interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: ButtonVariant;
@@ -16,6 +21,8 @@ interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 const VARIANT_CLASS: Record<ButtonVariant, string> = {
   primary: "mr-btn--primary",
   secondary: "mr-btn--secondary",
+  /** 되돌릴 수 없는 동작 전용. 채우지 않고 글자에만 빨강을 둔다 (DESIGN.md §4) */
+  danger: "mr-btn--danger",
   compact: "mr-btn--compact",
   "compact-quiet": "mr-btn--compact mr-btn--quiet",
 };
@@ -61,6 +68,35 @@ export function Field({ label, hint, hintTone = "muted", id, ...rest }: FieldPro
     <label className="mr-field" htmlFor={fieldId}>
       <span className="mr-field__label">{label}</span>
       <input id={fieldId} className="mr-input" {...rest} />
+      {hint ? (
+        <span className={cx("mr-field__hint", hintTone === "warn" && "mr-field__hint--warn")}>
+          {hint}
+        </span>
+      ) : null}
+    </label>
+  );
+}
+
+interface TextAreaFieldProps extends TextareaHTMLAttributes<HTMLTextAreaElement> {
+  label: string;
+  hint?: string | undefined;
+  hintTone?: "muted" | "warn";
+}
+
+/**
+ * 여러 줄 입력. Field 와 label · hint 를 **같은 구조로** 쓴다 — 입력만 있고 설명이
+ * 없는 필드를 만들지 않는다는 규칙(DESIGN.md §4)은 한 줄이든 여러 줄이든 같다.
+ *
+ * 높이만 다르다: 한 줄 입력의 48px 고정 높이 대신 최소 높이를 주고 세로로만 늘린다
+ * (가로로 늘어나면 읽기 폭 720px 제한이 깨진다).
+ */
+export function TextAreaField({ label, hint, hintTone = "muted", id, ...rest }: TextAreaFieldProps) {
+  const auto = useRef("mr-t-" + Math.random().toString(36).slice(2, 8));
+  const fieldId = id ?? auto.current;
+  return (
+    <label className="mr-field" htmlFor={fieldId}>
+      <span className="mr-field__label">{label}</span>
+      <textarea id={fieldId} className="mr-input mr-textarea" {...rest} />
       {hint ? (
         <span className={cx("mr-field__hint", hintTone === "warn" && "mr-field__hint--warn")}>
           {hint}
@@ -122,23 +158,21 @@ export function RadioGroup<T extends string>({
 export function Card({
   children,
   mine,
-  glass,
   className,
   style,
 }: {
   children: ReactNode;
   mine?: boolean;
-  /** 기능적 크롬 표면(상태 카드 등)에만 쓴다. 반복되는 리스트 항목에는 쓰지 않는다. */
-  glass?: boolean;
   className?: string;
   style?: React.CSSProperties;
 }) {
+  /*
+   * `glass` prop 은 없앴다. 유리를 걷어낸 뒤(DESIGN.md §6) `--glass` modifier 는
+   * `.mr-card` 와 완전히 같은 선언이 됐고, 이름만 남은 별칭을 유지하면 다음 사람이
+   * "여긴 유리를 쓰는 자리" 로 오해한다.
+   */
   return (
-    <div
-      // mine 이 유리보다 우선하도록 뒤에 둔다 — 캐스케이드에서 mine 배경이 이긴다.
-      className={cx("mr-card", glass && "mr-card--glass", mine && "mr-card--mine", className)}
-      style={style}
-    >
+    <div className={cx("mr-card", mine && "mr-card--mine", className)} style={style}>
       {children}
     </div>
   );
@@ -147,10 +181,11 @@ export function Card({
 /* ---------------- Badge ---------------- */
 
 export function Badge({
-  tone = "neutral",
+  tone,
   children,
 }: {
-  tone?: "mine" | "attn" | "neutral";
+  /** 배지는 "여기만 봐라" 는 신호다 — 색 없는 중립 배지는 두지 않는다(DESIGN.md §4). */
+  tone: "mine" | "attn";
   children: ReactNode;
 }) {
   return <span className={cx("mr-badge", "mr-badge--" + tone)}>{children}</span>;

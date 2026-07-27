@@ -36,7 +36,7 @@ function startOfDay(d: Date): Date {
   return out;
 }
 
-/** 날짜 범위 필터 (일 단위, from·to 모두 포함). listByRoomRange/listByRange 가 쓴다. */
+/** 날짜 범위 필터 (일 단위, from·to 모두 포함). listByRange 가 쓴다. */
 function inDateRange(d: Date, from: Date, to: Date): boolean {
   const t = startOfDay(d).getTime();
   return t >= startOfDay(from).getTime() && t <= startOfDay(to).getTime();
@@ -101,6 +101,7 @@ function seed(): Booking[] {
       attendeeCount: 3,
       conference: { kind: "meet", url: "https://meet.google.com/abc-defg-hij" },
       checkedInAt: atOffset(0, 9, 2),
+      summary: null,
       isMine: false,
     },
     {
@@ -118,6 +119,7 @@ function seed(): Booking[] {
       attendeeCount: 5,
       conference: { kind: "zoom", url: "https://zoom.us/j/1234567890" },
       checkedInAt: null,
+      summary: null,
       isMine: true,
     },
     {
@@ -134,6 +136,7 @@ function seed(): Booking[] {
       attendeeCount: 2,
       conference: null,
       checkedInAt: null,
+      summary: null,
       isMine: false,
     },
     {
@@ -151,6 +154,7 @@ function seed(): Booking[] {
       attendeeCount: 4,
       conference: null,
       checkedInAt: null,
+      summary: null,
       isMine: false,
     },
     {
@@ -167,6 +171,7 @@ function seed(): Booking[] {
       attendeeCount: 18,
       conference: { kind: "meet", url: "https://meet.google.com/xyz-uvwx-yz" },
       checkedInAt: null,
+      summary: null,
       isMine: false,
     },
     {
@@ -183,6 +188,7 @@ function seed(): Booking[] {
       attendeeCount: 6,
       conference: null,
       checkedInAt: null,
+      summary: null,
       isMine: true,
     },
     // 반복 예약 부분 성공 데모용 시드.
@@ -203,6 +209,7 @@ function seed(): Booking[] {
       attendeeCount: 5,
       conference: null,
       checkedInAt: null,
+      summary: null,
       isMine: false,
     },
     {
@@ -219,7 +226,65 @@ function seed(): Booking[] {
       attendeeCount: 4,
       conference: null,
       checkedInAt: null,
+      summary: null,
       isMine: false,
+    },
+
+    /*
+     * 지난 내 예약. "지난 예약" 탭과 회의 요약을 실제로 판단하려면 세 가지가 다 있어야 한다:
+     * 요약을 이미 쓴 회의 · 아직 안 쓴 회의 · 체크인을 놓친 회의.
+     * 하나만 넣어두면 빈 상태와 채워진 상태 중 한쪽을 못 본다.
+     */
+    {
+      id: nextId(),
+      roomId: roomLarge,
+      title: "스프린트 회고",
+      organizerName: ME.name,
+      organizerEmail: ME.email,
+      organizerDepartment: ME_DEPARTMENT,
+      recurringEventId: null,
+      start: atOffset(-1, 15, 0),
+      end: atOffset(-1, 16, 0),
+      headcount: 6,
+      attendeeCount: 6,
+      conference: null,
+      checkedInAt: atOffset(-1, 15, 3),
+      summary: "배포 자동화 먼저 하기로 했어요. 다음 회고까지 최민지님이 초안을 가져옵니다.",
+      isMine: true,
+    },
+    {
+      id: nextId(),
+      roomId: roomSmall,
+      title: "디자인 리뷰",
+      organizerName: ME.name,
+      organizerEmail: ME.email,
+      organizerDepartment: ME_DEPARTMENT,
+      recurringEventId: null,
+      start: atOffset(-2, 11, 0),
+      end: atOffset(-2, 11, 30),
+      headcount: 3,
+      attendeeCount: 2,
+      conference: null,
+      checkedInAt: atOffset(-2, 11, 1),
+      summary: null,
+      isMine: true,
+    },
+    {
+      id: nextId(),
+      roomId: roomSmall,
+      title: "벤더 미팅",
+      organizerName: ME.name,
+      organizerEmail: ME.email,
+      organizerDepartment: ME_DEPARTMENT,
+      recurringEventId: null,
+      start: atOffset(-5, 10, 0),
+      end: atOffset(-5, 11, 0),
+      headcount: 4,
+      attendeeCount: 4,
+      conference: { kind: "zoom", url: "https://zoom.us/j/1234567890" },
+      checkedInAt: null,
+      summary: null,
+      isMine: true,
     },
   ];
 }
@@ -260,11 +325,6 @@ export const mockAdapter: BookingRepository = {
       .map(clone);
   },
 
-  async listByRoomRange(roomId, from, to) {
-    await sleep(160);
-    return store.filter((b) => b.roomId === roomId && inDateRange(b.start, from, to)).map(clone);
-  },
-
   async listByRange(from, to) {
     await sleep(180);
     return store.filter((b) => inDateRange(b.start, from, to)).map(clone);
@@ -300,6 +360,7 @@ export const mockAdapter: BookingRepository = {
       attendeeCount: draft.attendeeEmails.length,
       conference: draft.conference,
       checkedInAt: null,
+      summary: null,
       isMine: true,
     };
     store = [...store, created];
@@ -352,6 +413,7 @@ export const mockAdapter: BookingRepository = {
         attendeeCount: draft.attendeeEmails.length,
         conference: draft.conference,
         checkedInAt: null,
+        summary: null,
         isMine: true,
       };
       store = [...store, created];
@@ -386,19 +448,24 @@ export const mockAdapter: BookingRepository = {
     return { ok: true, booking: clone(updated) };
   },
 
-  async reschedule(bookingId, newStart, newEnd): Promise<ChangeResult> {
+  async reschedule(bookingId, newStart, newEnd, newRoomId): Promise<ChangeResult> {
     await sleep(180);
     const target = store.find((b) => b.id === bookingId);
     if (!target) return { ok: false, reason: "error", message: "예약을 찾을 수 없습니다" };
 
+    // 목적지 회의실. 안 주면 제자리.
+    const destRoomId = newRoomId ?? target.roomId;
+
     // 저장 직전 재조회 — 드래그하는 동안 남이 그 자리를 잡았을 수 있다.
     // 화면이 들고 있던 목록으로 판단하면 조용히 이중 예약이 된다.
+    // **목적지 방**을 기준으로 검사한다 — 원래 방으로 검사하면 방을 옮길 때
+    // 정작 가려는 방의 충돌을 놓친다.
     const blocker = store.find(
-      (b) => b.id !== bookingId && b.roomId === target.roomId && overlaps(newStart, newEnd, b.start, b.end),
+      (b) => b.id !== bookingId && b.roomId === destRoomId && overlaps(newStart, newEnd, b.start, b.end),
     );
     if (blocker) return { ok: false, reason: "blocked", by: blocker.organizerName };
 
-    const updated: Booking = { ...target, start: newStart, end: newEnd };
+    const updated: Booking = { ...target, roomId: destRoomId, start: newStart, end: newEnd };
     store = store.map((b) => (b.id === bookingId ? updated : b));
     return { ok: true, booking: clone(updated) };
   },
@@ -406,6 +473,28 @@ export const mockAdapter: BookingRepository = {
   async cancel(bookingId) {
     await sleep(180);
     store = store.filter((b) => b.id !== bookingId);
+  },
+
+  async listMinePast(limit) {
+    await sleep(140);
+    const now = new Date();
+    return store
+      .filter((b) => b.isMine && b.end.getTime() < now.getTime())
+      .sort((a, b) => b.start.getTime() - a.start.getTime()) // 최신순 — 방금 끝난 회의가 맨 위
+      .slice(0, limit)
+      .map(clone);
+  },
+
+  async saveSummary(bookingId, summary) {
+    await sleep(160);
+    const target = store.find((b) => b.id === bookingId);
+    if (!target) throw new Error("예약을 찾을 수 없어요");
+    // 주최자만 쓸 수 있다 — 남의 회의 description 을 고치면 초대받은 모두의 캘린더가 바뀐다.
+    if (!target.isMine) throw new Error("내가 잡은 회의만 기록을 남길 수 있어요");
+    const trimmed = summary.trim();
+    store = store.map((b) =>
+      b.id === bookingId ? { ...b, summary: trimmed.length > 0 ? trimmed : null } : b,
+    );
   },
 
   async checkIn(bookingId) {
