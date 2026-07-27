@@ -1170,6 +1170,39 @@ export function GridScreen() {
           고르는 것)이고 일/주/월·격자/목록은 "어떻게 보나"(같은 데이터를 그리는 방식)다.
           같은 축끼리 붙여 두면 오른쪽 끝은 언제나 뷰 전환 하나만 남는다.
         */}
+        {/*
+          회의실 토글 — **사이드바가 접히는 폭(<1024px)에서만** 나타난다.
+          같은 것을 정하는 컨트롤이 둘이 되는 것 아니냐고 하면, 아니다: 둘은 절대
+          동시에 보이지 않고 같은 상태(useRoomVisibility)를 읽고 쓴다. 사이드바가
+          숨는 폭에서는 회의실을 켜고 끌 방법이 아예 없었다 — 주간이 켠 방에
+          의존하게 되면서 그 구멍이 실제 기능 구멍이 됐다.
+
+          모양은 사이드바와 같은 언어다: 채운 점 = 켜짐, 빈 링 = 꺼짐, 꺼진 것만
+          글자가 흐리다. 켜졌다고 파랗게 채우지 않는다(§12-6 — 기본값에 강조를 주지 않는다).
+        */}
+        {ROOMS.length > 1 ? (
+          <div className="grid-roomtoggle" role="group" aria-label="회의실 표시">
+            {ROOMS.map((room) => {
+              const on = roomVisibility.isVisible(room.id);
+              const last = on && visibleRooms.length <= 1;
+              return (
+                <button
+                  key={room.id}
+                  type="button"
+                  role="switch"
+                  aria-checked={on}
+                  disabled={last}
+                  className={cx("grid-roomtoggle__btn", on && "is-on")}
+                  onClick={() => roomVisibility.toggle(room.id)}
+                >
+                  <span className="grid-roomtoggle__dot" aria-hidden="true" />
+                  {room.name}
+                </button>
+              );
+            })}
+          </div>
+        ) : null}
+
         {departments.length > 0 ? (
           <>
             <span className="grid-controlbar__divider" aria-hidden="true" />
@@ -1851,9 +1884,21 @@ function WeekView({
     marginTop: 16,
     "--grid-slot-h": String(weekSlotPx) + "px",
     // 좁은 화면은 어차피 가로 스크롤이므로 열을 더 좁히지 않는다 — 손가락으로 누를 폭이 먼저다
-    // 76px: 1440px 창(사이드바 240 + 패딩 32 + 스크롤바 자리 15 제외)에서 방 둘 x 7일이
-    // 가로 스크롤 없이 딱 들어가는 값 — 실측 1101 / 14 = 78.6px 이 상한이다.
-    "--grid-week-col-min": isNarrow ? (split ? "96px" : "108px") : split ? "76px" : "132px",
+    /*
+     * 열 하한. `minmax(하한, 1fr)` 이므로 폭이 남으면 열은 알아서 늘어난다 —
+     * 이 값은 "여기부터는 가로 스크롤" 을 정하는 바닥이다.
+     *
+     * 쪼갠 열의 바닥을 76px 로 뒀더니 1024px 창(사이드바가 켜지는 첫 폭)에서
+     * 가로 스크롤 394px 이 생겼다: 가용 685px / 14열 = 48.9px 밖에 안 된다.
+     * 76px 은 "1440px 에서 스크롤이 안 생기는 값" 이었지 바닥이어야 할 이유가
+     * 없었다 — 1440px 에서는 1fr 이 알아서 78px 로 늘린다.
+     *
+     * 바닥은 44px 로 내린다(터치 타깃 하한이자, 좌측 4px 막대 + 여백을 빼고도
+     * 이름 두 글자가 남는 최소). 그러면 1024px 에서도 48.9px 씩 들어가 스크롤이
+     * 사라진다. 좁은 화면은 반대로 96px 을 유지한다 — 거기서는 7일을 다 보는 것보다
+     * 손가락으로 누를 수 있는 것이 먼저고, 가로 스크롤이 원래 그 뷰의 동작이다.
+     */
+    "--grid-week-col-min": isNarrow ? (split ? "96px" : "108px") : split ? "44px" : "132px",
   } as CSSProperties;
 
   const gridTemplateColumns =
