@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties } from "react";
-import { Alert, Badge, Button, ButtonWithReason, Card, Dialog } from "../components/ui";
+import { Alert, Badge, Button, ButtonWithReason, Dialog } from "../components/ui";
 import { BookingDialog } from "./BookingDialog";
 import { ROOMS, POLICY, roomById } from "../app/config";
 import { useRoomVisibility } from "../app/roomVisibility";
@@ -248,6 +248,7 @@ function AgendaView({
   loading,
   now,
   onSelectBooking,
+  onCreate,
 }: {
   bookings: readonly Booking[];
   group: AgendaGroup;
@@ -256,6 +257,12 @@ function AgendaView({
   loading: boolean;
   now: Date;
   onSelectBooking: (b: Booking) => void;
+  /**
+   * 이 화면에서 새 예약을 시작한다. **다음으로 비어 있는 30분**을 골라 다이얼로그를 연다
+   * — 목록에는 "빈 줄" 이 없어서 사용자가 시간을 가리킬 좌표가 없다. 그래서 화면이
+   * 대신 고르고, 다이얼로그에서 고치게 한다. null 이면 오늘 남은 빈 시간이 없다.
+   */
+  onCreate: () => void;
 }) {
   const sorted = useMemo(
     () => [...bookings].sort((a, b) => a.start.getTime() - b.start.getTime()),
@@ -309,14 +316,15 @@ function AgendaView({
       <div className="agenda__toolbar">
         <Segmented items={AGENDA_GROUPS} active={group} onChange={onGroupChange} label="묶는 기준" small />
         {/*
-          목록 보기에는 **새 예약을 만드는 길이 없다** — 이 화면은 있는 일정을 시간순으로
-          읽는 곳이고, 없는 시간을 가리킬 좌표가 없다(격자에는 빈 슬롯이 있지만 목록에는
-          빈 줄이 없다). 그 사실을 적어두지 않으면 "여기선 예약이 안 되나?" 로 남는다 —
-          되는 경로를 함께 알려준다(DESIGN.md §10).
+          목록에는 "빈 줄" 이 없어서 사용자가 빈 시간을 가리킬 수 없다. 그래서 예약을
+          시작하는 길이 아예 없었다 — 격자로 가라는 안내만 있었다. 화면이 다음 빈 30분을
+          대신 골라주고, 정확한 시간은 다이얼로그에서 정하게 한다.
         */}
+        <Button variant="secondary" onClick={onCreate}>
+          새 예약
+        </Button>
         <p className="agenda__hint">
-          일정을 누르면 시간을 바꾸거나 취소할 수 있어요. 새로 예약하려면 <b>격자</b> 보기에서 빈 시간을
-          끌어주세요.
+          일정을 누르면 시간을 바꾸거나 취소할 수 있어요.
         </p>
       </div>
 
@@ -687,6 +695,117 @@ export function GridScreen() {
       else max = Math.min(max, s - 1);
     }
     return { min, max };
+  }
+
+  /* ---- 키보드로 예약하기 ----
+   *
+   * 격자는 마우스로 끄는 것이 주 인터랙션이라, 그동안 **키보드로는 새 예약을 만들 수
+   * 없었다**(빈 슬롯이 <div> 였다). 드래그의 키보드 대체를 "끌기" 로 흉내내지 않고,
+   * 주간 뷰와 같은 계약 — **한 칸(30분)을 골라 시작하고 길이는 다이얼로그에서** — 으로
+   * 맞췄다. 배울 것이 늘지 않는다.
+   */
+  const [rovingCell, setRovingCell] = useState<{ roomId: string; slot: number } | null>(null);
+
+  /** 지금 탭으로 진입했을 때 포커스를 받을 칸인지. 아직 아무 데도 안 갔으면 첫 방의 첫 칸. */
+  function isRovingCell(roomId: string, slot: number): boolean {
+    if (rovingCell) return rovingCell.roomId === roomId && rovingCell.slot === slot;
+    const first = visibleRooms[0];
+    return first !== undefined && first.id === roomId && slot === 0;
+  }
+
+  function focusCell(roomId: string, slot: number) {
+    setRovingCell({ roomId, slot });
+    // 렌더 후에 실제 DOM 으로 포커스를 옮긴다 — tabIndex 가 먼저 바뀌어야 한다.
+    requestAnimationFrame(() => {
+      const el = document.querySelector<HTMLElement>(
+        '.grid-col[data-room-id="' + roomId + '"] .grid-slot--cell[data-slot="' + String(slot) + '"]',
+      );
+      el?.focus();
+    });
+  }
+
+  function onSlotKeyDown(e: React.KeyboardEvent, roomId: string, slot: number) {
+    const roomIndex = visibleRooms.findIndex((r) => r.id === roomId);
+    if (e.key === "Enter" || e.key === " ") {
+      /*
+       * <button> 의 Enter 는 기본적으로 click 을 일으킨다. 슬롯의 click 은 드래그
+       * 종료(mouseup) 경로와 겹치므로, 여기서 막고 직접 연다 — 그렇지 않으면 마우스로
+       * 끌고 놓았을 때 다이얼로그가 두 번 열린다.
+       */
+      e.preventDefault();
+      if (firstLoad) return;
+      const range = freeRangeAround(roomId, slot);
+      if (!range) {
+        /*
+         * 이미 예약된 칸. 조용히 아무 일도 안 하면 "키보드에서는 안 되는구나" 로
+         * 읽힌다 — 마우스로 그 자리를 누르면 상세가 열리므로, 키보드도 같은 것을 연다.
+         * 두 입력 방식이 같은 곳에서 같은 결과를 낸다.
+         */
+        const at = slotToDate(slot).getTime();
+        const occupying = (bookingsByRoom.get(roomId) ?? []).find(
+          (b) => b.start.getTime() <= at && at < b.end.getTime(),
+        );
+        if (occupying) setDetailBooking(occupying);
+        return;
+      }
+      setDialogRange({
+        roomId,
+        start: slotToDate(slot),
+        end: slotToDate(slot + 1),
+      });
+      return;
+    }
+    const move = (dSlot: number, dRoom: number) => {
+      e.preventDefault();
+      const nextRoom = visibleRooms[Math.min(visibleRooms.length - 1, Math.max(0, roomIndex + dRoom))];
+      const nextSlot = Math.min(slotCount - 1, Math.max(0, slot + dSlot));
+      if (nextRoom) focusCell(nextRoom.id, nextSlot);
+    };
+    if (e.key === "ArrowDown") move(1, 0);
+    else if (e.key === "ArrowUp") move(-1, 0);
+    else if (e.key === "ArrowRight") move(0, 1);
+    else if (e.key === "ArrowLeft") move(0, -1);
+    else if (e.key === "Home") move(-slot, 0);
+    else if (e.key === "End") move(slotCount - 1 - slot, 0);
+  }
+
+  /**
+   * 지금 이후로 가장 먼저 비어 있는 30분을 찾는다. 목록 보기의 "새 예약" 이 쓴다.
+   *
+   * 방을 순서대로 보는 것이 아니라 **시각을 먼저 맞춘다** — 같은 시각이면 사이드바
+   * 순서(=사용자가 보는 순서)의 첫 방을 고른다. 방부터 훑으면 소회의실 저녁이
+   * 대회의실 지금보다 먼저 잡힌다.
+   */
+  function nextFreeRange(): { roomId: string; start: Date; end: Date } | null {
+    /*
+     * slotIndexOf 는 **소수**를 돌려준다 — 현재시각 선을 픽셀로 놓기 위한 값이라
+     * 그게 맞다. 여기서는 칸 번호가 필요하므로 내림한 뒤 다음 칸으로 넘어간다.
+     * 안 그러면 "13:59–14:29" 처럼 30분 격자에 없는 시각이 나온다(실제로 그랬다).
+     */
+    const startSlot = isToday
+      ? Math.max(0, Math.floor(slotIndexOf(now, dayStart, POLICY.slotMinutes)) + 1)
+      : 0;
+    for (let slot = startSlot; slot < slotCount; slot += 1) {
+      for (const room of visibleRooms) {
+        if (freeRangeAround(room.id, slot)) {
+          return { roomId: room.id, start: slotToDate(slot), end: slotToDate(slot + 1) };
+        }
+      }
+    }
+    return null;
+  }
+
+  /** 한 방의 다음 빈 30분. 모바일의 방별 "예약" 버튼이 쓴다. */
+  function nextFreeRangeInRoom(roomId: string): { start: Date; end: Date } | null {
+    const startSlot = isToday
+      ? Math.max(0, Math.floor(slotIndexOf(now, dayStart, POLICY.slotMinutes)) + 1)
+      : 0;
+    for (let slot = startSlot; slot < slotCount; slot += 1) {
+      if (freeRangeAround(roomId, slot)) {
+        return { start: slotToDate(slot), end: slotToDate(slot + 1) };
+      }
+    }
+    return null;
   }
 
   function startDrag(roomId: string, slot: number, colTop: number) {
@@ -1228,12 +1347,28 @@ export function GridScreen() {
                       data-room-id={room.id}
                     >
                       {slotIndices.map((i) => (
-                        <div
+                        <button
                           key={i}
+                          type="button"
+                          data-room-id={room.id}
+                          data-slot={i}
+                          /*
+                           * roving tabindex — 격자 전체에서 **한 칸만** 탭 대상이다.
+                           * 48개 슬롯을 전부 탭 가능하게 두면 키보드 사용자가 격자를
+                           * 지나가는 데만 탭을 48번 눌러야 한다. 진입은 한 번, 그 뒤는
+                           * 화살표로 움직인다(캘린더 앱의 표준 동작).
+                           */
+                          tabIndex={isRovingCell(room.id, i) ? 0 : -1}
                           className={cx(
                             "grid-slot",
+                            "grid-slot--cell",
                             slotIsHourBoundary(i, POLICY.slotMinutes) ? "grid-slot--hour" : "grid-slot--half",
                           )}
+                          aria-label={
+                            room.name + " " + hhmm(slotToDate(i)) + " 예약하기"
+                          }
+                          onFocus={() => setRovingCell({ roomId: room.id, slot: i })}
+                          onKeyDown={(e) => onSlotKeyDown(e, room.id, i)}
                           onMouseDown={(e) => {
                             if (firstLoad) return;
                             e.preventDefault();
@@ -1315,21 +1450,36 @@ export function GridScreen() {
           </div>
 
           <div className="grid-mobile">
+            {/*
+              QR 이 모바일의 주 진입점이라는 것은 맞지만, 그 말만 적어두고 **예약을 만들
+              길을 하나도 두지 않았다.** 복도가 아니라 자리에서 폰으로 여는 경우에도
+              방을 잡을 수 있어야 한다. 방마다 "예약" 을 두고, 화면이 다음 빈 30분을
+              골라준다 — 좁은 화면에서 시간을 끌어 고르게 하지 않는다.
+            */}
             <p className="t-cap grid-mobile__hint">
-              모바일에서는 회의실 문에 붙은 QR 코드가 예약의 시작점이에요. QR을 스캔하면 그 자리에서 바로
-              예약·체크인할 수 있어요.
+              회의실 문에 붙은 QR 을 스캔하면 그 자리에서 바로 예약·체크인할 수 있어요.
             </p>
             {visibleRooms.map((room) => {
               const roomBookings = firstLoad
                 ? []
                 : (bookingsByRoom.get(room.id) ?? []).filter(matchesDept);
+              const free = firstLoad ? null : nextFreeRangeInRoom(room.id);
               return (
                 <section key={room.id} className="grid-mobile__room">
                   <header className="grid-mobile__room-head">
                     <span className="t-body grid-mobile__room-name">{room.name}</span>
-                    <span className="t-cap t-muted">
-                      {room.floor}
-                    </span>
+                    <span className="t-cap t-muted">{room.floor}</span>
+                    {/* 비활성 사유를 상시 노출한다 — 오늘 남은 빈 시간이 없을 때 (DESIGN.md §4) */}
+                    <ButtonWithReason
+                      variant="secondary"
+                      onClick={() => {
+                        if (free) setDialogRange({ roomId: room.id, ...free });
+                      }}
+                      disabled={free === null}
+                      reason={free === null && !firstLoad ? "오늘은 남은 시간이 없어요" : null}
+                    >
+                      {free ? hhmm(free.start) + " 예약" : "예약"}
+                    </ButtonWithReason>
                   </header>
                   {firstLoad ? (
                     <div className="grid-skeleton-card" aria-hidden="true" />
@@ -1338,19 +1488,28 @@ export function GridScreen() {
                   ) : (
                     <div className="mr-stack">
                       {roomBookings.map((b) => (
-                        <Card key={b.id} mine={b.isMine}>
-                          <div className="mr-row" style={{ justifyContent: "space-between" }}>
+                        /*
+                         * 카드가 눌리지 않아서, 모바일에서는 **내 예약도 취소·체크인할 수
+                         * 없었다.** 격자에서 블록을 누르는 것과 같은 상세를 연다.
+                         */
+                        <button
+                          key={b.id}
+                          type="button"
+                          className={cx("grid-mobile__item", b.isMine && "grid-mobile__item--mine")}
+                          onClick={() => setDetailBooking(b)}
+                        >
+                          <span className="mr-row" style={{ justifyContent: "space-between" }}>
                             <span className="t-small grid-mobile__organizer">{b.organizerName}</span>
                             <span className="t-small t-num grid-mobile__time">
                               {hhmm(b.start)}–{hhmm(b.end)}
                             </span>
-                          </div>
+                          </span>
                           {isNoShow(b, now, POLICY.checkInGraceMinutes) ? (
-                            <div style={{ marginTop: 6 }}>
+                            <span style={{ marginTop: 6, display: "inline-flex" }}>
                               <Badge tone="attn">미체크인</Badge>
-                            </div>
+                            </span>
                           ) : null}
-                        </Card>
+                        </button>
                       ))}
                     </div>
                   )}
@@ -1368,6 +1527,11 @@ export function GridScreen() {
           loading={firstLoad}
           now={now}
           onSelectBooking={setDetailBooking}
+          onCreate={() => {
+            const next = nextFreeRange();
+            if (next) setDialogRange(next);
+            else setEditError("오늘은 남은 빈 시간이 없어요. 다른 날짜를 골라주세요.");
+          }}
         />
       ) : view === "week" ? (
         <WeekView
@@ -1398,6 +1562,7 @@ export function GridScreen() {
             setSelectedDate(startOfDay(d));
             setView("day");
           }}
+          onSelectBooking={setDetailBooking}
           now={now}
         />
       )}
@@ -1798,6 +1963,7 @@ function MonthView({
   visibleRooms,
   matchesDept,
   onSelectDate,
+  onSelectBooking,
   now,
 }: {
   monthAnchor: Date;
@@ -1808,6 +1974,8 @@ function MonthView({
   visibleRooms: readonly Room[];
   matchesDept: (b: Booking) => boolean;
   onSelectDate: (d: Date) => void;
+  /** 월간에서도 예약을 눌러 상세(시간 변경·취소)를 연다 */
+  onSelectBooking: (b: Booking) => void;
   now: Date;
 }) {
   const today = useMemo(() => startOfDay(now), [now]);
@@ -1863,25 +2031,42 @@ function MonthView({
 
 
             return (
-              <button
+              /*
+               * 칸 전체가 <button> 이었다. 그래서 안의 일정 칩을 누를 수 있게 만들 수가
+               * 없었다(버튼 안에 버튼은 넣지 못한다) — 월간에서는 내 회의를 눌러도
+               * 상세가 열리지 않고 그날로 이동만 됐다.
+               *
+               * 칸을 <div> 로 내리고, 그 안에 **날짜 숫자 버튼**(그날로 이동)과
+               * **칩 버튼**(그 예약 상세)을 나란히 둔다. 중첩이 사라지고 키보드로도
+               * 둘 다 닿는다. 칸 빈 곳 클릭은 마우스 편의로 남긴다.
+               */
+              <div
                 key={ymd(d)}
-                type="button"
                 className={cx(
                   "grid-month__cell",
                   !inMonth && "grid-month__cell--outside",
                   sameYMD(d, today) && "grid-month__cell--today",
                 )}
                 onClick={() => onSelectDate(d)}
-                aria-label={
-                  String(d.getMonth() + 1) +
-                  "월 " +
-                  String(d.getDate()) +
-                  "일 · 예약 " +
-                  String(cellBookings.length) +
-                  "건"
-                }
               >
-                <span className="grid-month__daynum t-num">{d.getDate()}</span>
+                <button
+                  type="button"
+                  className="grid-month__daynum t-num"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onSelectDate(d);
+                  }}
+                  aria-label={
+                    String(d.getMonth() + 1) +
+                    "월 " +
+                    String(d.getDate()) +
+                    "일 열기 · 예약 " +
+                    String(cellBookings.length) +
+                    "건"
+                  }
+                >
+                  {d.getDate()}
+                </button>
                 {/*
                   건수 + 회색 막대만 보여주면 "그날 뭐가 있는지" 를 알 수 없다.
                   캘린더 월간 뷰는 일정 자체를 보여준다 — 시각 · 방 약칭 · 주최자.
@@ -1894,16 +2079,24 @@ function MonthView({
                       .sort((x, y) => x.start.getTime() - y.start.getTime())
                       .slice(0, MONTH_CHIP_LIMIT)
                       .map((b) => (
-                        <span
+                        <button
                           key={b.id}
+                          type="button"
                           className={cx("grid-month__chip", b.isMine && "grid-month__chip--mine")}
+                          onClick={(e) => {
+                            e.stopPropagation(); // 칸의 "그날로 이동" 이 함께 일어나지 않게
+                            onSelectBooking(b);
+                          }}
+                          aria-label={
+                            hhmm(b.start) + " " + b.organizerName + " 예약 상세 보기"
+                          }
                         >
                           <span className="grid-month__chip-time t-num">{hhmm(b.start)}</span>
                           <span className="grid-month__chip-room">
                             {roomById(b.roomId)?.short ?? ""}
                           </span>
                           <span className="grid-month__chip-name">{b.organizerName}</span>
-                        </span>
+                        </button>
                       ))}
                     {cellBookings.length > MONTH_CHIP_LIMIT ? (
                       <span className="grid-month__more t-cap">
@@ -1912,7 +2105,7 @@ function MonthView({
                     ) : null}
                   </span>
                 ) : null}
-              </button>
+              </div>
             );
             })}
       </div>

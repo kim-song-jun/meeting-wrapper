@@ -320,3 +320,15 @@
   color: var(--c-link);
   cursor: pointer;
 }
+
+/*
+ * 헤더 내비는 좁은 화면에서 33px 이었다(실측) — 터치 타깃 하한 44px 미달.
+ * 글자 크기는 그대로 두고 눌리는 영역만 넓힌다.
+ */
+@media (max-width: 767px) {
+  .mr-navlink {
+    display: inline-flex;
+    align-items: center;
+    min-height: 44px;
+  }
+}

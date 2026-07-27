@@ -131,10 +131,19 @@
  * 격자보다 컨트롤이 먼저 읽히고, 잠긴 판에서는 그만큼 격자 높이를 뺏는다.
  * 배경·보더 없이 여백만으로 묶는다.
  */
+/*
+ * 모바일에서도 한 줄로 흐르게 한다.
+ *
+ * column 이었을 때 390px 화면에서 컨트롤이 **4줄 · 240px**(화면의 28%)를 먹었다 —
+ * 날짜 / 일·주·월 / 격자·목록 / 부서. 정작 일정은 그 아래로 밀렸다. row + wrap 이면
+ * 폭이 남는 만큼 같은 줄에 붙고, 모자랄 때만 넘어간다.
+ */
 .grid-controlbar {
   display: flex;
-  flex-direction: column;
-  gap: 10px;
+  flex-direction: row;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 12px;
   margin-bottom: 12px;
 }
 
@@ -159,6 +168,21 @@
   align-items: center;
   flex-wrap: wrap;
   gap: 8px 12px;
+}
+
+/*
+ * 좁은 화면에서 이 그룹은 **한 줄을 통째로** 쓴다.
+ *
+ * 그러지 않으면 날짜 툴바(260px)가 먼저 자리를 먹고 남은 폭(83px)에 눌려, 안의
+ * 컨트롤 셋이 각자 한 줄씩 차지했다 — 컨트롤만 4줄 240px(390px 화면의 28%).
+ *
+ * 여기서 더 줄이려면 세그먼티드 버튼의 좌우 여백을 깎아야 하는데, 그러면 버튼 하나가
+ * 28px 이 되어 터치 타깃 하한(44px)을 밑돈다. 줄 수보다 손가락이 먼저다.
+ */
+@media (max-width: 767px) {
+  .grid-controlbar__right {
+    flex: 1 1 100%;
+  }
 }
 
 /* ---------- 조작 안내 한 줄 ----------
@@ -496,6 +520,32 @@
 
 .grid-slot--half {
   border-bottom: 1px solid var(--c-surface-muted);
+}
+
+/*
+ * 일간 격자의 빈 칸도 버튼이다 — 다만 여기서는 **드래그가 주 인터랙션**이라
+ * hover 배경을 주지 않는다(칸마다 배경이 켜지면 끄는 동안 화면이 깜빡인다).
+ * 키보드로 들어왔을 때만 지금 어디에 있는지 보이면 된다.
+ */
+.grid-slot--cell {
+  display: block;
+  width: 100%;
+  padding: 0;
+  background: none;
+  border-left: none;
+  border-right: none;
+  border-top: none;
+  font: inherit;
+  color: inherit;
+  cursor: default;
+}
+
+.grid-slot--cell:focus-visible {
+  outline: none;
+  box-shadow: inset 0 0 0 2px var(--c-action);
+  background: var(--c-action-weak-bg);
+  position: relative;
+  z-index: 2;
 }
 
 /*
@@ -905,6 +955,8 @@
 
 /* 오늘 — 캘린더는 굵게가 아니라 채운 원으로 표시한다. 숫자가 원 안에서 흔들리지
  * 않도록 정사각 박스에 가운데 정렬한다. */
+/* 이제 <button> 이다(그날로 이동하는 키보드 경로). 생김새는 그대로 두고
+   버튼 기본값만 지운다. */
 .grid-month__daynum {
   display: inline-flex;
   align-items: center;
@@ -912,6 +964,11 @@
   min-width: 24px;
   height: 24px;
   padding: 0 6px;
+  border: none;
+  background: none;
+  color: inherit;
+  font-family: inherit;
+  cursor: pointer;
   border-radius: var(--r-pill);
   font-size: var(--t-small-size);
   font-weight: 500;
@@ -949,6 +1006,34 @@
 .grid-month__chip--mine {
   background: var(--c-mine-bg);
   color: var(--c-mine-fg);
+}
+
+/* 칩이 <button> 이 됐다(눌러서 상세). 버튼 기본값을 지우고, 누를 수 있다는 것은
+   커서와 hover 로만 알린다 — 칩마다 보더를 두르면 월간 개요가 표로 읽힌다. */
+.grid-month__chip {
+  border: none;
+  font-family: inherit;
+  width: 100%;
+  cursor: pointer;
+  transition: filter var(--dur-hover) var(--ease-out);
+}
+
+@media (hover: hover) {
+  .grid-month__chip:hover {
+    filter: brightness(0.96);
+  }
+}
+
+.grid-month__daynum:focus-visible,
+.grid-month__chip:focus-visible {
+  outline: none;
+  box-shadow: var(--shadow-focus);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .grid-month__chip {
+    transition: none;
+  }
 }
 .grid-month__chip-time {
   flex: none;
@@ -1002,10 +1087,57 @@
 
 .grid-mobile__room-head {
   display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 12px;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
   margin-bottom: 8px;
+}
+
+/* 방 이름과 층은 붙어 있고, 예약 버튼만 반대쪽 끝으로 민다 */
+.grid-mobile__room-head > :last-child {
+  margin-left: auto;
+}
+
+/*
+ * 카드가 <button> 이 됐다(눌러서 상세). Card 컴포넌트를 쓰지 않는 이유는
+ * <button> 안에 <div> 를 넣지 않기 위해서다 — 같은 생김새를 여기서 낸다.
+ * 면과 선만 쓴다(§6): 흰 면 · 1px 경계선 · radius --r-lg.
+ */
+.grid-mobile__item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+  padding: var(--pad-content);
+  background: var(--c-surface);
+  border: 1px solid var(--c-border);
+  border-radius: var(--r-lg);
+  cursor: pointer;
+  transition: background-color var(--dur-hover) var(--ease-out), transform var(--dur-hover) var(--ease-out);
+}
+
+.grid-mobile__item--mine {
+  background: var(--c-mine-bg);
+  border-color: transparent;
+}
+
+.grid-mobile__item:active {
+  transform: scale(0.98);
+}
+
+.grid-mobile__item:focus-visible {
+  outline: none;
+  box-shadow: var(--shadow-focus);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .grid-mobile__item {
+    transition: none;
+  }
+  .grid-mobile__item:active {
+    transform: none;
+  }
 }
 
 .grid-mobile__room-name {
@@ -1295,13 +1427,21 @@
   flex: none;
 }
 
-/* 좁은 폭에서는 툴바를 위계 순으로 쌓는다: 날짜 → 뷰 전환 → 필터.
- * 지금 어느 날짜를 보고 있는지가 먼저고, 필터는 마지막이다. */
+/*
+ * 좁은 폭에서도 위계 순은 유지한다: 날짜 → 뷰 전환 → 필터.
+ *
+ * 예전엔 column-reverse 로 **한 줄에 하나씩** 쌓았다. 그 결과 390px 화면에서
+ * 컨트롤만 4줄 176px 을 먹고 일정은 화면 아래로 밀렸다(실측 contentTop 312px).
+ * 위계는 DOM 순서(뷰 전환 → 필터)로도 지켜지므로, 방향만 row 로 되돌리고
+ * 남는 폭에 붙게 한다. 폭이 모자라면 그때 넘어간다.
+ */
 @media (max-width: 1023px) {
   .grid-controlbar__right {
-    flex-direction: column-reverse;
-    align-items: stretch;
-    gap: 8px;
+    flex-direction: row-reverse;
+    justify-content: flex-end;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px 12px;
   }
 }
 
@@ -1312,12 +1452,38 @@
  * 우리 툴바는 컨트롤 48px + 칩 4개 + 탭 4개 + 토글 2개였다. 격자 화면에서
  * 세로 예산은 곧 "하루가 한 화면에 들어가는가" 이므로, 여기서만 크롬 높이를
  * --h-toolbar(36px)로 낮춘다. 액션 버튼(48px)은 그대로다 — 툴바는 액션이 아니다. */
-.grid-controlbar .mr-btn,
-.grid-controlbar .grid-viewswitch__btn,
-.grid-controlbar .grid-datestepper,
-.grid-controlbar .grid-datepick,
-.grid-deptselect__input {
-  height: var(--h-toolbar);
+/*
+ * **포인터가 있는 화면에서만** 압축한다.
+ *
+ * 이 규칙이 전 폭에 걸려 있어서 모바일 세그먼티드 버튼이 28px 로 렌더됐다(실측).
+ * 터치 타깃 하한은 44px 이고, DESIGN.md §8 은 모바일 컨트롤을 56px 로 정한다 —
+ * 세로 예산을 아끼자고 손가락이 못 누르는 버튼을 만들 수는 없다. 세로 예산이
+ * 문제인 것은 하루를 한 화면에 넣어야 하는 **데스크톱 격자**이고, 모바일 격자는
+ * 애초에 세로 리스트라 그 제약이 없다.
+ */
+/*
+ * 좁은 화면의 터치 타깃 바닥. 위 압축 규칙을 포인터 전용으로 막아도, 세그먼티드의
+ * --sm 변형과 부서 셀렉트는 자기 높이를 따로 갖고 있어 각각 28px · 26px 로 남았다(실측).
+ * 개별 규칙을 쫓아다니는 대신 여기서 바닥을 깐다 — 44px 은 WCAG 2.5.8 의 최소치다.
+ */
+@media (max-width: 767px) {
+  .grid-controlbar .grid-viewswitch__btn,
+  .grid-viewswitch--sm .grid-viewswitch__btn,
+  .grid-deptselect__input,
+  .grid-controlbar .mr-btn,
+  .grid-controlbar .grid-datestepper__btn {
+    min-height: 44px;
+  }
+}
+
+@media (hover: hover) and (min-width: 768px) {
+  .grid-controlbar .mr-btn,
+  .grid-controlbar .grid-viewswitch__btn,
+  .grid-controlbar .grid-datestepper,
+  .grid-controlbar .grid-datepick,
+  .grid-deptselect__input {
+    height: var(--h-toolbar);
+  }
 }
 .grid-controlbar .grid-datestepper__btn {
   width: var(--h-toolbar);
