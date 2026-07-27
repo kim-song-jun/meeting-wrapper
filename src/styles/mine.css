@@ -92,6 +92,26 @@
   align-items: center;
   gap: 8px;
   flex-shrink: 0;
+  /*
+   * 지난 예약에는 버튼이 셋(고치기 · 복사 · Notion 열기)까지 온다.
+   *
+   * flex-shrink:0 만 두고 wrap 을 켰더니 375px 화면에서 이 그룹이 388px 로
+   * 부풀어 오른쪽 50px 이 카드 밖으로 잘려 나갔다(실측) — shrink 가 0 이라
+   * 줄어들지 못하고, min-width 기본값(auto)이라 내용보다 작아지지도 못했다.
+   * 안에서 줄바꿈할 수 있게 바닥을 풀어 준다.
+   */
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  min-width: 0;
+}
+
+/* 좁은 폭에서는 액션이 한 줄을 통째로 받아 본문 아래로 내려간다.
+ * 320px 짜리 본문 옆에 버튼 셋을 끼워 넣을 자리가 없다. */
+@media (max-width: 767px) {
+  .mine-item__actions {
+    flex: 1 1 100%;
+    justify-content: flex-start;
+  }
 }
 
 /* 체크인 완료는 상태 표시다. Weak 텍스트색으로 "내 것" 계열임을 알리되 배지는 쓰지 않는다
@@ -132,6 +152,41 @@
   gap: 8px;
   flex-wrap: wrap;
   margin-top: 16px;
+}
+
+/* ---------- 요약 내보내기 ----------
+ * Notion 은 브라우저에서 직접 못 부른다(CORS — domain/summaryExport.ts 참고).
+ * 그래서 "복사" 와 "빈 페이지 열기" 두 걸음이고, 두 번째는 액션이 아니라
+ * 바깥으로 나가는 링크다 — 버튼처럼 보이면 그것도 무언가를 저장한다고 읽힌다. */
+.mine-item__link {
+  display: inline-flex;
+  align-items: center;
+  /* 옆의 Compact/Secondary 버튼과 같은 줄에서 눌리는 영역을 맞춘다 */
+  min-height: var(--h-action);
+  padding: 0 4px;
+  color: var(--c-link);
+  font-size: var(--t-small-size);
+  white-space: nowrap;
+}
+
+/*
+ * 복사 결과 한 줄. .mine-item 은 가로 flex 라 그냥 두면 버튼 옆에 끼어
+ * 줄을 밀어낸다 — 한 줄을 통째로 받아 아래로 내려간다.
+ */
+.mine-item__copied,
+.mine-item__copyfail {
+  flex: 1 1 100%;
+  margin: 8px 0 0;
+  font-size: var(--t-small-size);
+  line-height: var(--t-small-lh);
+}
+/* 성공은 조용히, 실패는 읽히게. 둘 다 Body 이상 — Muted 는 문장에 쓰지 않는다(§12-5) */
+.mine-item__copied {
+  color: var(--c-body);
+}
+.mine-item__copyfail {
+  color: var(--c-fg);
+  font-weight: 600;
 }
 
 .mine-empty {

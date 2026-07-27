@@ -16,6 +16,7 @@ import { roomById } from "../app/config";
 import { repo } from "../data";
 import { useAsync } from "../app/useAsync";
 import { hhmm, humanDuration, MINUTE } from "../domain/time";
+import { summaryToMarkdown } from "../domain/summaryExport";
 import type { Booking, UserPrefs } from "../domain/types";
 import "../styles/mine.css";
 
@@ -313,11 +314,33 @@ function PastBookingItem({ booking }: { booking: Booking }) {
   const [saving, setSaving] = useState(false);
   const [failure, setFailure] = useState<string | null>(null);
 
+  /*
+   * 복사 결과. 성공했으면 무슨 일이 일어났는지, 실패했으면 원인과 다음 행동을
+   * 말한다(§10). 조용히 실패하면 사용자는 붙여넣기를 하고 나서야 알게 된다.
+   */
+  const [copyState, setCopyState] = useState<{ ok: boolean; text: string } | null>(null);
+
   const dirty = draft.trim() !== (summary ?? "");
+
+  async function copyMarkdown() {
+    const md = summaryToMarkdown({ ...booking, summary }, room?.name ?? booking.roomId);
+    try {
+      await navigator.clipboard.writeText(md);
+      setCopyState({ ok: true, text: "복사했어요. Notion·Slack 어디든 붙여넣으면 돼요" });
+    } catch {
+      /*
+       * 클립보드는 권한·보안 컨텍스트에 따라 막힌다(http, 권한 거부 등).
+       * 빈 catch 로 넘기면 "눌렀는데 아무 일도 안 일어남" 이 된다 — 사유를 말한다.
+       */
+      setCopyState({ ok: false, text: "복사가 막혀 있어요. 위에 보이는 요약을 직접 끌어서 복사해 주세요" });
+    }
+  }
 
   async function save() {
     setSaving(true);
     setFailure(null);
+    // 요약이 바뀌면 직전 복사 안내는 거짓말이 된다(복사해 둔 것은 옛 내용이다)
+    setCopyState(null);
     try {
       await repo.saveSummary(booking.id, draft);
       const trimmed = draft.trim();
@@ -389,8 +412,34 @@ function PastBookingItem({ booking }: { booking: Booking }) {
           <Button variant="secondary" onClick={() => setEditing(true)}>
             {summary ? "요약 고치기" : "회의 요약 남기기"}
           </Button>
+          {/*
+            요약이 있을 때만 내보내기를 연다 — 없는 것을 복사할 이유가 없다.
+            Notion API 는 브라우저에서 직접 못 부르므로(CORS, summaryExport.ts 참고)
+            "복사 → 붙여넣기" 두 걸음으로 나눈다. 두 번째 버튼은 붙여넣을 빈 페이지를
+            열어 줄 뿐이고, 내용을 실어 보내지는 않는다 — 그래서 라벨도 "열기" 다.
+          */}
+          {summary ? (
+            <>
+              <Button variant="secondary" onClick={() => void copyMarkdown()}>
+                요약 복사하기
+              </Button>
+              <a
+                className="mine-item__link"
+                href="https://www.notion.new"
+                target="_blank"
+                rel="noreferrer noopener"
+              >
+                Notion 새 페이지 열기
+              </a>
+            </>
+          ) : null}
         </div>
       )}
+      {copyState ? (
+        <p className={copyState.ok ? "mine-item__copied" : "mine-item__copyfail"} role="status">
+          {copyState.text}
+        </p>
+      ) : null}
     </div>
   );
 }
