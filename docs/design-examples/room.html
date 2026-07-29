@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>MolRoom · 회의실 QR 랜딩 예시</title>
+  <link rel="stylesheet" href="examples.css" />
+</head>
+<body>
+  <span class="demo-note">정적 디자인 예시 · QR 회의실</span>
+  <main class="landing-page">
+    <header class="landing-header">
+      <a class="brand-lockup" href="index.html">
+        <img class="brand-mark" src="brand.svg" alt="" />
+        <span>MolRoom</span>
+      </a>
+      <button class="text-action" type="button">로그아웃</button>
+    </header>
+
+    <div class="landing-content">
+      <p class="room-kicker">3층</p>
+      <h1 class="room-title">소회의실</h1>
+
+      <section class="room-status" aria-label="현재 회의실 상태">
+        <div class="status-row"><span class="status-dot" aria-hidden="true"></span>지금 비어 있어요</div>
+        <p class="status-copy">다음 예약은 11:00에 시작해요. 지금부터 30분 동안 바로 사용할 수 있어요.</p>
+      </section>
+
+      <div class="quick-book">
+        <a class="button" href="booking-dialog.html">10:30까지 예약하기</a>
+        <a class="button secondary" href="booking-dialog.html">시간 직접 고르기</a>
+      </div>
+
+      <h2 class="section-label">오늘 이 방의 일정</h2>
+      <section class="timeline-card card" aria-label="오늘 일정">
+        <div class="timeline-row">
+          <span class="timeline-time">09:00–10:30</span>
+          <span class="timeline-main"><strong>이영희</strong><span>종료됨</span></span>
+        </div>
+        <div class="timeline-row">
+          <span class="timeline-time">11:00–12:00</span>
+          <span class="timeline-main"><strong>김성준 · 내 예약</strong><span>30분 뒤 시작</span></span>
+        </div>
+        <div class="timeline-row">
+          <span class="timeline-time">14:00–15:00</span>
+          <span class="timeline-main"><strong>박지민</strong><span>예정</span></span>
+        </div>
+      </section>
+    </div>
+  </main>
+</body>
+</html>

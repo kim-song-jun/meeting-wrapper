@@ -6,6 +6,7 @@ import { RoomVisibilityProvider } from "./app/roomVisibility";
 import "./styles/base.css";
 import "./styles/components.css";
 import "./styles/screens.css";
+import "./styles/navigation.css";
 
 const host = document.getElementById("root");
 if (!host) throw new Error("#root 를 찾을 수 없습니다");

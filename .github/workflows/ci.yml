@@ -1,0 +1,53 @@
+name: Verify
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: verify-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  app:
+    name: Typecheck, test, build, design examples
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Rebuild standalone design examples
+        run: node scripts/build-design-standalone.mjs
+
+      - name: Verify generated files are committed
+        run: |
+          git diff --exit-code -- docs/design-examples/standalone
+          test -z "$(git ls-files --others --exclude-standard -- docs/design-examples/standalone)"
+
+      - name: Validate design examples
+        run: node scripts/validate-design-examples.mjs
+
+      - name: Install
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Test
+        run: npm test
+
+      - name: Build
+        run: npm run build

@@ -1,0 +1,147 @@
+/*
+ * 반응형 주요 내비게이션 — Toss 파생 원칙을 그대로 따른다.
+ *
+ * 새 색·그림자·유리를 만들지 않는다. 데스크톱 사이드바, 태블릿 상단 바,
+ * 모바일 하단 바가 같은 두 목적지를 서로 다른 배치로 제공한다.
+ */
+
+.mr-mobile-nav {
+  display: none;
+}
+
+
+/* 사이드바가 없는 폭에서는 긴 계정 문자열을 숨겨 주요 화면과 경쟁하지 않게 한다. */
+@media (max-width: 1023px) {
+  .mr-appbar__email {
+    display: none;
+  }
+}
+
+/* 사이드바가 접히고 포인터가 주 입력인 폭: 텍스트 링크를 명확한 선택 행으로 만든다. */
+@media (min-width: 768px) and (max-width: 1023px) {
+  .mr-appbar__nav {
+    gap: 8px;
+  }
+
+  .mr-navlink {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 40px;
+    padding: 0 12px;
+    border-radius: var(--r-seg);
+    transition:
+      background-color var(--dur-hover) var(--ease-out),
+      color var(--dur-hover) var(--ease-out);
+  }
+
+  .mr-navlink:hover {
+    background: var(--c-surface-muted);
+  }
+
+  .mr-navlink.active {
+    background: var(--c-action-weak-bg);
+    color: var(--c-action-weak-fg);
+  }
+
+  .mr-navlink:focus-visible {
+    outline: none;
+    box-shadow: var(--shadow-focus);
+  }
+
+  .mr-appbar__signout {
+    min-height: 40px;
+    padding: 0 8px;
+  }
+}
+
+/*
+ * 손가락 폭: 상단 바는 브랜드와 계정만 남기고 화면 이동은 고정 하단 바로 내린다.
+ * 하단 바는 흰 면 + 위쪽 경계선만 쓴다. 그림자·blur 는 Toss 판본의 금지 항목이다.
+ */
+@media (max-width: 767px) {
+  .mr-appbar {
+    gap: 16px;
+    padding-left: max(16px, env(safe-area-inset-left));
+    padding-right: max(16px, env(safe-area-inset-right));
+  }
+
+  .mr-appbar__nav {
+    display: none;
+  }
+
+  .mr-appbar__account {
+    margin-left: auto;
+  }
+
+  .mr-appbar__signout {
+    min-height: 44px;
+    padding: 0 8px;
+  }
+
+  /* 고정 하단 바와 홈 인디케이터가 마지막 콘텐츠를 덮지 않게 공간을 예약한다. */
+  .mr-main {
+    padding-bottom: calc(96px + env(safe-area-inset-bottom));
+  }
+
+  .mr-mobile-nav {
+    position: fixed;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    z-index: 20;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+    padding:
+      8px max(16px, env(safe-area-inset-right))
+      calc(8px + env(safe-area-inset-bottom))
+      max(16px, env(safe-area-inset-left));
+    background: var(--c-surface);
+    border-top: 1px solid var(--c-border);
+  }
+
+  .mr-mobile-nav__item {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 0;
+    min-height: var(--h-action);
+    border-radius: var(--r-md);
+    color: var(--c-body);
+    text-decoration: none;
+    font-size: var(--t-small-size);
+    line-height: var(--t-small-lh);
+    font-weight: var(--t-label-w);
+    transition:
+      background-color var(--dur-hover) var(--ease-out),
+      color var(--dur-hover) var(--ease-out),
+      transform var(--dur-hover) var(--ease-out);
+  }
+
+  .mr-mobile-nav__item.active {
+    background: var(--c-action-weak-bg);
+    color: var(--c-action-weak-fg);
+  }
+
+  .mr-mobile-nav__item:focus-visible {
+    outline: none;
+    box-shadow: var(--shadow-focus);
+  }
+
+  .mr-mobile-nav__item:active {
+    transform: scale(0.97);
+  }
+}
+
+@media (max-width: 767px) and (hover: hover) {
+  .mr-mobile-nav__item:not(.active):hover {
+    background: var(--c-surface-muted);
+  }
+}
+
+@media (max-width: 767px) and (prefers-reduced-motion: reduce) {
+  .mr-mobile-nav__item:active {
+    transform: none;
+  }
+}

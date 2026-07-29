@@ -10,8 +10,8 @@ import { ROOMS } from "./app/config";
 import { useRoomVisibility } from "./app/roomVisibility";
 
 /**
- * 앱바 우측 계정 클러스터. 이메일은 정보 표시 전용(클릭 불가), 로그아웃은
- * 기존 .mr-navlink 스타일을 재사용한다(새 클래스 불필요).
+ * 앱바 우측 계정 클러스터. 이메일은 넓은 화면의 정보 표시 전용(클릭 불가)이고,
+ * 1024px 미만에서는 숨긴다. 로그아웃은 기존 .mr-navlink 스타일을 재사용한다.
  * /r/:roomId(QR 랜딩)는 이 Shell 을 쓰지 않으므로 여기 나타나지 않는다 —
  * 그 화면은 의도적으로 최소 크롬을 유지한다(DESIGN.md §13).
  */
@@ -31,15 +31,32 @@ function AccountCluster() {
 }
 
 /**
- * 사이드바 — macOS 앱의 얼굴.
+ * 손가락 폭의 주요 내비게이션.
  *
- * 캘린더·메일·메모 모두 반투명 사이드바 + 콘텐츠 2단 창이고, 그게 "맥 앱처럼
- * 보이는" 첫째 요인이다. 상단 내비바만 있으면 색과 폰트를 다 맞춰도 웹사이트로 읽힌다.
- * 유리(vibrancy)의 원래 자리도 여기다 — 뒤에 캔버스와 앰비언트가 있어 실제로 비친다.
+ * 모바일 상단 바에 브랜드·화면 이동·계정을 한꺼번에 두면 세 역할이 한 줄에서
+ * 경쟁한다. 상단에는 브랜드와 계정만 남기고, 자주 오가는 두 화면은 엄지가
+ * 닿는 하단으로 내린다. 별도 아이콘을 발명하지 않고 텍스트와 Weak 선택 상태만
+ * 써서 기존 Toss 파생 언어를 유지한다.
+ */
+function MobileNavigation() {
+  return (
+    <nav className="mr-mobile-nav" aria-label="주요 화면">
+      <NavLink to="/" end className="mr-mobile-nav__item">
+        예약 현황
+      </NavLink>
+      <NavLink to="/me" className="mr-mobile-nav__item">
+        내 예약
+      </NavLink>
+    </nav>
+  );
+}
+
+/**
+ * 넓은 화면의 내비게이션과 회의실 표시 컨트롤.
  *
- * 회의실 목록은 장식이 아니라 캘린더 목록과 같은 컨트롤이다: 체크를 끄면 격자에서 빠진다.
- * 1024px 미만에서는 접히고(screens.css) 기존 상단 내비로 돌아간다 — 손가락으로 220px
- * 사이드바를 두면 격자가 남지 않는다.
+ * 회의실 목록은 장식이 아니라 캘린더 목록과 같은 컨트롤이다: 체크를 끄면
+ * 격자에서 빠진다. 1024px 미만에서는 접히고, 태블릿은 상단 내비게이션,
+ * 모바일은 하단 내비게이션으로 같은 두 화면을 오간다.
  */
 function Sidebar() {
   const auth = useAuth();
@@ -119,13 +136,12 @@ function Shell({ children, pane = false }: { children: React.ReactNode; pane?: b
   return (
     <div className={pane ? "mr-shell mr-shell--pane" : "mr-shell"}>
       <Sidebar />
-      {/* 좁은 폭에서만 보이는 상단 바 — 사이드바가 접히면 이쪽이 내비게이션을 맡는다 */}
       <header className="mr-appbar">
         <span className="mr-appbar__brand">
           <BrandMark className="mr-appbar__mark" />
           MolRoom
         </span>
-        <nav className="mr-appbar__nav">
+        <nav className="mr-appbar__nav" aria-label="주요 화면">
           <NavLink to="/" end className="mr-navlink">
             예약 현황
           </NavLink>
@@ -136,6 +152,7 @@ function Shell({ children, pane = false }: { children: React.ReactNode; pane?: b
         <AccountCluster />
       </header>
       <main className="mr-main">{children}</main>
+      <MobileNavigation />
     </div>
   );
 }

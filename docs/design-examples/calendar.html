@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>MolRoom · 예약 현황 예시</title>
+  <link rel="stylesheet" href="examples.css" />
+</head>
+<body>
+  <span class="demo-note">정적 디자인 예시 · 예약 현황</span>
+  <div class="app-shell">
+    <aside class="sidebar" aria-label="사이드바">
+      <a class="brand-lockup" href="index.html">
+        <img class="brand-mark" src="brand.svg" alt="" />
+        <span>MolRoom</span>
+      </a>
+
+      <nav class="side-nav" aria-label="주요 화면">
+        <a class="side-link active" href="calendar.html" aria-current="page">예약 현황</a>
+        <a class="side-link" href="my-bookings.html">내 예약</a>
+      </nav>
+
+      <section class="room-list" aria-labelledby="room-filter-title">
+        <h2 class="sidebar-section-title" id="room-filter-title">회의실</h2>
+        <p class="sidebar-hint">켠 회의실만 격자에 보여요.</p>
+        <button class="room-row" type="button" role="switch" aria-checked="true">
+          <span class="room-dot" aria-hidden="true"></span>
+          <span class="room-name">소회의실</span>
+          <span class="room-floor">3F</span>
+        </button>
+        <button class="room-row" type="button" role="switch" aria-checked="true">
+          <span class="room-dot" aria-hidden="true"></span>
+          <span class="room-name">대회의실</span>
+          <span class="room-floor">3F</span>
+        </button>
+      </section>
+
+      <div class="sidebar-user">
+        <strong>김성준</strong>
+        <span>sungjun@molcube.com</span>
+        <button class="sidebar-signout" type="button">로그아웃</button>
+      </div>
+    </aside>
+
+    <header class="mobile-topbar">
+      <a class="brand-lockup" href="index.html">
+        <img class="brand-mark" src="brand.svg" alt="" />
+        <span>MolRoom</span>
+      </a>
+    </header>
+
+    <main class="app-main">
+      <div class="page-head">
+        <div>
+          <h1 class="page-title">예약 현황</h1>
+          <p class="page-subtitle">비어 있는 시간을 고르면 예약을 시작해요.</p>
+        </div>
+        <a class="button compact" href="booking-dialog.html">새 예약</a>
+      </div>
+
+      <div class="calendar-toolbar" aria-label="달력 도구">
+        <button class="button quiet compact" type="button">오늘</button>
+        <div class="date-nav" aria-label="날짜 이동">
+          <button class="icon-button" type="button" aria-label="이전 날짜">‹</button>
+          <button class="icon-button" type="button" aria-label="다음 날짜">›</button>
+        </div>
+        <strong class="period-title">7월 28일 화요일</strong>
+        <span class="grow"></span>
+        <div class="segmented" aria-label="표시 방식">
+          <span class="active">격자</span>
+          <span>목록</span>
+        </div>
+        <div class="segmented" aria-label="기간">
+          <span class="active">일</span>
+          <span>주</span>
+          <span>월</span>
+        </div>
+      </div>
+      <p class="toolbar-hint"><strong>빈 시간을 끌어서</strong> 원하는 길이만큼 예약하세요. 이미 잡힌 일정은 눌러서 자세히 볼 수 있어요.</p>
+
+      <section class="calendar-frame" aria-label="7월 28일 회의실 예약 격자">
+        <div class="calendar-board">
+          <div class="corner-cell"></div>
+          <div class="room-head"><strong>소회의실</strong><span>3F</span></div>
+          <div class="room-head"><strong>대회의실</strong><span>3F</span></div>
+
+          <div class="time-axis">
+            <span class="time-label" style="top:0px">08:00</span>
+            <span class="time-label" style="top:48px">09:00</span>
+            <span class="time-label" style="top:96px">10:00</span>
+            <span class="time-label" style="top:144px">11:00</span>
+            <span class="time-label" style="top:192px">12:00</span>
+            <span class="time-label" style="top:240px">13:00</span>
+            <span class="time-label" style="top:288px">14:00</span>
+            <span class="time-label" style="top:336px">15:00</span>
+            <span class="time-label" style="top:384px">16:00</span>
+            <span class="time-label" style="top:432px">17:00</span>
+            <span class="time-label" style="top:480px">18:00</span>
+            <span class="time-label" style="top:528px">19:00</span>
+          </div>
+
+          <div class="grid-column">
+            <div class="event" style="top:48px;height:72px"><strong>이영희</strong><span>09:00–10:30</span></div>
+            <div class="event mine" style="top:144px;height:48px"><strong>김성준 · 내 예약</strong><span>11:00–12:00</span></div>
+            <div class="event" style="top:288px;height:48px"><strong>박지민</strong><span>14:00–15:00</span></div>
+            <div class="event attention" style="top:408px;height:48px"><strong>최유나 · 미체크인</strong><span>16:30–17:30</span></div>
+            <div class="now-line" style="top:124px"></div>
+          </div>
+
+          <div class="grid-column">
+            <div class="event" style="top:24px;height:48px"><strong>정민수</strong><span>08:30–09:30</span></div>
+            <div class="event" style="top:120px;height:72px"><strong>한서연</strong><span>10:30–12:00</span></div>
+            <div class="event mine" style="top:240px;height:72px"><strong>김성준 · 내 예약</strong><span>13:00–14:30</span></div>
+            <div class="event" style="top:360px;height:48px"><strong>송지호</strong><span>15:30–16:30</span></div>
+            <div class="now-line" style="top:124px"></div>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <nav class="mobile-bottom-nav" aria-label="주요 화면">
+      <a class="active" href="calendar.html" aria-current="page">예약 현황</a>
+      <a href="my-bookings.html">내 예약</a>
+    </nav>
+  </div>
+</body>
+</html>
