@@ -4,6 +4,7 @@ import { Alert, Badge, Button, ButtonWithReason, Card } from "../components/ui";
 import { BookingDialog } from "./BookingDialog";
 import { BrandMark } from "../auth/BrandMark";
 import { useAsync } from "../app/useAsync";
+import { appNow } from "../app/clock";
 import { repo } from "../data";
 import { ROOMS, POLICY, roomById } from "../app/config";
 import {
@@ -101,7 +102,7 @@ export function RoomLandingScreen() {
 
   const bookingsState = useAsync(async () => {
     if (!roomId) return [];
-    return repo.listByRoom(roomId, new Date());
+    return repo.listByRoom(roomId, appNow());
   }, [roomId, autoTick]);
 
   const prefsState = useAsync(() => repo.getPrefs(), []);
@@ -143,7 +144,7 @@ export function RoomLandingScreen() {
 
   const bookings = bookingsState.data ?? [];
   const hasData = bookingsState.data !== null;
-  const now = new Date();
+  const now = appNow();
   const dayEnd = dayEndOf(now);
   const activeBooking = currentBooking(bookings, now);
   const gap = nextGap(bookings, now, dayEnd);
@@ -192,7 +193,7 @@ export function RoomLandingScreen() {
     setExtendError(null);
     try {
       // 연장 직전 재조회 — 오래된 화면 캐시로 판단하면 조용히 이중 예약이 된다 (설계 스펙 §6.2)
-      const fresh = await repo.listByRoom(safeRoomId, new Date());
+      const fresh = await repo.listByRoom(safeRoomId, appNow());
       const result = canExtend(mineBooking, fresh, POLICY.extendStepMinutes, POLICY);
       if (!result.ok) {
         setExtendError(extendReasonText(result));
@@ -218,7 +219,7 @@ export function RoomLandingScreen() {
     setEnding(true);
     setEndError(null);
     try {
-      const result = await repo.changeEnd(mineBooking.id, new Date());
+      const result = await repo.changeEnd(mineBooking.id, appNow());
       if (!result.ok) {
         setEndError(result.reason === "blocked" ? result.by + "님 예약과 겹쳐요" : result.message);
         return;

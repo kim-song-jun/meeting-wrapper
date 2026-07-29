@@ -15,6 +15,7 @@ import type { TabItem } from "../components/ui";
 import { roomById } from "../app/config";
 import { repo } from "../data";
 import { useAsync } from "../app/useAsync";
+import { appNow } from "../app/clock";
 import { hhmm, humanDuration, MINUTE } from "../domain/time";
 import { summaryToMarkdown } from "../domain/summaryExport";
 import type { Booking, UserPrefs } from "../domain/types";
@@ -139,7 +140,7 @@ function MineTab() {
     );
   }
 
-  const now = new Date();
+  const now = appNow();
   const groups: { label: string; items: Booking[] }[] = [];
   for (const b of [...bookings].sort((a, c) => a.start.getTime() - c.start.getTime())) {
     const label = dayLabel(b.start, now);
@@ -213,7 +214,7 @@ function BookingItem({
     setCheckInError(null);
     try {
       await repo.checkIn(booking.id);
-      setCheckedInAt(new Date());
+      setCheckedInAt(appNow());
       onChanged();
     } catch (e: unknown) {
       setCheckInError(
@@ -455,7 +456,7 @@ function CancelDialog({
 }) {
   const { booking, isAdminAction } = target;
   const room = roomById(booking.roomId);
-  const now = new Date();
+  const now = appNow();
   const [busy, setBusy] = useState(false);
   const [failure, setFailure] = useState<string | null>(null);
 
@@ -524,7 +525,7 @@ function CancelDialog({
 /* ---------------- 전체 예약 (관리자) ---------------- */
 
 function AllTab() {
-  const todayRef = useRef(new Date());
+  const todayRef = useRef(appNow());
   const state = useAsync(() => repo.listByDay(todayRef.current), []);
   const [cancelTarget, setCancelTarget] = useState<CancelTarget | null>(null);
 

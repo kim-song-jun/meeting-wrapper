@@ -6,6 +6,7 @@ import { ROOMS, POLICY, roomById } from "../app/config";
 import { useRoomVisibility } from "../app/roomVisibility";
 import { repo } from "../data";
 import { useAsync } from "../app/useAsync";
+import { appNow } from "../app/clock";
 import {
   canExtend,
   canReschedule,
@@ -494,12 +495,12 @@ export function GridScreen() {
   );
 
   /* ---- 일간 뷰 상태 (기존, 손대지 않음) ---- */
-  const [selectedDate, setSelectedDate] = useState<Date>(() => startOfDay(new Date()));
+  const [selectedDate, setSelectedDate] = useState<Date>(() => startOfDay(appNow()));
   const dayKey = ymd(selectedDate);
 
-  const [now, setNow] = useState<Date>(() => new Date());
+  const [now, setNow] = useState<Date>(() => appNow());
   useEffect(() => {
-    const t = setInterval(() => setNow(new Date()), 30_000);
+    const t = setInterval(() => setNow(appNow()), 30_000);
     return () => clearInterval(t);
   }, []);
 
@@ -555,7 +556,7 @@ export function GridScreen() {
   }, [bookingsState.data]);
 
   /* ---- 주간 뷰 상태 ---- */
-  const [weekAnchor, setWeekAnchor] = useState<Date>(() => startOfDay(new Date()));
+  const [weekAnchor, setWeekAnchor] = useState<Date>(() => startOfDay(appNow()));
   const weekStart = useMemo(() => startOfWeek(weekAnchor), [weekAnchor]);
   // repo 의 날짜 범위 조회는 from·to 를 모두 포함한다 (일 단위) — "주 끝"은 그 주의
   // 마지막 날(일요일)이지 다음 주 월요일이 아니다. +7 로 넘기면 다음 주 첫날 예약까지
@@ -595,7 +596,7 @@ export function GridScreen() {
   );
 
   /* ---- 월간 뷰 상태 ---- */
-  const [monthAnchor, setMonthAnchor] = useState<Date>(() => startOfMonth(new Date()));
+  const [monthAnchor, setMonthAnchor] = useState<Date>(() => startOfMonth(appNow()));
   // 마찬가지로 repo 의 범위 조회는 to 를 포함한다 — "한 달치"는 그 달의 마지막 날까지고
   // 다음 달 1일이 아니다. 앞뒤 달로 채워지는 달력 여백 칸은 스펙대로 개요 이상을 보여주지 않는다.
   const monthRangeEnd = useMemo(() => addDays(addMonths(monthAnchor, 1), -1), [monthAnchor]);
@@ -896,7 +897,7 @@ export function GridScreen() {
         newStart,
         newEnd,
         POLICY,
-        new Date(),
+        appNow(),
       );
       if (!verdict.ok) {
         setEditError(rescheduleMessage(verdict));
@@ -1092,7 +1093,7 @@ export function GridScreen() {
              뷰를 바꿀 때 날짜 이동 UI 가 자리를 옮기면 그것부터 다시 찾게 된다. */
           view === "day" || view === "agenda" ? (
             <div className="grid-toolbar mr-row">
-              <Button variant="secondary" onClick={() => setSelectedDate(startOfDay(new Date()))}>
+              <Button variant="secondary" onClick={() => setSelectedDate(startOfDay(appNow()))}>
                 오늘
               </Button>
               {/* 주간·월간과 같은 ‹ › 스테퍼를 쓴다 — 뷰를 바꿔도 날짜 이동 위치가 안 변한다.
@@ -1137,7 +1138,7 @@ export function GridScreen() {
             <DateStepper
               onPrev={() => setWeekAnchor((d) => addWeeks(d, -1))}
               onNext={() => setWeekAnchor((d) => addWeeks(d, 1))}
-              onToday={() => setWeekAnchor(startOfDay(new Date()))}
+              onToday={() => setWeekAnchor(startOfDay(appNow()))}
               prevLabel="이전 주"
               nextLabel="다음 주"
               todayLabel="이번 주"
@@ -1147,7 +1148,7 @@ export function GridScreen() {
             <DateStepper
               onPrev={() => setMonthAnchor((d) => addMonths(d, -1))}
               onNext={() => setMonthAnchor((d) => addMonths(d, 1))}
-              onToday={() => setMonthAnchor(startOfMonth(new Date()))}
+              onToday={() => setMonthAnchor(startOfMonth(appNow()))}
               prevLabel="이전 달"
               nextLabel="다음 달"
               todayLabel="이번 달"
@@ -2331,7 +2332,7 @@ function EventDetail({
        * booking 은 부모가 넘긴 스냅샷이라 재조회로 갱신되지 않는다 — 그래서 성공한
        * 쓰기의 결과를 여기서 들고 있는다.
        */
-      setCheckedInAt(new Date());
+      setCheckedInAt(appNow());
       onRefresh();
     } catch (e: unknown) {
       setActionError(

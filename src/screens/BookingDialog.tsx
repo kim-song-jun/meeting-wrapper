@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Alert, Button, Dialog, Field, RadioGroup } from "../components/ui";
 import { POLICY, roomById } from "../app/config";
+import { appNow } from "../app/clock";
 import { repo } from "../data";
 import { hhmm, humanDuration, validateDraft, MINUTE } from "../domain/time";
 import {
@@ -50,7 +51,8 @@ export function BookingDialog({ roomId, start, end, prefs, onClose, onCreated }:
   const [failure, setFailure] = useState<string | null>(null);
   const [recurrenceResult, setRecurrenceResult] = useState<RecurringCreateResult | null>(null);
 
-  const problems = validateDraft({ start, end }, POLICY, new Date());
+  const now = appNow();
+  const problems = validateDraft({ start, end }, POLICY, now);
   const durationMin = (end.getTime() - start.getTime()) / MINUTE;
   const zoomMissing = vc === "zoom" && zoomUrl.trim().length === 0;
 
@@ -59,7 +61,7 @@ export function BookingDialog({ roomId, start, end, prefs, onClose, onCreated }:
   // (다섯째 요일 없는 달을 건너뛰면 "12회 뒤" 가 산술로 계산한 날짜와 달라진다).
   const advanceExceeded =
     recurrence !== null &&
-    lastOccurrenceExceedsAdvance(expandRecurrence(start, end, recurrence), POLICY.maxAdvanceDays, new Date());
+    lastOccurrenceExceedsAdvance(expandRecurrence(start, end, recurrence), POLICY.maxAdvanceDays, now);
 
   const blocked = problems.length > 0 || zoomMissing || advanceExceeded;
 

@@ -4,6 +4,7 @@ import { overlaps } from "../domain/time";
 import { expandRecurrence } from "../domain/recurrence";
 import rooms from "../config/rooms.json";
 import { MOCK_IDENTITY } from "../config/currentUser";
+import { appNow } from "../app/clock";
 
 /**
  * 환경변수를 붙이기 전까지 화면을 돌리는 인메모리 어댑터.
@@ -21,6 +22,73 @@ import { MOCK_IDENTITY } from "../config/currentUser";
 const ME: CurrentUser = { ...MOCK_IDENTITY, isAdmin: true };
 
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+
+const CREATE_DELAY_MS = 220;
+const RECURRING_CREATE_DELAY_MS = 260;
+
+type ReadErrorFixture = "grid-once" | "room-once" | "my-bookings-once";
+
+function captureQaFixtures(): {
+  saveDelayMs: number | null;
+  readError: ReadErrorFixture | null;
+} {
+  if (!import.meta.env.DEV || typeof window === "undefined") {
+    return { saveDelayMs: null, readError: null };
+  }
+
+  const params = new URLSearchParams(window.location.search);
+  let saveDelayMs: number | null = null;
+  if (params.has("mockSaveDelayMs")) {
+    const rawDelay = params.get("mockSaveDelayMs") ?? "";
+    const parsedDelay = Number(rawDelay);
+    if (/^(0|[1-9]\d*)$/.test(rawDelay) && parsedDelay <= 5000) {
+      saveDelayMs = parsedDelay;
+    } else {
+      console.warn("[MolRoom QA] invalid mockSaveDelayMs");
+    }
+  }
+
+  let readError: ReadErrorFixture | null = null;
+  if (params.has("mockReadError")) {
+    const rawReadError = params.get("mockReadError");
+    if (
+      rawReadError === "grid-once" ||
+      rawReadError === "room-once" ||
+      rawReadError === "my-bookings-once"
+    ) {
+      readError = rawReadError;
+    } else {
+      console.warn("[MolRoom QA] invalid mockReadError");
+    }
+  }
+
+  return { saveDelayMs, readError };
+}
+
+const qaFixtures = captureQaFixtures();
+let readErrorArmed = true;
+let pendingReadErrorResolutions: Array<(fail: boolean) => void> = [];
+let readErrorBatchScheduled = false;
+
+function takeReadError(expected: ReadErrorFixture): Promise<boolean> {
+  if (!readErrorArmed || qaFixtures.readError !== expected) return Promise.resolve(false);
+
+  return new Promise((resolve) => {
+    pendingReadErrorResolutions.push(resolve);
+    if (readErrorBatchScheduled) return;
+    readErrorBatchScheduled = true;
+
+    queueMicrotask(() => {
+      readErrorBatchScheduled = false;
+      const batch = pendingReadErrorResolutions;
+      pendingReadErrorResolutions = [];
+      readErrorArmed = false;
+      for (let index = 0; index < batch.length; index += 1) {
+        batch[index]!(index === batch.length - 1);
+      }
+    });
+  });
+}
 
 function sameDay(a: Date, b: Date): boolean {
   return (
@@ -43,7 +111,7 @@ function inDateRange(d: Date, from: Date, to: Date): boolean {
 }
 
 function atOffset(dayOffset: number, h: number, m: number): Date {
-  const d = new Date();
+  const d = appNow();
   d.setDate(d.getDate() + dayOffset);
   d.setHours(h, m, 0, 0);
   return d;
@@ -307,18 +375,24 @@ export const mockAdapter: BookingRepository = {
   },
 
   async listByDay(day) {
+    const fail = await takeReadError("grid-once");
     await sleep(140);
+    if (fail) throw new Error("QA fixture: grid read failed");
     return store.filter((b) => sameDay(b.start, day)).map(clone);
   },
 
   async listByRoom(roomId, day) {
+    const fail = await takeReadError("room-once");
     await sleep(120);
+    if (fail) throw new Error("QA fixture: room read failed");
     return store.filter((b) => b.roomId === roomId && sameDay(b.start, day)).map(clone);
   },
 
   async listMine() {
+    const fail = await takeReadError("my-bookings-once");
     await sleep(120);
-    const now = new Date();
+    if (fail) throw new Error("QA fixture: my-bookings read failed");
+    const now = appNow();
     return store
       .filter((b) => b.isMine && b.end.getTime() >= now.getTime())
       .sort((a, b) => a.start.getTime() - b.start.getTime())
@@ -331,7 +405,7 @@ export const mockAdapter: BookingRepository = {
   },
 
   async create(draft: BookingDraft): Promise<CreateResult> {
-    await sleep(220);
+    await sleep(qaFixtures.saveDelayMs ?? CREATE_DELAY_MS);
 
     // 3차 방어 재현: 회의실이 사후에 거절
     if (draft.title.includes("__declined")) {
@@ -368,7 +442,7 @@ export const mockAdapter: BookingRepository = {
   },
 
   async createRecurring(draft: BookingDraft): Promise<RecurringCreateResult> {
-    await sleep(260);
+    await sleep(qaFixtures.saveDelayMs ?? RECURRING_CREATE_DELAY_MS);
 
     // 반복 규칙이 없으면 단발 예약 한 번을 부른 것과 같은 결과로 감싼다.
     if (!draft.recurrence) {
@@ -477,7 +551,7 @@ export const mockAdapter: BookingRepository = {
 
   async listMinePast(limit) {
     await sleep(140);
-    const now = new Date();
+    const now = appNow();
     return store
       .filter((b) => b.isMine && b.end.getTime() < now.getTime())
       .sort((a, b) => b.start.getTime() - a.start.getTime()) // 최신순 — 방금 끝난 회의가 맨 위
@@ -499,7 +573,7 @@ export const mockAdapter: BookingRepository = {
 
   async checkIn(bookingId) {
     await sleep(150);
-    store = store.map((b) => (b.id === bookingId ? { ...b, checkedInAt: new Date() } : b));
+    store = store.map((b) => (b.id === bookingId ? { ...b, checkedInAt: appNow() } : b));
   },
 
   async getPrefs() {
