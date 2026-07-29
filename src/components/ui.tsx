@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import type {
   ButtonHTMLAttributes,
   InputHTMLAttributes,
@@ -202,25 +202,60 @@ export function Tabs({
   items,
   active,
   onChange,
+  idBase,
+  panelIdFor,
 }: {
   items: readonly TabItem[];
   active: string;
   onChange: (id: string) => void;
+  idBase?: string;
+  panelIdFor?: (item: TabItem) => string;
 }) {
+  const generatedId = useId();
+  const instanceId = idBase ?? "mr-tabs-" + generatedId.replaceAll(":", "");
+  const tabRefs = useRef(new Map<string, HTMLButtonElement>());
+
+  function activateAndFocus(index: number) {
+    const item = items[index];
+    if (!item) return;
+    onChange(item.id);
+    tabRefs.current.get(item.id)?.focus();
+  }
+
   return (
     <div className="mr-tabs" role="tablist">
-      {items.map((t) => (
-        <button
-          key={t.id}
-          type="button"
-          role="tab"
-          className="mr-tab"
-          aria-selected={t.id === active}
-          onClick={() => onChange(t.id)}
-        >
-          {t.label}
-        </button>
-      ))}
+      {items.map((t, index) => {
+        const selected = t.id === active;
+        return (
+          <button
+            key={t.id}
+            ref={(node) => {
+              if (node) tabRefs.current.set(t.id, node);
+              else tabRefs.current.delete(t.id);
+            }}
+            id={`${instanceId}-tab-${t.id}`}
+            type="button"
+            role="tab"
+            className="mr-tab"
+            aria-selected={selected}
+            aria-controls={panelIdFor?.(t)}
+            tabIndex={selected ? 0 : -1}
+            onClick={() => onChange(t.id)}
+            onKeyDown={(event) => {
+              let nextIndex: number | null = null;
+              if (event.key === "ArrowRight") nextIndex = (index + 1) % items.length;
+              if (event.key === "ArrowLeft") nextIndex = (index - 1 + items.length) % items.length;
+              if (event.key === "Home") nextIndex = 0;
+              if (event.key === "End") nextIndex = items.length - 1;
+              if (nextIndex === null) return;
+              event.preventDefault();
+              activateAndFocus(nextIndex);
+            }}
+          >
+            {t.label}
+          </button>
+        );
+      })}
     </div>
   );
 }
@@ -315,6 +350,7 @@ export function Dialog({
   actions,
   actionsLayout = "end",
   dismissible = true,
+  busy = false,
 }: {
   title: string;
   subtitle?: string;
@@ -329,19 +365,23 @@ export function Dialog({
    * (호출부 전환은 이 컴포넌트 담당 범위 밖 — concerns 참조)
    */
   dismissible?: boolean;
+  busy?: boolean;
 }) {
   const panelRef = useRef<HTMLDivElement>(null);
   const [backdropEl, setBackdropEl] = useState<HTMLDivElement | null>(null);
-  // 열리기 직전 포커스였던 요소 — 렌더 시점(첫 effect 가 돌기 전)에 캡처해야
-  // 아래 focus-in effect 가 포커스를 옮기기 전 값을 잃지 않는다.
-  const triggerRef = useRef<HTMLElement | null>(
-    document.activeElement instanceof HTMLElement ? document.activeElement : null,
-  );
+  const triggerRef = useRef<HTMLElement | null>(null);
+
+  useLayoutEffect(() => {
+    const active = document.activeElement;
+    if (active instanceof HTMLElement && active.matches(FOCUSABLE_SELECTOR) && active.offsetParent !== null) {
+      triggerRef.current = active;
+    }
+  }, []);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
-        onClose();
+        if (!busy) onClose();
         return;
       }
       if (e.key !== "Tab") return;
@@ -367,7 +407,7 @@ export function Dialog({
     };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
-  }, [onClose]);
+  }, [busy, onClose]);
 
   // 최초 진입 포커스는 마운트 시 한 번만. deps 에 onClose 를 넣으면(호출부가
   // 인라인 함수를 넘길 때 매 렌더 재실행돼) 사용자가 다이얼로그 안에서 입력 중에도
@@ -384,7 +424,14 @@ export function Dialog({
   useEffect(() => {
     const trigger = triggerRef.current;
     return () => {
-      trigger?.focus();
+      if (
+        trigger?.isConnected &&
+        trigger.matches(FOCUSABLE_SELECTOR) &&
+        trigger.offsetParent !== null &&
+        !trigger.closest("[inert]")
+      ) {
+        trigger.focus();
+      }
     };
   }, []);
 
@@ -393,7 +440,10 @@ export function Dialog({
       className="mr-backdrop"
       ref={setBackdropEl}
       onMouseDown={(e) => {
-        if (dismissible && e.target === e.currentTarget) onClose();
+        if (dismissible && !busy && e.target === e.currentTarget) {
+          e.preventDefault();
+          onClose();
+        }
       }}
     >
       <div

@@ -40,11 +40,10 @@ export function BookingDialog({ roomId, start, end, prefs, onClose, onCreated }:
   const [title, setTitle] = useState("");
   const [headcount, setHeadcount] = useState(2);
   const [invitees, setInvitees] = useState<DirectoryPerson[]>([]);
-  const [invitesOpen, setInvitesOpen] = useState(false);
+  const [optionsOpen, setOptionsOpen] = useState(false);
   const [vc, setVc] = useState<VcKind>("meet");
   const [zoomUrl, setZoomUrl] = useState(prefs.defaultZoomUrl ?? "");
   const [saveZoom, setSaveZoom] = useState(true);
-  const [recurrenceOpen, setRecurrenceOpen] = useState(false);
   const [freq, setFreq] = useState<RecurrenceFreq | "none">("none");
   const [count, setCount] = useState(4);
   const [busy, setBusy] = useState(false);
@@ -63,13 +62,33 @@ export function BookingDialog({ roomId, start, end, prefs, onClose, onCreated }:
     recurrence !== null &&
     lastOccurrenceExceedsAdvance(expandRecurrence(start, end, recurrence), POLICY.maxAdvanceDays, now);
 
-  const blocked = problems.length > 0 || zoomMissing || advanceExceeded;
-
   const saveLabel = recurrence !== null ? String(recurrence.count) + "회 예약하기" : "예약하기";
   const savingLabel = recurrence !== null ? String(recurrence.count) + "회 예약하는 중…" : "예약하는 중…";
 
+  const optionSummary = [
+    invitees.length > 0 ? "참석자 " + String(invitees.length) + "명" : null,
+    recurrence !== null ? FREQ_LABEL[recurrence.freq] + " " + String(recurrence.count) + "회" : null,
+    vc === "meet" ? "Google Meet 자동 생성" : vc === "zoom" ? "Zoom" : "화상회의 없음",
+  ]
+    .filter((value): value is string => value !== null)
+    .join(" · ");
+
+  function revealInvalidOption(id: string) {
+    setOptionsOpen(true);
+    requestAnimationFrame(() => document.getElementById(id)?.focus());
+  }
+
   async function submit() {
-    if (blocked || busy) return;
+    if (busy) return;
+    if (problems.length > 0) return;
+    if (zoomMissing) {
+      revealInvalidOption("molroom-zoom-url");
+      return;
+    }
+    if (advanceExceeded) {
+      revealInvalidOption("molroom-recurrence-count");
+      return;
+    }
     setBusy(true);
     setFailure(null);
 
@@ -172,6 +191,7 @@ export function BookingDialog({ roomId, start, end, prefs, onClose, onCreated }:
       title="회의실 예약"
       subtitle={subtitle}
       onClose={onClose}
+      busy={busy}
       /* 데이터 입력 폼이므로 배경 클릭으로 닫지 않는다 (omd:feel MODAL 🟢).
          제목·인원·참석자·반복·Zoom 링크를 적다가 배경을 한 번 잘못 누르면 전부 사라진다. */
       dismissible={false}
@@ -180,7 +200,7 @@ export function BookingDialog({ roomId, start, end, prefs, onClose, onCreated }:
           <Button variant="secondary" onClick={onClose} disabled={busy}>
             취소
           </Button>
-          <Button onClick={submit} disabled={blocked || busy}>
+          <Button onClick={submit} disabled={busy}>
             {busy ? savingLabel : saveLabel}
           </Button>
         </>
@@ -231,25 +251,25 @@ export function BookingDialog({ roomId, start, end, prefs, onClose, onCreated }:
           </div>
         </div>
 
-        {/* 초대는 선택. 접어두면 QR 예약이 두 번 탭으로 끝난다. */}
         <div>
-          {invitesOpen ? (
-            <>
+          <button
+            type="button"
+            className="mr-disclosure"
+            aria-expanded={optionsOpen}
+            aria-controls="molroom-booking-options"
+            onClick={() => {
+              setOptionsOpen((open) => !open);
+            }}
+          >
+            추가 옵션 · {optionSummary}
+          </button>
+
+          {optionsOpen ? (
+            <div id="molroom-booking-options" className="mr-subsection">
               <span className="mr-field__label">참석자 초대 (선택)</span>
               <AttendeePicker selected={invitees} onChange={setInvitees} />
               <p className="mr-field__hint">초대장과 캘린더 알림이 자동으로 갑니다</p>
-            </>
-          ) : (
-            <button type="button" className="mr-disclosure" onClick={() => setInvitesOpen(true)}>
-              참석자 초대하기 (선택)
-            </button>
-          )}
-        </div>
 
-        {/* 반복도 선택. 접어두면 단발 예약 흐름이 그대로 유지된다. */}
-        <div>
-          {recurrenceOpen ? (
-            <>
               <RadioGroup
                 name="molroom-recurrence-freq"
                 legend="반복 (선택)"
@@ -292,49 +312,46 @@ export function BookingDialog({ roomId, start, end, prefs, onClose, onCreated }:
                   ) : null}
                 </div>
               ) : null}
-            </>
-          ) : (
-            <button type="button" className="mr-disclosure" onClick={() => setRecurrenceOpen(true)}>
-              반복 설정하기 (선택)
-            </button>
-          )}
-        </div>
 
-        <RadioGroup
-          name="molroom-vc"
-          legend="화상회의"
-          value={vc}
-          onChange={setVc}
-          options={[
-            { value: "none", label: "없음" },
-            { value: "meet", label: "Google Meet 자동 생성" },
-            { value: "zoom", label: "Zoom" },
-          ]}
-        />
-
-        {vc === "zoom" ? (
-          <div className="mr-subsection">
-            <input
-              className="mr-input"
-              placeholder="https://zoom.us/j/..."
-              value={zoomUrl}
-              onChange={(e) => setZoomUrl(e.target.value)}
-              aria-label="Zoom 링크"
-            />
-            <label className="mr-row" style={{ gap: 8, marginTop: 8 }}>
-              <input
-                type="checkbox"
-                checked={saveZoom}
-                onChange={(e) => setSaveZoom(e.target.checked)}
+              <RadioGroup
+                name="molroom-vc"
+                legend="화상회의"
+                value={vc}
+                onChange={setVc}
+                options={[
+                  { value: "none", label: "없음" },
+                  { value: "meet", label: "Google Meet 자동 생성" },
+                  { value: "zoom", label: "Zoom" },
+                ]}
               />
-              <span className="t-small">내 기본 링크로 저장 (폰에서도 자동으로 채워져요)</span>
-            </label>
-            {prefs.defaultZoomUrl && zoomUrl === prefs.defaultZoomUrl ? (
-              <p className="mr-field__hint">저장된 기본 링크를 불러왔어요</p>
-            ) : null}
-            {zoomMissing ? <p className="mr-field__hint mr-field__hint--warn">Zoom 링크를 입력해 주세요</p> : null}
-          </div>
-        ) : null}
+
+              {vc === "zoom" ? (
+                <div className="mr-subsection">
+                  {zoomMissing ? <Alert>Zoom 링크를 입력해 주세요.</Alert> : null}
+                  <input
+                    id="molroom-zoom-url"
+                    className="mr-input"
+                    placeholder="https://zoom.us/j/..."
+                    value={zoomUrl}
+                    onChange={(e) => setZoomUrl(e.target.value)}
+                    aria-label="Zoom 링크"
+                  />
+                  <label className="mr-row" style={{ gap: 8, marginTop: 8 }}>
+                    <input
+                      type="checkbox"
+                      checked={saveZoom}
+                      onChange={(e) => setSaveZoom(e.target.checked)}
+                    />
+                    <span className="t-small">내 기본 링크로 저장 (폰에서도 자동으로 채워져요)</span>
+                  </label>
+                  {prefs.defaultZoomUrl && zoomUrl === prefs.defaultZoomUrl ? (
+                    <p className="mr-field__hint">저장된 기본 링크를 불러왔어요</p>
+                  ) : null}
+                </div>
+              ) : null}
+            </div>
+          ) : null}
+        </div>
       </div>
     </Dialog>
   );

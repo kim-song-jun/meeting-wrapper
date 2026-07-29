@@ -27,6 +27,8 @@ import "../styles/grid.css";
 const cx = (...parts: Array<string | false | null | undefined>): string =>
   parts.filter(Boolean).join(" ");
 
+const READ_ERROR_MESSAGE = "예약 정보를 불러오지 못했어요. 네트워크 상태를 확인하고 다시 시도해 주세요.";
+
 /* ---------------- date helpers ---------------- */
 
 const pad2 = (n: number): string => (n < 10 ? "0" + String(n) : String(n));
@@ -121,11 +123,37 @@ function slotHourLabel(dayStart: Date, slotIndex: number, slotMinutes: number): 
  * tokens.css 의 --grid-slot-h 가 단일 진실 소스이며, JS 에 숫자를 따로
  * 하드코딩하면 CSS 값이 바뀔 때 픽셀 배치가 조용히 어긋난다.
  */
-function readCssPx(varName: string, fallback: number): number {
-  if (typeof window === "undefined") return fallback;
+function readCssPx(varName: string): number {
+  if (typeof window === "undefined") {
+    throw new Error("[MolRoom] CSS geometry requires a browser.");
+  }
   const raw = getComputedStyle(document.documentElement).getPropertyValue(varName).trim();
-  const n = parseFloat(raw);
-  return Number.isFinite(n) ? n : fallback;
+  const match = raw.match(/^(\d+(?:\.\d+)?)px$/);
+  const n = match ? Number(match[1]) : Number.NaN;
+  if (!Number.isFinite(n) || n <= 0) {
+    throw new Error('[MolRoom] CSS token ' + varName + ' must be a positive px value; received "' + raw + '".');
+  }
+  return n;
+}
+
+function useCssPx(varName: string): number {
+  const [value, setValue] = useState(() => readCssPx(varName));
+  useEffect(() => {
+    const media = [
+      window.matchMedia("(hover: hover) and (pointer: fine) and (min-width: 768px)"),
+      window.matchMedia("(hover: none), (pointer: coarse)"),
+      window.matchMedia("(max-width: 767px)"),
+    ];
+    const update = () => setValue(readCssPx(varName));
+    for (const query of media) query.addEventListener("change", update);
+    window.addEventListener("resize", update);
+    update();
+    return () => {
+      for (const query of media) query.removeEventListener("change", update);
+      window.removeEventListener("resize", update);
+    };
+  }, [varName]);
+  return value;
 }
 
 /** 모바일 폭 여부. grid.css 의 767px 브레이크포인트와 같은 값을 쓴다. */
@@ -514,9 +542,14 @@ export function GridScreen() {
    * useAsync 는 재조회 중에도 이전 data 를 들고 있으므로 그대로 그리면 된다.
    */
   const firstLoad = bookingsState.data === null;
+  const gridLiveMessage = bookingsState.loading
+    ? "예약 정보를 불러오는 중이에요."
+    : bookingsState.error || bookingsState.data === null
+      ? ""
+      : "예약 정보를 불러왔어요.";
   const prefsState = useAsync<UserPrefs>(() => repo.getPrefs(), []);
 
-  const slotPx = useMemo(() => readCssPx("--grid-slot-h", 28), []);
+  const slotPx = useCssPx("--grid-slot-h");
   const dayStart = useMemo(() => gridDayStart(selectedDate, POLICY), [selectedDate]);
   const slotCount = useMemo(() => gridSlotCount(POLICY), []);
   const dayEnd = useMemo(
@@ -525,6 +558,8 @@ export function GridScreen() {
   );
   const slotIndices = useMemo(() => Array.from({ length: slotCount }, (_, i) => i), [slotCount]);
   const isToday = sameYMD(selectedDate, now);
+  const dayGridScrollRef = useRef<HTMLDivElement>(null);
+  const autoPositionedTodayRef = useRef<string | null>(null);
 
   const dateLabel = useMemo(
     () =>
@@ -1053,6 +1088,26 @@ export function GridScreen() {
   const showNowLine = isToday && nowSlot >= 0 && nowSlot <= slotCount;
   const nowTop = nowSlot * slotPx;
 
+  useEffect(() => {
+    if (view !== "day" || firstLoad || !showNowLine || autoPositionedTodayRef.current === dayKey) return;
+    const frame = requestAnimationFrame(() => {
+      const scroll = dayGridScrollRef.current;
+      if (!scroll) return;
+      autoPositionedTodayRef.current = dayKey;
+      if (scroll.scrollHeight <= scroll.clientHeight + 1) return;
+      const headerHeight =
+        scroll.querySelector<HTMLElement>(".grid-room-header")?.getBoundingClientRect().height ?? 0;
+      const lineY = headerHeight + nowTop;
+      const visibleTop = scroll.scrollTop + headerHeight + 48;
+      const visibleBottom = scroll.scrollTop + scroll.clientHeight - 96;
+      if (lineY < visibleTop || lineY > visibleBottom) {
+        const desired = lineY - scroll.clientHeight * 0.35;
+        scroll.scrollTop = Math.max(0, Math.min(scroll.scrollHeight - scroll.clientHeight, desired));
+      }
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [dayKey, firstLoad, nowTop, showNowLine, view]);
+
   /* ---- event detail / cancel (모든 뷰 공유) ---- */
   const [detailBooking, setDetailBooking] = useState<Booking | null>(null);
   const [cancelTarget, setCancelTarget] = useState<Booking | null>(null);
@@ -1074,6 +1129,9 @@ export function GridScreen() {
 
   return (
     <div className="grid-screen">
+      <p className="visually-hidden" role="status" aria-live="polite" aria-atomic="true">
+        {gridLiveMessage}
+      </p>
       {/*
        * 상단은 한 줄이다: 왼쪽에 날짜 이동(현재로 점프 · ‹ › · 큰 제목),
        * 오른쪽에 보기 범위(부서 필터 · 일간/주간/월간).
@@ -1308,7 +1366,7 @@ export function GridScreen() {
           {bookingsState.error ? (
             <div style={{ marginTop: 16 }}>
               <Alert>
-                예약 정보를 불러오지 못했어요: {bookingsState.error.message}{" "}
+                {READ_ERROR_MESSAGE}{" "}
                 <button type="button" className="grid-retry" onClick={bookingsState.reload}>
                   다시 시도
                 </button>
@@ -1325,7 +1383,7 @@ export function GridScreen() {
            * 로딩 중엔 중립색 스켈레톤으로 채워 "이미 그 자리에 있던 것처럼" 만든다.
            */}
           <div className="grid-desktop" style={{ marginTop: 16 }}>
-            <div className="grid-scroll">
+            <div className="grid-scroll" ref={dayGridScrollRef}>
               <div className={cx("grid-table", drag && "is-dragging", edit && "is-editing")} style={{ gridTemplateColumns }}>
                 <div className="grid-corner" />
 
@@ -1745,6 +1803,7 @@ function GridEventBlock({
           ? (e) => {
               // 슬롯의 mousedown(새 예약 선택 시작)까지 올라가지 않게 막는다
               e.stopPropagation();
+              e.currentTarget.focus();
               e.preventDefault();
               /*
                * 잡은 지점을 **px 로** 넘긴다.
@@ -1858,7 +1917,7 @@ function WeekView({
   const today = useMemo(() => startOfDay(now), [now]);
 
   /*
-   * 모바일에서는 슬롯을 44px 로 키운다. 28px 짜리 30분 블록은 손가락으로 누를 수 없다.
+   * 모바일에서는 슬롯을 44px 로 유지한다. 24px 짜리 30분 블록은 손가락으로 누를 수 없다.
    * 주간 뷰를 일간처럼 리스트로 무너뜨리지 않는 이유는 이 화면의 목적이
    * "요일별로 같은 시간대가 비는 패턴" 을 보는 것이라 격자가 곧 정보이기 때문이다.
    *
@@ -1910,7 +1969,7 @@ function WeekView({
       {error ? (
         <div style={{ marginTop: 16 }}>
           <Alert>
-            예약 정보를 불러오지 못했어요: {error.message}{" "}
+            {READ_ERROR_MESSAGE}{" "}
             <button type="button" className="grid-retry" onClick={onReload}>
               다시 시도
             </button>
@@ -2121,7 +2180,7 @@ function MonthView({
       {error ? (
         <div style={{ marginTop: 16 }}>
           <Alert>
-            예약 정보를 불러오지 못했어요: {error.message}{" "}
+            {READ_ERROR_MESSAGE}{" "}
             <button type="button" className="grid-retry" onClick={onReload}>
               다시 시도
             </button>

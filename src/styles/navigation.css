@@ -9,6 +9,31 @@
   display: none;
 }
 
+.mr-skip-link {
+  position: fixed;
+  top: 8px;
+  left: max(16px, env(safe-area-inset-left));
+  z-index: 30;
+  padding: 8px 16px;
+  border: 1px solid var(--c-border);
+  border-radius: var(--r-md);
+  background: var(--c-surface);
+  color: var(--c-action);
+  text-decoration: none;
+  transform: translateY(-200%);
+  transition: transform var(--dur-hover) var(--ease-out);
+}
+
+.mr-skip-link:focus-visible {
+  transform: translateY(0);
+  outline: none;
+  box-shadow: var(--shadow-focus);
+}
+
+.mr-main:focus {
+  outline: none;
+}
+
 
 /* 사이드바가 없는 폭에서는 긴 계정 문자열을 숨겨 주요 화면과 경쟁하지 않게 한다. */
 @media (max-width: 1023px) {

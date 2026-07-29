@@ -581,7 +581,7 @@
 }
 
 .grid-slot--half {
-  border-bottom: 1px solid var(--c-surface-muted);
+  border-bottom: 1px solid color-mix(in srgb, var(--c-border) 65%, var(--c-surface));
 }
 
 /*
@@ -876,18 +876,28 @@
   /* 시간축 칸은 비우고 회의실 열 위에만 긋는다 — 축 위를 덮으면 눈금을 가린다 */
   left: var(--grid-axis-w);
   right: 0;
-  height: 1px;
+  height: 2px;
   background: var(--c-now);
 }
 .grid-now__line::before {
   content: "";
   position: absolute;
-  left: -3px;
-  top: -3px;
-  width: 7px;
-  height: 7px;
+  left: -4px;
+  top: -4px;
+  width: 10px;
+  height: 10px;
   border-radius: var(--r-pill);
   background: var(--c-now);
+}
+.grid-now__line::after {
+  content: "지금";
+  position: absolute;
+  left: 10px;
+  top: -18px;
+  color: var(--c-now);
+  font-size: var(--t-axis-size);
+  line-height: var(--t-axis-lh);
+  font-weight: 600;
 }
 
 /* 768~1023px: 회의실 일부만 보이고 가로 스크롤로 나머지를 본다.
@@ -1623,10 +1633,11 @@
   .grid-controlbar .mr-btn,
   .grid-controlbar .grid-datestepper__btn {
     min-height: 44px;
+    min-width: 44px;
   }
 }
 
-@media (hover: hover) and (min-width: 768px) {
+@media (hover: hover) and (pointer: fine) and (min-width: 768px) {
   .grid-controlbar .mr-btn,
   .grid-controlbar .grid-viewswitch__btn,
   .grid-controlbar .grid-datestepper,
@@ -1646,7 +1657,7 @@
   padding: 0 14px;
 }
 .grid-viewswitch--sm .grid-viewswitch__btn {
-  height: calc(var(--h-toolbar) - 8px);
+  height: var(--h-action-compact);
   padding: 0 12px;
 }
 

@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from "react";
+import { useId, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import {
   Alert,
@@ -73,6 +73,14 @@ function LoadError({ what, error, onRetry }: { what: string; error: Error; onRet
   );
 }
 
+function LoadingState() {
+  return (
+    <p className="mr-state" role="status" aria-live="polite" aria-atomic="true">
+      불러오는 중…
+    </p>
+  );
+}
+
 interface CancelTarget {
   booking: Booking;
   /** 관리자가 남의 예약을 취소하는 경우 문구가 달라진다 */
@@ -81,6 +89,7 @@ interface CancelTarget {
 
 export function MyBookingsScreen() {
   const [active, setActive] = useState("mine");
+  const tabsId = useId();
   const userState = useAsync(() => repo.getCurrentUser(), []);
 
   const tabs = useMemo(() => {
@@ -89,7 +98,7 @@ export function MyBookingsScreen() {
   }, [userState.data?.isAdmin]);
 
   if (userState.loading) {
-    return <p className="mr-state">불러오는 중…</p>;
+    return <LoadingState />;
   }
   if (userState.error) {
     return <LoadError what="사용자 정보" error={userState.error} onRetry={userState.reload} />;
@@ -107,8 +116,20 @@ export function MyBookingsScreen() {
         {user.name} · {user.email}
         {user.isAdmin ? " · 관리자" : ""}
       </p>
-      <Tabs items={tabs} active={effectiveTab} onChange={setActive} />
-      <div className="mine-section">
+      <Tabs
+        items={tabs}
+        active={effectiveTab}
+        onChange={setActive}
+        idBase={tabsId}
+        panelIdFor={(tab) => `${tabsId}-panel-${tab.id}`}
+      />
+      <div
+        className="mine-section"
+        role="tabpanel"
+        id={`${tabsId}-panel-${effectiveTab}`}
+        aria-labelledby={`${tabsId}-tab-${effectiveTab}`}
+        tabIndex={0}
+      >
         {effectiveTab === "mine" ? <MineTab /> : null}
         {effectiveTab === "past" ? <PastTab /> : null}
         {effectiveTab === "all" && user.isAdmin ? <AllTab /> : null}
@@ -124,7 +145,7 @@ function MineTab() {
   const state = useAsync(() => repo.listMine(), []);
   const [cancelTarget, setCancelTarget] = useState<CancelTarget | null>(null);
 
-  if (state.loading) return <p className="mr-state">불러오는 중…</p>;
+  if (state.loading) return <LoadingState />;
   if (state.error) {
     return (
       <LoadError what="예약 목록" error={state.error} onRetry={state.reload} />
@@ -280,7 +301,7 @@ function BookingItem({
 function PastTab() {
   const state = useAsync(() => repo.listMinePast(PAST_LIMIT), []);
 
-  if (state.loading) return <p className="mr-state">불러오는 중…</p>;
+  if (state.loading) return <LoadingState />;
   if (state.error) {
     return <LoadError what="지난 예약" error={state.error} onRetry={state.reload} />;
   }
@@ -529,7 +550,7 @@ function AllTab() {
   const state = useAsync(() => repo.listByDay(todayRef.current), []);
   const [cancelTarget, setCancelTarget] = useState<CancelTarget | null>(null);
 
-  if (state.loading) return <p className="mr-state">불러오는 중…</p>;
+  if (state.loading) return <LoadingState />;
   if (state.error) {
     return (
       <LoadError what="오늘 예약 전체" error={state.error} onRetry={state.reload} />
@@ -619,7 +640,7 @@ function looksLikeHttpsUrl(v: string): boolean {
 function SettingsTab() {
   const state = useAsync(() => repo.getPrefs(), []);
 
-  if (state.loading) return <p className="mr-state">불러오는 중…</p>;
+  if (state.loading) return <LoadingState />;
   if (state.error) {
     return (
       <LoadError what="설정" error={state.error} onRetry={state.reload} />

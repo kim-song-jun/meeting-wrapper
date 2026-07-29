@@ -44,7 +44,7 @@ export function LoginScreen() {
 
   // 이미 로그인된 채로 /login 에 왔으면 폼을 그리지 않고 즉시 되돌린다.
   if (auth.status === "signed-in") {
-    return <Navigate to={fromState?.pathname ?? "/"} replace />;
+    return <Navigate to={fromState ?? "/"} replace />;
   }
 
   const handleSignIn = async () => {
@@ -73,6 +73,7 @@ export function LoginScreen() {
   };
 
   const isAuthenticating = state.kind === "authenticating";
+  const loginStatus = isAuthenticating ? "로그인하는 중이에요." : "";
 
   return (
     <div className="mr-login">
@@ -80,10 +81,13 @@ export function LoginScreen() {
         <BrandMark size={56} className="mr-login__mark" />
         <h1 className="t-title mr-login__title">MolRoom</h1>
         <p className="t-small t-muted mr-login__subtitle">molcube 회의실 예약</p>
+        <p className="visually-hidden" role="status" aria-live="polite" aria-atomic="true">
+          {loginStatus}
+        </p>
 
         {state.kind !== "wrong-domain" ? (
           <Button variant="primary" block disabled={isAuthenticating} onClick={handleSignIn}>
-            {isAuthenticating ? "계속하는 중…" : "Google 계정으로 계속"}
+            {isAuthenticating ? "로그인하는 중…" : state.kind === "error" ? "다시 로그인" : "Google 계정으로 계속"}
           </Button>
         ) : null}
 
@@ -98,7 +102,7 @@ export function LoginScreen() {
               </div>
             </Alert>
             <Button variant="secondary" block onClick={handleRetryOtherAccount}>
-              다른 계정으로 다시 시도
+              다른 계정으로 로그인
             </Button>
           </div>
         ) : null}

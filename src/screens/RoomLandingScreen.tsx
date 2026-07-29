@@ -47,13 +47,13 @@ function buildFreePresets(now: Date, boundEnd: Date | null): Preset[] {
     presets.push({ label, start: now, end });
   };
 
-  tryAdd(30, "30분 예약");
-  tryAdd(60, "1시간 예약");
+  tryAdd(30, "30분 예약하기");
+  tryAdd(60, "1시간 예약하기");
 
   if (boundEnd) {
     const minutes = Math.round((boundEnd.getTime() - now.getTime()) / MINUTE);
     if (minutes > 0 && minutes <= POLICY.maxDurationMinutes) {
-      presets.push({ label: hhmm(boundEnd) + "까지 전부", start: now, end: boundEnd });
+      presets.push({ label: hhmm(boundEnd) + "까지 예약하기", start: now, end: boundEnd });
     }
   }
 
@@ -114,6 +114,7 @@ export function RoomLandingScreen() {
   const [extendError, setExtendError] = useState<string | null>(null);
   const [ending, setEnding] = useState(false);
   const [endError, setEndError] = useState<string | null>(null);
+  const [actionStatus, setActionStatus] = useState<string | null>(null);
 
   if (!room) {
     return (
@@ -163,20 +164,39 @@ export function RoomLandingScreen() {
 
   const boundEnd: Date | null = gap && gap.end.getTime() < dayEnd.getTime() ? gap.end : null;
   const freePresets = state.kind === "free" ? buildFreePresets(now, boundEnd) : [];
-  const nextLabel = boundEnd ? "다음 예약 " + hhmm(boundEnd) : "오늘 남은 시간 모두 비어있음";
+  const nextLabel = boundEnd
+    ? "다음 예약은 " + hhmm(boundEnd) + "에 있어요."
+    : "오늘 남은 시간은 모두 비어 있어요.";
 
   const mineBooking = state.kind === "mine" ? state.booking : null;
   const extendPreview = mineBooking
     ? canExtend(mineBooking, bookings, POLICY.extendStepMinutes, POLICY)
     : null;
   const extendBlockedReason = extendPreview && !extendPreview.ok ? extendReasonText(extendPreview) : null;
+  const roomLiveMessage =
+    checkingIn
+      ? "체크인하는 중이에요."
+      : extending
+        ? "연장하는 중이에요."
+        : ending
+          ? "회의를 끝내는 중이에요."
+          : checkInError || extendError || endError
+            ? ""
+            : actionStatus ??
+              (!hasData && bookingsState.loading
+                ? "예약 정보를 불러오는 중이에요."
+                : hasData && !bookingsState.loading && !bookingsState.error
+                  ? "예약 정보를 불러왔어요."
+                  : "");
 
   async function handleCheckIn() {
     if (!mineBooking) return;
     setCheckingIn(true);
     setCheckInError(null);
+    setActionStatus(null);
     try {
       await repo.checkIn(mineBooking.id);
+      setActionStatus("체크인했어요.");
       bookingsState.reload();
     } catch (e) {
       setCheckInError(
@@ -191,6 +211,7 @@ export function RoomLandingScreen() {
     if (!mineBooking) return;
     setExtending(true);
     setExtendError(null);
+    setActionStatus(null);
     try {
       // 연장 직전 재조회 — 오래된 화면 캐시로 판단하면 조용히 이중 예약이 된다 (설계 스펙 §6.2)
       const fresh = await repo.listByRoom(safeRoomId, appNow());
@@ -204,6 +225,7 @@ export function RoomLandingScreen() {
         setExtendError(changed.reason === "blocked" ? changed.by + "님 예약과 겹쳐요" : changed.message);
         return;
       }
+      setActionStatus(String(POLICY.extendStepMinutes) + "분 연장했어요.");
       bookingsState.reload();
     } catch (e) {
       setExtendError(
@@ -218,12 +240,14 @@ export function RoomLandingScreen() {
     if (!mineBooking) return;
     setEnding(true);
     setEndError(null);
+    setActionStatus(null);
     try {
       const result = await repo.changeEnd(mineBooking.id, appNow());
       if (!result.ok) {
         setEndError(result.reason === "blocked" ? result.by + "님 예약과 겹쳐요" : result.message);
         return;
       }
+      setActionStatus("지금 회의를 끝냈어요.");
       bookingsState.reload();
     } catch (e) {
       setEndError(e instanceof Error ? e.message : "종료 중 문제가 생겼어요. 잠시 후 다시 시도해 주세요.");
@@ -242,6 +266,9 @@ export function RoomLandingScreen() {
         <h1 className="t-display mr-landing__title">{room.name}</h1>
         <p className="t-body mr-landing__meta">
           {room.floor}
+        </p>
+        <p className="visually-hidden" role="status" aria-live="polite" aria-atomic="true">
+          {roomLiveMessage}
         </p>
 
         {prefsState.error ? (
@@ -284,7 +311,7 @@ export function RoomLandingScreen() {
                   <Card>
                     <div className="mr-landing__statusline">
                       <span className="mr-landing__dot" data-tone="free" />
-                      <span className="t-body">지금 비어있음</span>
+                      <span className="t-body">지금 비어 있어요.</span>
                     </div>
                     <p className="t-small t-muted mr-landing__sub">{nextLabel}</p>
                   </Card>
@@ -309,7 +336,7 @@ export function RoomLandingScreen() {
                     <div className="mr-landing__statusline">
                       <span className="mr-landing__dot" data-tone="busy" />
                       <span className="t-body">
-                        {state.booking.organizerName}님 사용 중 · {hhmm(state.booking.end)}까지
+                        {state.booking.organizerName}님이 사용 중이에요. {hhmm(state.booking.end)}에 끝나요.
                       </span>
                     </div>
                   </Card>
@@ -331,12 +358,12 @@ export function RoomLandingScreen() {
                            * 유일한 액션을 흐리게 두라는 뜻이 아니다.
                            */}
                           <Button block onClick={() => setDraft(suggestedSlot(gap))}>
-                            {hhmm(gap.start)}에 예약하기
+                            {hhmm(gap.start)}부터 예약하기
                           </Button>
                         </div>
                       </>
                     ) : (
-                      <p className="t-small mr-landing__gaplabel">오늘 남은 시간 동안 사용 중이에요</p>
+                      <p className="t-small mr-landing__gaplabel">오늘 남은 시간은 계속 사용 중이에요.</p>
                     )}
                   </Card>
                 </>
@@ -345,7 +372,7 @@ export function RoomLandingScreen() {
                   <div className="mr-landing__mine-head">
                     <span className="mr-landing__dot" data-tone="busy" />
                     <span className="t-body">
-                      내 회의 진행 중 · {hhmm(state.booking.start)}–{hhmm(state.booking.end)}
+                      내 회의가 진행 중이에요. {hhmm(state.booking.start)}–{hhmm(state.booking.end)}
                     </span>
                   </div>
 
@@ -365,9 +392,9 @@ export function RoomLandingScreen() {
                         variant="secondary"
                         onClick={handleExtend}
                         disabled={extending || Boolean(extendBlockedReason)}
-                        reason={extendError ?? extendBlockedReason}
+                        reason={extendBlockedReason}
                       >
-                        {extending ? "연장하는 중…" : "+" + String(POLICY.extendStepMinutes) + "분 연장"}
+                        {extending ? "연장하는 중…" : String(POLICY.extendStepMinutes) + "분 연장하기"}
                       </ButtonWithReason>
                       <Button variant="secondary" onClick={handleEndNow} disabled={ending}>
                         {ending ? "종료하는 중…" : "지금 종료하기"}
@@ -375,6 +402,7 @@ export function RoomLandingScreen() {
                     </div>
 
                     {checkInError ? <Alert>{checkInError}</Alert> : null}
+                    {extendError ? <Alert>{extendError}</Alert> : null}
                     {endError ? <Alert>{endError}</Alert> : null}
                   </div>
                 </Card>

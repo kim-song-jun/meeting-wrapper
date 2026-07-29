@@ -135,6 +135,9 @@ function Sidebar() {
 function Shell({ children, pane = false }: { children: React.ReactNode; pane?: boolean }) {
   return (
     <div className={pane ? "mr-shell mr-shell--pane" : "mr-shell"}>
+      <a className="mr-skip-link" href="#main-content">
+        본문으로 건너뛰기
+      </a>
       <Sidebar />
       <header className="mr-appbar">
         <span className="mr-appbar__brand">
@@ -151,7 +154,9 @@ function Shell({ children, pane = false }: { children: React.ReactNode; pane?: b
         </nav>
         <AccountCluster />
       </header>
-      <main className="mr-main">{children}</main>
+      <main id="main-content" tabIndex={-1} className="mr-main">
+        {children}
+      </main>
       <MobileNavigation />
     </div>
   );
