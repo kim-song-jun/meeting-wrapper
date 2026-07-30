@@ -59,11 +59,11 @@ function conferenceUrl(booking: Booking): string | null {
  * useAsync 가 reload() 를 이미 주는데 "새로고침해 주세요" 로만 끝내면
  * 사용자가 브라우저를 직접 새로고침해야 한다.
  */
-function LoadError({ what, error, onRetry }: { what: string; error: Error; onRetry: () => void }) {
+function LoadError({ what, onRetry }: { what: string; onRetry: () => void }) {
   return (
     <Alert>
       <span>
-        {what}을 불러오지 못했어요 ({error.message}).
+        {what}을 불러오지 못했어요. 잠시 후 다시 시도해 주세요.
       </span>{" "}
       {/* secondary(44px) — /me 는 모바일에서도 그대로 열리고 데스크톱 격자 인접 컨텍스트가 아니다 */}
       <Button variant="secondary" onClick={onRetry}>
@@ -101,7 +101,7 @@ export function MyBookingsScreen() {
     return <LoadingState />;
   }
   if (userState.error) {
-    return <LoadError what="사용자 정보" error={userState.error} onRetry={userState.reload} />;
+    return <LoadError what="사용자 정보" onRetry={userState.reload} />;
   }
   const user = userState.data;
   if (!user) return null;
@@ -148,7 +148,7 @@ function MineTab() {
   if (state.loading) return <LoadingState />;
   if (state.error) {
     return (
-      <LoadError what="예약 목록" error={state.error} onRetry={state.reload} />
+      <LoadError what="예약 목록" onRetry={state.reload} />
     );
   }
   const bookings = state.data ?? [];
@@ -303,7 +303,7 @@ function PastTab() {
 
   if (state.loading) return <LoadingState />;
   if (state.error) {
-    return <LoadError what="지난 예약" error={state.error} onRetry={state.reload} />;
+    return <LoadError what="지난 예약" onRetry={state.reload} />;
   }
   const bookings = state.data ?? [];
 
@@ -553,7 +553,7 @@ function AllTab() {
   if (state.loading) return <LoadingState />;
   if (state.error) {
     return (
-      <LoadError what="오늘 예약 전체" error={state.error} onRetry={state.reload} />
+      <LoadError what="오늘 예약 전체" onRetry={state.reload} />
     );
   }
   const bookings = state.data ?? [];
@@ -643,7 +643,7 @@ function SettingsTab() {
   if (state.loading) return <LoadingState />;
   if (state.error) {
     return (
-      <LoadError what="설정" error={state.error} onRetry={state.reload} />
+      <LoadError what="설정" onRetry={state.reload} />
     );
   }
   if (!state.data) return null;
