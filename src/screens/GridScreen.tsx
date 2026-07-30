@@ -708,8 +708,13 @@ export function GridScreen() {
   }
 
   function closeBookingDialog() {
+    const range = dialogRange;
     setDialogRange(null);
     setPendingSel(null);
+    if (range && view === "day") {
+      const slot = Math.floor(slotIndexOf(range.start, dayStart, POLICY.slotMinutes));
+      requestAnimationFrame(() => focusCell(range.roomId, slot));
+    }
   }
 
   /* ---- 내 예약 드래그 수정 (일간 뷰 전용) ---- */
