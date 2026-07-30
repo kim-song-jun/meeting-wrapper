@@ -1227,39 +1227,29 @@ svg {
     </aside>
     <main class="app-main">
       <div class="page-head"><div><h1 class="page-title">예약 현황</h1><p class="page-subtitle">비어 있는 시간을 고르면 예약을 시작해요.</p></div></div>
-      <div class="calendar-toolbar"><span class="button quiet compact">오늘</span><strong class="period-title">7월 28일 화요일</strong><span class="grow"></span><div class="segmented"><span class="active">일</span><span>주</span><span>월</span></div></div>
-      <section class="calendar-frame"><div class="calendar-board"><div class="corner-cell"></div><div class="room-head"><strong>소회의실</strong><span>3F</span></div><div class="room-head"><strong>대회의실</strong><span>3F</span></div><div class="time-axis"></div><div class="grid-column"><div class="event mine" style="top:144px;height:48px"><strong>김성준 · 내 예약</strong><span>11:00–12:00</span></div></div><div class="grid-column"><div class="event" style="top:120px;height:72px"><strong>한서연</strong><span>10:30–12:00</span></div></div></div></section>
+      <div class="calendar-toolbar"><span class="button quiet compact">오늘</span><strong class="period-title">7월 29일 (수)</strong><span class="grow"></span><div class="segmented"><span class="active">일</span><span>주</span><span>월</span></div></div>
+      <section class="calendar-frame"><div class="calendar-board"><div class="corner-cell"></div><div class="room-head"><strong>소회의실</strong><span>3F</span></div><div class="room-head"><strong>대회의실</strong><span>3F</span></div><div class="time-axis"></div><div class="grid-column"><div class="event mine" style="top:144px;height:24px"><strong>11:00–11:30</strong><span>30분</span></div></div><div class="grid-column"><div class="event mine" style="top:144px;height:72px"><strong>성준</strong><span>11:00–12:30</span></div></div></div></section>
     </main>
   </div>
 
   <div class="dialog-backdrop" role="presentation">
     <section class="dialog" role="dialog" aria-modal="true" aria-labelledby="booking-title">
-      <h2 id="booking-title">소회의실 예약</h2>
-      <p class="dialog-subtitle">7월 28일 화요일 · 10:30–11:00</p>
+      <h2 id="booking-title">회의실 예약</h2>
+      <p class="dialog-subtitle">소회의실 · 11:00–11:30 (30분)</p>
 
       <form class="form-stack">
         <div class="field">
           <label for="meeting-title">회의 제목</label>
-          <input class="input" id="meeting-title" value="주간 제품 회의" />
+          <input class="input" id="meeting-title" placeholder="주간 기획회의" />
+          <p class="field-hint">격자에는 주최자만 보이고 제목은 표시되지 않아요</p>
         </div>
-        <div class="field-row">
-          <div class="field"><span class="label">시작</span><div class="choice-row"><strong>10:30</strong><span>변경</span></div></div>
-          <div class="field"><span class="label">종료</span><div class="choice-row"><strong>11:00</strong><span>30분</span></div></div>
-        </div>
-        <div class="field">
-          <span class="label">참석 인원</span>
-          <div class="choice-row"><strong>4명</strong><span>− &nbsp;&nbsp; +</span></div>
-        </div>
-        <div class="field">
-          <label for="attendees">참석자 초대</label>
-          <input class="input" id="attendees" placeholder="이름이나 이메일 검색" />
-        </div>
-        <p class="dialog-alert">이 시간은 지금 비어 있어요. 예약 직전에 한 번 더 확인해 중복을 막아요.</p>
+        <div class="field"><span class="label">인원</span><div class="choice-row"><span>−</span><strong>2명</strong><span>+</span></div><p class="field-hint">참석 인원 기록용 — 초대와 별개예요</p></div>
+        <div class="field"><span class="label">추가 옵션 · Google Meet 자동 생성</span></div>
       </form>
 
       <div class="dialog-actions">
-        <a class="button secondary" href="calendar.html">그만두기</a>
-        <a class="button" href="my-bookings.html">30분 예약하기</a>
+        <a class="button secondary" href="calendar.html">취소</a>
+        <a class="button" href="my-bookings.html">예약하기</a>
       </div>
     </section>
   </div>
