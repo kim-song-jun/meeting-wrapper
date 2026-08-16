@@ -81,7 +81,12 @@ export function LoginScreen() {
         <BrandMark size={56} className="mr-login__mark" />
         <h1 className="t-title mr-login__title">MolRoom</h1>
         <p className="t-small t-muted mr-login__subtitle">molcube 회의실 예약</p>
-        <p className="visually-hidden" role="status" aria-live="polite" aria-atomic="true">
+        <p
+          className="visually-hidden mr-login__status"
+          role="status"
+          aria-live="polite"
+          aria-atomic="true"
+        >
           {loginStatus}
         </p>
 

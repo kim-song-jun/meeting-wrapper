@@ -1,8 +1,4 @@
-/*
- * /login — Shell 밖 단독 화면(QR 랜딩과 같은 급). 배경은 base.css 의 전역
- * body::before 앰비언트 블루 radial 이 자동 적용된다 — 여기서 새로 만들
- * 것 없음.
- */
+/* /login — Shell 밖 단독 화면(QR 랜딩과 같은 급). */
 
 .mr-login {
   min-height: 100dvh;
@@ -24,8 +20,7 @@
 }
 
 
-/* 유리 위 보조 텍스트는 --c-muted(4.66:1) 로는 위험하다 — 한 단 올린다.
- * components.css 의 유리 위 텍스트 보정과 같은 규칙. */
+/* 읽어야 하는 보조 문장은 DESIGN.md §12-5에 따라 Body 색을 쓴다. */
 .mr-login__col .t-muted {
   color: var(--c-body);
 }
@@ -44,19 +39,17 @@
 }
 
 /*
- * 아이덴티티 블록과 액션 사이 — Apple 사인인 페이지 관행의 넉넉한 여백.
- * 도메인 거부 상태(③)는 Primary 버튼이 사라져 안내 문구가 subtitle 바로
- * 다음 형제가 되므로, 어느 쪽이 오든 subtitle 다음 요소에 32px 을 준다.
+ * 숨은 live status는 시각 간격을 차지하지 않는다. 다음에 버튼이 오든,
+ * 도메인 거부 상태에서 안내 문구가 오든 24px의 결정 간격을 유지한다.
  */
-.mr-login__subtitle + .mr-btn,
-.mr-login__subtitle + .mr-login__hint {
+.mr-login__status + .mr-btn,
+.mr-login__status + .mr-login__hint {
   margin-top: 24px;
 }
 
 /*
- * 포인터에서는 폭을 글자에 맞춘다. 292px 짜리 28px 버튼은 맥 앱의 컨트롤이
- * 아니라 웹 폼처럼 읽힌다 — 맥의 사인인 시트 버튼은 글자 폭 + 패딩이다.
- * 손가락(<768px)에서는 iOS 관행대로 전폭 44px 를 유지한다.
+ * 포인터에서는 글자 폭에 맞추고, 모바일에서는 한 손으로 누르기 쉽게
+ * 열 너비를 채운다. 높이는 공통 Button의 48px/56px 규칙을 따른다.
  */
 @media (min-width: 768px) {
   .mr-login__col .mr-btn--block {
