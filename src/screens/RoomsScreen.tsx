@@ -53,13 +53,18 @@ export function RoomsScreen() {
     return grouped;
   }, [dayState.data]);
 
-  const dialogPrefs = prefsState.data ?? { defaultZoomUrl: null };
+  const prefsPending = prefsState.data === null && prefsState.error === null;
+  const prefsReady = prefsState.data !== null || prefsState.error !== null;
+  const dialogPrefs = prefsState.data ?? (prefsState.error ? { defaultZoomUrl: null } : null);
   const hasBookings = dayState.data !== null;
   const now = appNow();
   const liveMessage = hasBookings && dayState.loading ? "최신 상태를 확인하는 중…" : announcement;
 
-  function reloadAll() {
+  function reloadDay() {
     dayState.reload();
+  }
+
+  function reloadPrefs() {
     prefsState.reload();
   }
 
@@ -80,7 +85,7 @@ export function RoomsScreen() {
         <Alert>
           회의실 상태를 불러오지 못했어요. 네트워크 상태를 확인하고 다시 시도해 주세요.
           <div className="rooms-alert__action">
-            <Button variant="secondary" onClick={reloadAll}>
+            <Button variant="secondary" onClick={reloadDay}>
               다시 불러오기
             </Button>
           </div>
@@ -109,7 +114,7 @@ export function RoomsScreen() {
         <Alert>
           표시된 상태가 최신이 아닐 수 있어요. 다시 불러와 주세요.
           <div className="rooms-alert__action">
-            <Button variant="secondary" onClick={reloadAll}>
+            <Button variant="secondary" onClick={reloadDay}>
               다시 불러오기
             </Button>
           </div>
@@ -117,7 +122,14 @@ export function RoomsScreen() {
       ) : null}
 
       {prefsState.error ? (
-        <Alert>기본 Zoom 링크를 불러오지 못했어요. 예약할 때 직접 입력해야 할 수 있어요.</Alert>
+        <Alert>
+          기본 Zoom 링크를 불러오지 못했어요. 예약할 때 직접 입력해야 할 수 있어요.
+          <div className="rooms-alert__action">
+            <Button variant="secondary" onClick={reloadPrefs}>
+              다시 불러오기
+            </Button>
+          </div>
+        </Alert>
       ) : null}
 
       <div className="rooms-grid">
@@ -128,7 +140,9 @@ export function RoomsScreen() {
             selectedTime?.roomId === room.id
               ? availability.options.find((option) => option.id === selectedTime.option.id) ?? null
               : null;
-          const actionReason = availability.unavailableReason ?? (selectedOption ? null : "예약할 시간을 골라 주세요.");
+          const actionReason = availability.unavailableReason ?? (
+            prefsPending ? "사용자 설정을 확인하는 중이에요." : selectedOption ? null : "예약할 시간을 골라 주세요."
+          );
 
           return (
             <Card key={room.id} className="rooms-card">
@@ -164,7 +178,7 @@ export function RoomsScreen() {
                   variant="secondary"
                   disabled={actionReason !== null}
                   onClick={() => {
-                    if (selectedOption) setDialogSlot({ roomId: room.id, option: selectedOption });
+                    if (selectedOption && prefsReady) setDialogSlot({ roomId: room.id, option: selectedOption });
                   }}
                 >
                   이 시간 예약하기
@@ -191,7 +205,7 @@ export function RoomsScreen() {
         })}
       </div>
 
-      {dialogSlot ? (
+      {dialogSlot && dialogPrefs ? (
         <BookingDialog
           roomId={dialogSlot.roomId}
           start={dialogSlot.option.start}
@@ -203,6 +217,7 @@ export function RoomsScreen() {
             setSelectedTime(null);
             setAnnouncement(`${roomById(booking.roomId)?.name ?? "회의실"} ${hhmm(booking.start)}–${hhmm(booking.end)} 예약을 만들었어요.`);
             dayState.reload();
+            prefsState.reload();
           }}
         />
       ) : null}
