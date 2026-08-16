@@ -36,6 +36,9 @@ function nextBookingCopy(next: { start: Date } | null): string {
 export function RoomsScreen() {
   const [now, setNow] = useState(appNow);
   const todayRef = useRef(now);
+  const optionButtonRefs = useRef(new Map<string, HTMLButtonElement>());
+  const fallbackFocusRef = useRef<HTMLAnchorElement>(null);
+  const focusRestoreFrameRef = useRef<number | null>(null);
   const [selectedTime, setSelectedTime] = useState<SelectedTime | null>(null);
   const [dialogSlot, setDialogSlot] = useState<SelectedTime | null>(null);
   const [announcement, setAnnouncement] = useState("");
@@ -83,6 +86,13 @@ export function RoomsScreen() {
       document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
   }, [dayState.reload]);
+
+  useEffect(() => () => {
+    if (focusRestoreFrameRef.current !== null) {
+      window.cancelAnimationFrame(focusRestoreFrameRef.current);
+      focusRestoreFrameRef.current = null;
+    }
+  }, []);
 
   const currentDayBookings = bookingsForLocalDay(dayState.data, now);
   const bookingsByRoom = useMemo(() => {
@@ -135,8 +145,33 @@ export function RoomsScreen() {
   }
 
   function closeDialog() {
+    const preferredFocusKey = dialogSlot
+      ? `${dialogSlot.roomId}:${dialogSlot.option.id}`
+      : null;
     setDialogSlot(null);
     setSelectedTime(null);
+
+    if (focusRestoreFrameRef.current !== null) {
+      window.cancelAnimationFrame(focusRestoreFrameRef.current);
+    }
+    focusRestoreFrameRef.current = window.requestAnimationFrame(() => {
+      focusRestoreFrameRef.current = window.requestAnimationFrame(() => {
+        focusRestoreFrameRef.current = null;
+        const preferredTarget = preferredFocusKey
+          ? optionButtonRefs.current.get(preferredFocusKey) ?? null
+          : null;
+        const target = preferredTarget && !preferredTarget.disabled
+          ? preferredTarget
+          : fallbackFocusRef.current;
+        if (
+          target?.isConnected &&
+          target.offsetParent !== null &&
+          !target.closest("[inert]")
+        ) {
+          target.focus();
+        }
+      });
+    });
   }
 
   function selectTime(roomId: string, option: QuickBookingOption) {
@@ -176,7 +211,7 @@ export function RoomsScreen() {
             지금 상태와 다음 예약을 비교하고, 가능한 시간을 골라보세요.
           </p>
         </div>
-        <Link className="mr-page-action" to="/">전체 일정 보기</Link>
+        <Link ref={fallbackFocusRef} className="mr-page-action" to="/">전체 일정 보기</Link>
       </header>
 
       <p className="visually-hidden" role="status" aria-live="polite" aria-atomic="true">
@@ -240,6 +275,11 @@ export function RoomsScreen() {
                   return (
                     <button
                       key={option.id}
+                      ref={(element) => {
+                        const key = `${room.id}:${option.id}`;
+                        if (element) optionButtonRefs.current.set(key, element);
+                        else optionButtonRefs.current.delete(key);
+                      }}
                       type="button"
                       className="rooms-time-option"
                       aria-pressed={isSelected}
