@@ -2,6 +2,7 @@ import { NavLink, Route, Routes } from "react-router-dom";
 import { GridScreen } from "./screens/GridScreen";
 import { RoomLandingScreen } from "./screens/RoomLandingScreen";
 import { MyBookingsScreen } from "./screens/MyBookingsScreen";
+import { RoomsScreen } from "./screens/RoomsScreen";
 import { LoginScreen } from "./screens/LoginScreen";
 import { AuthProvider, useAuth } from "./auth/AuthProvider";
 import { RequireAuth } from "./auth/RequireAuth";
@@ -34,7 +35,7 @@ function AccountCluster() {
  * 손가락 폭의 주요 내비게이션.
  *
  * 모바일 상단 바에 브랜드·화면 이동·계정을 한꺼번에 두면 세 역할이 한 줄에서
- * 경쟁한다. 상단에는 브랜드와 계정만 남기고, 자주 오가는 두 화면은 엄지가
+ * 경쟁한다. 상단에는 브랜드와 계정만 남기고, 자주 오가는 세 화면은 엄지가
  * 닿는 하단으로 내린다. 별도 아이콘을 발명하지 않고 텍스트와 Weak 선택 상태만
  * 써서 기존 Toss 파생 언어를 유지한다.
  */
@@ -43,6 +44,9 @@ function MobileNavigation() {
     <nav className="mr-mobile-nav" aria-label="주요 화면">
       <NavLink to="/" end className="mr-mobile-nav__item">
         예약 현황
+      </NavLink>
+      <NavLink to="/rooms" className="mr-mobile-nav__item">
+        회의실
       </NavLink>
       <NavLink to="/me" className="mr-mobile-nav__item">
         내 예약
@@ -56,7 +60,7 @@ function MobileNavigation() {
  *
  * 회의실 목록은 장식이 아니라 캘린더 목록과 같은 컨트롤이다: 체크를 끄면
  * 격자에서 빠진다. 1024px 미만에서는 접히고, 태블릿은 상단 내비게이션,
- * 모바일은 하단 내비게이션으로 같은 두 화면을 오간다.
+ * 모바일은 하단 내비게이션으로 같은 세 화면을 오간다.
  */
 function Sidebar() {
   const auth = useAuth();
@@ -71,6 +75,9 @@ function Sidebar() {
       <nav className="mr-sidebar__nav" aria-label="화면 이동">
         <NavLink to="/" end className={({ isActive }) => (isActive ? "mr-sidebar__item active" : "mr-sidebar__item")}>
           예약 현황
+        </NavLink>
+        <NavLink to="/rooms" className={({ isActive }) => (isActive ? "mr-sidebar__item active" : "mr-sidebar__item")}>
+          회의실
         </NavLink>
         <NavLink to="/me" className={({ isActive }) => (isActive ? "mr-sidebar__item active" : "mr-sidebar__item")}>
           내 예약
@@ -148,6 +155,9 @@ function Shell({ children, pane = false }: { children: React.ReactNode; pane?: b
           <NavLink to="/" end className="mr-navlink">
             예약 현황
           </NavLink>
+          <NavLink to="/rooms" className="mr-navlink">
+            회의실
+          </NavLink>
           <NavLink to="/me" className="mr-navlink">
             내 예약
           </NavLink>
@@ -186,6 +196,16 @@ export function App() {
             <RequireAuth>
               <Shell pane>
                 <GridScreen />
+              </Shell>
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/rooms"
+          element={
+            <RequireAuth>
+              <Shell>
+                <RoomsScreen />
               </Shell>
             </RequireAuth>
           }

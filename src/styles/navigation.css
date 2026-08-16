@@ -2,7 +2,7 @@
  * 반응형 주요 내비게이션 — Toss 파생 원칙을 그대로 따른다.
  *
  * 새 색·그림자·유리를 만들지 않는다. 데스크톱 사이드바, 태블릿 상단 바,
- * 모바일 하단 바가 같은 두 목적지를 서로 다른 배치로 제공한다.
+ * 모바일 하단 바가 같은 세 목적지를 서로 다른 배치로 제공한다.
  */
 
 .mr-mobile-nav {
@@ -116,7 +116,7 @@
     left: 0;
     z-index: 20;
     display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: 8px;
     padding:
       8px max(16px, env(safe-area-inset-right))
