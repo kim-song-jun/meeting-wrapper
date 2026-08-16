@@ -24,6 +24,11 @@ export interface RoomAvailability {
   unavailableReason: string | null;
 }
 
+export interface LocalDayBookings {
+  day: Date;
+  bookings: readonly Booking[];
+}
+
 export function millisecondsUntilNextMinute(now: Date): number {
   return MINUTE - (now.getSeconds() * 1_000 + now.getMilliseconds());
 }
@@ -34,6 +39,15 @@ export function hasLocalDayChanged(previous: Date, current: Date): boolean {
     previous.getMonth() !== current.getMonth() ||
     previous.getDate() !== current.getDate()
   );
+}
+
+export function bookingsForLocalDay(
+  payload: LocalDayBookings | null,
+  currentDay: Date,
+): readonly Booking[] | null {
+  return payload !== null && !hasLocalDayChanged(payload.day, currentDay)
+    ? payload.bookings
+    : null;
 }
 
 export function findExactQuickBookingOption(

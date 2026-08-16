@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  bookingsForLocalDay,
   deriveRoomAvailability,
   findExactQuickBookingOption,
   hasLocalDayChanged,
@@ -153,5 +154,13 @@ describe("room availability refresh boundaries", () => {
 
     expect(selected).toBeDefined();
     expect(selected && findExactQuickBookingOption(offeredAfterTick, selected)).toBeNull();
+  });
+
+  it("exposes bookings only for the local day they were loaded for", () => {
+    const bookings = [booking(9, 0, 10, 0)];
+    const payload = { day: at(8), bookings };
+
+    expect(bookingsForLocalDay(payload, at(18))).toBe(bookings);
+    expect(bookingsForLocalDay(payload, new Date(2026, 7, 17, 0, 0, 0, 0))).toBeNull();
   });
 });

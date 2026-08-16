@@ -6,6 +6,7 @@ import { useAsync } from "../app/useAsync";
 import { Alert, Button, Card } from "../components/ui";
 import { repo } from "../data";
 import {
+  bookingsForLocalDay,
   deriveRoomAvailability,
   findExactQuickBookingOption,
   hasLocalDayChanged,
@@ -13,7 +14,7 @@ import {
 } from "../domain/roomAvailability";
 import { hhmm } from "../domain/time";
 import type { Booking, UserPrefs } from "../domain/types";
-import type { QuickBookingOption } from "../domain/roomAvailability";
+import type { LocalDayBookings, QuickBookingOption } from "../domain/roomAvailability";
 import { BookingDialog } from "./BookingDialog";
 import "../styles/rooms.css";
 
@@ -43,7 +44,10 @@ export function RoomsScreen() {
    * 이 화면의 방 상태는 하루 전체 예약 한 번으로만 그린다. 설정은 별도의
    * 비동기 상태로 둬서 Zoom 기본값 실패가 회의실 카드까지 비우지 않게 한다.
    */
-  const dayState = useAsync<Booking[]>(() => repo.listByDay(todayRef.current), []);
+  const dayState = useAsync<LocalDayBookings>(async () => {
+    const day = new Date(todayRef.current.getTime());
+    return { day, bookings: await repo.listByDay(day) };
+  }, []);
   const prefsState = useAsync<UserPrefs>(() => repo.getPrefs(), []);
 
   useEffect(() => {
@@ -80,10 +84,11 @@ export function RoomsScreen() {
     };
   }, [dayState.reload]);
 
+  const currentDayBookings = bookingsForLocalDay(dayState.data, now);
   const bookingsByRoom = useMemo(() => {
     const grouped = new Map<string, Booking[]>();
     for (const room of ROOMS) grouped.set(room.id, []);
-    for (const booking of dayState.data ?? []) {
+    for (const booking of currentDayBookings ?? []) {
       const roomBookings = grouped.get(booking.roomId);
       if (roomBookings) roomBookings.push(booking);
     }
@@ -91,30 +96,35 @@ export function RoomsScreen() {
       roomBookings.sort((a, b) => a.start.getTime() - b.start.getTime());
     }
     return grouped;
-  }, [dayState.data]);
+  }, [currentDayBookings]);
 
   const roomAvailabilities = useMemo(() => ROOMS.map((room) => ({
     room,
-    availability: deriveRoomAvailability(bookingsByRoom.get(room.id) ?? [], now, POLICY),
-  })), [bookingsByRoom, now]);
+    availability: currentDayBookings === null
+      ? null
+      : deriveRoomAvailability(bookingsByRoom.get(room.id) ?? [], now, POLICY),
+  })), [bookingsByRoom, currentDayBookings, now]);
 
   useEffect(() => {
     function isStillOffered(selection: SelectedTime): boolean {
       const roomAvailability = roomAvailabilities.find(({ room }) => room.id === selection.roomId);
-      return roomAvailability
+      return roomAvailability?.availability
         ? findExactQuickBookingOption(roomAvailability.availability.options, selection.option) !== null
         : false;
     }
 
-    if (selectedTime && !isStillOffered(selectedTime)) setSelectedTime(null);
-    if (dialogSlot && !isStillOffered(dialogSlot)) setDialogSlot(null);
+    if (!dialogSlot && selectedTime && !isStillOffered(selectedTime)) setSelectedTime(null);
   }, [dialogSlot, roomAvailabilities, selectedTime]);
 
   const prefsPending = prefsState.data === null && prefsState.error === null;
   const prefsReady = prefsState.data !== null || prefsState.error !== null;
   const dialogPrefs = prefsState.data ?? (prefsState.error ? { defaultZoomUrl: null } : null);
-  const hasBookings = dayState.data !== null;
-  const liveMessage = hasBookings && dayState.loading ? "최신 상태를 확인하는 중…" : announcement;
+  const hasLoadedBookings = dayState.data !== null;
+  const liveMessage = hasLoadedBookings && dayState.loading ? "최신 상태를 확인하는 중…" : announcement;
+  const waitingForCurrentDay = currentDayBookings === null && dayState.error === null;
+  const unavailableDayCopy = dayState.loading || waitingForCurrentDay
+    ? "새 날짜의 예약을 불러오는 중이에요."
+    : "새 날짜의 예약을 불러오지 못했어요. 다시 불러와 주세요.";
 
   function reloadDay() {
     dayState.reload();
@@ -124,18 +134,25 @@ export function RoomsScreen() {
     prefsState.reload();
   }
 
+  function closeDialog() {
+    setDialogSlot(null);
+    setSelectedTime(null);
+  }
+
   function selectTime(roomId: string, option: QuickBookingOption) {
     setAnnouncement("");
     setSelectedTime((current) =>
-      current?.roomId === roomId && current.option.id === option.id ? null : { roomId, option },
+      current?.roomId === roomId && findExactQuickBookingOption([option], current.option)
+        ? null
+        : { roomId, option },
     );
   }
 
-  if (!hasBookings && dayState.loading) {
+  if (!hasLoadedBookings && dayState.loading) {
     return <p className="mr-state" role="status">회의실 상태를 불러오는 중…</p>;
   }
 
-  if (!hasBookings && dayState.error) {
+  if (!hasLoadedBookings && dayState.error) {
     return (
       <div className="rooms-state-alert">
         <Alert>
@@ -192,12 +209,14 @@ export function RoomsScreen() {
         {roomAvailabilities.map(({ room, availability }) => {
           const bookings = bookingsByRoom.get(room.id) ?? [];
           const selectedOption =
-            selectedTime?.roomId === room.id
+            availability && selectedTime?.roomId === room.id
               ? findExactQuickBookingOption(availability.options, selectedTime.option)
               : null;
-          const actionReason = availability.unavailableReason ?? (
-            prefsPending ? "사용자 설정을 확인하는 중이에요." : selectedOption ? null : "예약할 시간을 골라 주세요."
-          );
+          const actionReason = availability
+            ? availability.unavailableReason ?? (
+              prefsPending ? "사용자 설정을 확인하는 중이에요." : selectedOption ? null : "예약할 시간을 골라 주세요."
+            )
+            : unavailableDayCopy;
 
           return (
             <Card key={room.id} className="rooms-card">
@@ -206,13 +225,17 @@ export function RoomsScreen() {
                   <h2 className="t-section rooms-card__name">{room.name}</h2>
                   <p className="t-small rooms-card__floor">{room.floor}</p>
                 </div>
-                <p className="t-body rooms-card__status">{statusCopy(availability.state)}</p>
+                <p className="t-body rooms-card__status">
+                  {availability ? statusCopy(availability.state) : unavailableDayCopy}
+                </p>
               </div>
 
-              <p className="t-small rooms-card__next">{nextBookingCopy(availability.next)}</p>
+              <p className="t-small rooms-card__next">
+                {availability ? nextBookingCopy(availability.next) : unavailableDayCopy}
+              </p>
 
               <div className="rooms-card__choices" role="group" aria-label={`${room.name} 예약 시간 선택`}>
-                {availability.options.map((option) => {
+                {(availability?.options ?? []).map((option) => {
                   const isSelected = selectedOption?.id === option.id;
                   return (
                     <button
@@ -243,7 +266,9 @@ export function RoomsScreen() {
 
               <div className="rooms-card__bookings">
                 <h3 className="t-small rooms-card__bookings-title">오늘 예약</h3>
-                {bookings.length === 0 ? (
+                {!availability ? (
+                  <p className="t-small rooms-card__empty">{unavailableDayCopy}</p>
+                ) : bookings.length === 0 ? (
                   <p className="t-small rooms-card__empty">오늘 예약이 없어요.</p>
                 ) : (
                   <ul className="rooms-card__booking-list">
@@ -266,7 +291,7 @@ export function RoomsScreen() {
           start={dialogSlot.option.start}
           end={dialogSlot.option.end}
           prefs={dialogPrefs}
-          onClose={() => setDialogSlot(null)}
+          onClose={closeDialog}
           onCreated={(booking) => {
             setDialogSlot(null);
             setSelectedTime(null);
