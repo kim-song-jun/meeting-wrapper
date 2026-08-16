@@ -10,10 +10,15 @@ export interface QuickBookingOption {
   end: Date;
 }
 
+export interface RoomAvailabilityBooking {
+  start: Date;
+  end: Date;
+}
+
 export interface RoomAvailability {
   state: RoomAvailabilityState;
-  current: Booking | null;
-  next: Booking | null;
+  current: RoomAvailabilityBooking | null;
+  next: RoomAvailabilityBooking | null;
   availableUntil: Date | null;
   options: QuickBookingOption[];
   unavailableReason: string | null;
@@ -29,6 +34,10 @@ function futureBooking(bookings: readonly Booking[], now: Date): Booking | null 
   return [...bookings]
     .filter((booking) => booking.start.getTime() > now.getTime())
     .sort((a, b) => a.start.getTime() - b.start.getTime())[0] ?? null;
+}
+
+function projectBooking(booking: Booking | null): RoomAvailabilityBooking | null {
+  return booking ? { start: booking.start, end: booking.end } : null;
 }
 
 function buildOptions(start: Date, end: Date, policy: Policy): QuickBookingOption[] {
@@ -63,8 +72,8 @@ export function deriveRoomAvailability(
   if (active) {
     return {
       state: active.isMine ? "mine" : "busy",
-      current: active,
-      next,
+      current: projectBooking(active),
+      next: projectBooking(next),
       availableUntil: null,
       options: [],
       unavailableReason: `${hhmm(active.end)}에 다시 확인해 주세요.`,
@@ -77,7 +86,7 @@ export function deriveRoomAvailability(
     return {
       state: "free",
       current: null,
-      next,
+      next: projectBooking(next),
       availableUntil: null,
       options: [],
       unavailableReason: "오늘 예약 가능한 시간이 끝났어요.",
@@ -90,19 +99,20 @@ export function deriveRoomAvailability(
     return {
       state: "free",
       current: null,
-      next,
+      next: projectBooking(next),
       availableUntil: null,
       options: [],
       unavailableReason: "지금 선택할 수 있는 시간이 없어요.",
     };
   }
 
-  const options = buildOptions(candidateStart, gap.end, policy);
+  const availableUntil = gap.end.getTime() > businessEnd.getTime() ? businessEnd : gap.end;
+  const options = buildOptions(candidateStart, availableUntil, policy);
   return {
     state: "free",
     current: null,
-    next,
-    availableUntil: gap.end,
+    next: projectBooking(next),
+    availableUntil,
     options,
     unavailableReason: options.length === 0 ? "30분 이상 비어 있는 시간을 기다려 주세요." : null,
   };

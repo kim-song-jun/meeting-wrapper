@@ -64,8 +64,10 @@ describe("deriveRoomAvailability", () => {
       maxDurationMinutes: 60,
     });
 
-    expect(result.options.map((option) => option.id)).toEqual(["30-minutes", "60-minutes"]);
-    expect(result.options.every((option) => option.end.getTime() <= at(11, 0).getTime())).toBe(true);
+    expect(result.options).toEqual([
+      { id: "30-minutes", label: "30분", start: at(10, 0), end: at(10, 30) },
+      { id: "60-minutes", label: "1시간", start: at(10, 0), end: at(11, 0) },
+    ]);
   });
 
   it("blocks quick booking while another person's meeting is active", () => {
@@ -90,5 +92,31 @@ describe("deriveRoomAvailability", () => {
     expect(result.state).toBe("free");
     expect(result.options).toEqual([]);
     expect(result.unavailableReason).toBe("오늘 예약 가능한 시간이 끝났어요.");
+  });
+
+  it("caps a late-day gap at business end even when the next booking starts later", () => {
+    const result = deriveRoomAvailability([booking(21, 0, 22, 0)], at(19, 30), POLICY);
+
+    expect(result.availableUntil).toEqual(at(20, 0));
+    expect(result.options).toEqual([
+      { id: "30-minutes", label: "30분", start: at(19, 30), end: at(20, 0) },
+    ]);
+    expect(result.options.every((option) => option.end.getTime() <= at(20, 0).getTime())).toBe(true);
+  });
+
+  it("offers no quick booking when the remaining gap is shorter than 30 minutes", () => {
+    const result = deriveRoomAvailability([booking(10, 20, 11, 0)], at(10, 0), POLICY);
+
+    expect(result.availableUntil).toEqual(at(10, 20));
+    expect(result.options).toEqual([]);
+  });
+
+  it("projects current and next bookings as safe time-only values", () => {
+    const current = booking(9, 30, 10, 30, { isMine: true });
+    const next = booking(11, 0, 12, 0);
+    const result = deriveRoomAvailability([current, next], at(10, 0), POLICY);
+
+    expect(result.current).toEqual({ start: at(9, 30), end: at(10, 30) });
+    expect(result.next).toEqual({ start: at(11, 0), end: at(12, 0) });
   });
 });
