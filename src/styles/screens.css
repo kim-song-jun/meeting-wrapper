@@ -162,6 +162,72 @@
   font-size: var(--t-small-size);
 }
 
+/* 페이지 위계 — 목록·허브 화면이 제목, 설명, 보조 행동을 같은 순서로 쓴다. */
+.mr-page-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--sp-4);
+  margin-bottom: var(--sp-5);
+}
+
+.mr-page-head__title {
+  color: var(--c-fg);
+}
+
+.mr-page-head__description {
+  max-width: 720px;
+  margin-top: var(--sp-1);
+  color: var(--c-body);
+}
+
+.mr-page-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  padding: 0 var(--sp-3);
+  border-radius: var(--r-sm);
+  background: var(--c-action-weak-bg);
+  color: var(--c-action-weak-fg);
+  font-size: var(--t-body-size);
+  font-weight: var(--t-label-w);
+  text-decoration: none;
+  white-space: nowrap;
+  transition: background-color var(--dur-hover) var(--ease-out), transform var(--dur-hover) var(--ease-out);
+}
+
+.mr-page-action:hover {
+  background: var(--c-action-weak-bg-hover);
+}
+
+.mr-page-action:focus-visible {
+  outline: none;
+  box-shadow: var(--shadow-focus);
+}
+
+.mr-page-action:active {
+  transform: scale(0.97);
+}
+
+@media (max-width: 767px) {
+  .mr-page-head {
+    flex-direction: column;
+    gap: var(--sp-3);
+    margin-bottom: var(--sp-4);
+  }
+
+  .mr-page-action {
+    align-self: flex-start;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mr-page-action:active {
+    transform: none;
+  }
+}
+
 /* ==================== 사이드바 (macOS 2단 창) ====================
  *
  * 맥 앱의 창은 반투명 사이드바 + 흰 콘텐츠 2단이다. 사이드바는 vibrancy 의
