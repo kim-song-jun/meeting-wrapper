@@ -1,14 +1,17 @@
 /* /me — 내 예약 / 설정. mine 화면 전용 스타일. 값은 tokens.css 변수만 사용한다. */
 
-/* 페이지 타이틀 — Apple 은 탭 바 위에 항상 Title/Section 스케일 제목을 둔다.
- * 사용자 이메일/관리자 표시는 이 아래 보조 텍스트로 내린다(.mine-user). */
+/* 제목·설명·사용자 정보와 새 예약 행동을 한 페이지 헤더로 묶는다. */
+.mine-head {
+  margin-bottom: var(--sp-3);
+}
+
 .mine-title {
-  margin-top: 4px;
+  margin: 0;
 }
 
 .mine-user {
-  margin-top: 4px;
-  margin-bottom: 20px;
+  margin-top: var(--sp-2);
+  color: var(--c-body);
 }
 
 .mine-section {

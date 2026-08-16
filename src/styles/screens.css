@@ -181,6 +181,21 @@
   color: var(--c-body);
 }
 
+.mr-page-head__controls {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+  min-width: 0;
+}
+
+/* 격자 pane의 남은 높이는 grid-scroll이 받는다. 헤더는 줄어들지 않는다. */
+.mr-page-head--pane {
+  flex: none;
+  margin-bottom: var(--sp-3);
+}
+
 .mr-page-action {
   display: inline-flex;
   align-items: center;
@@ -219,6 +234,11 @@
 
   .mr-page-action {
     align-self: flex-start;
+  }
+
+  .mr-page-head__controls {
+    justify-content: flex-start;
+    width: 100%;
   }
 }
 

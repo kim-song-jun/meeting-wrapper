@@ -1138,12 +1138,36 @@ export function GridScreen() {
         {gridLiveMessage}
       </p>
       {/*
-       * 상단은 한 줄이다: 왼쪽에 날짜 이동(현재로 점프 · ‹ › · 큰 제목),
-       * 오른쪽에 보기 범위(부서 필터 · 일간/주간/월간).
-       * Proton Calendar · Front 의 실제 배치이고, 뷰 스위처를 왼쪽 위에 따로
-       * 띄워 두던 것보다 세로를 한 줄 덜 쓴다 — 잠긴 판에서는 그게 격자 높이다.
-       * 좁은 화면에서는 자연히 두 줄로 접힌다(flex-wrap).
+       * 페이지 제목과 보기 전환을 먼저 두고, 날짜·회의실·부서처럼 현재 데이터의
+       * 범위를 고르는 컨트롤은 바로 아래 툴바에 둔다. 보기 전환의 상수와 콜백은
+       * 기존 것을 그대로 사용해 일간·일정·주간·월간 흐름을 바꾸지 않는다.
        */}
+      <header className="mr-page-head mr-page-head--pane">
+        <div>
+          <h1 className="t-title mr-page-head__title">예약 현황</h1>
+          <p className="mr-page-head__description">
+            빈 시간을 골라 예약하고, 내 예약은 바로 바꿀 수 있어요.
+          </p>
+        </div>
+        <div className="mr-page-head__controls">
+          {view === "day" || view === "agenda" ? (
+            <Segmented
+              items={DAY_MODES}
+              active={view === "agenda" ? "agenda" : "day"}
+              onChange={setView}
+              label="표시 방식"
+              small
+            />
+          ) : null}
+          <Segmented
+            items={RANGE_TABS}
+            active={view === "agenda" ? "day" : view}
+            onChange={(id) => setView(id === "day" && view === "agenda" ? "agenda" : id)}
+            label="기간 전환"
+          />
+        </div>
+      </header>
+
       <div className="grid-controlbar">
         {/*
           인원 필터는 없앴다. 두 회의실 모두 정원 제한이 없어서 "N명 들어가는 방"
@@ -1288,23 +1312,6 @@ export function GridScreen() {
           </>
         ) : null}
 
-        <div className="grid-controlbar__right">
-          {view === "day" || view === "agenda" ? (
-            <Segmented
-              items={DAY_MODES}
-              active={view === "agenda" ? "agenda" : "day"}
-              onChange={setView}
-              label="표시 방식"
-              small
-            />
-          ) : null}
-          <Segmented
-            items={RANGE_TABS}
-            active={view === "agenda" ? "day" : view}
-            onChange={(id) => setView(id === "day" && view === "agenda" ? "agenda" : id)}
-            label="기간 전환"
-          />
-        </div>
       </div>
 
       {/*

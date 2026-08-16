@@ -111,11 +111,18 @@ export function MyBookingsScreen() {
 
   return (
     <div>
-      <h1 className="t-title mine-title">내 예약</h1>
-      <p className="mine-user t-small t-muted">
-        {user.name} · {user.email}
-        {user.isAdmin ? " · 관리자" : ""}
-      </p>
+      <header className="mr-page-head mine-head">
+        <div>
+          <h1 className="t-title mine-title">내 예약</h1>
+          <p className="mr-page-head__description">
+            다가오는 회의를 확인하고 변경하거나 취소할 수 있어요.
+          </p>
+          <p className="mine-user t-small t-muted">
+            {user.name} · {user.email}{user.isAdmin ? " · 관리자" : ""}
+          </p>
+        </div>
+        <Link className="mr-page-action" to="/rooms">새 예약</Link>
+      </header>
       <Tabs
         items={tabs}
         active={effectiveTab}
