@@ -144,10 +144,7 @@ export function RoomsScreen() {
     prefsState.reload();
   }
 
-  function closeDialog() {
-    const preferredFocusKey = dialogSlot
-      ? `${dialogSlot.roomId}:${dialogSlot.option.id}`
-      : null;
+  function closeDialogWithFocus(preferredFocusKey: string | null) {
     setDialogSlot(null);
     setSelectedTime(null);
 
@@ -172,6 +169,12 @@ export function RoomsScreen() {
         }
       });
     });
+  }
+
+  function closeDialog() {
+    closeDialogWithFocus(
+      dialogSlot ? `${dialogSlot.roomId}:${dialogSlot.option.id}` : null,
+    );
   }
 
   function selectTime(roomId: string, option: QuickBookingOption) {
@@ -333,8 +336,7 @@ export function RoomsScreen() {
           prefs={dialogPrefs}
           onClose={closeDialog}
           onCreated={(booking) => {
-            setDialogSlot(null);
-            setSelectedTime(null);
+            closeDialogWithFocus(null);
             setAnnouncement(`${roomById(booking.roomId)?.name ?? "회의실"} ${hhmm(booking.start)}–${hhmm(booking.end)} 예약을 만들었어요.`);
             dayState.reload();
             prefsState.reload();
