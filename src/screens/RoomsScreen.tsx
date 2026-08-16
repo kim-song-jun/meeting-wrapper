@@ -1,11 +1,16 @@
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { appNow } from "../app/clock";
 import { POLICY, ROOMS, roomById } from "../app/config";
 import { useAsync } from "../app/useAsync";
 import { Alert, Button, Card } from "../components/ui";
 import { repo } from "../data";
-import { deriveRoomAvailability } from "../domain/roomAvailability";
+import {
+  deriveRoomAvailability,
+  findExactQuickBookingOption,
+  hasLocalDayChanged,
+  millisecondsUntilNextMinute,
+} from "../domain/roomAvailability";
 import { hhmm } from "../domain/time";
 import type { Booking, UserPrefs } from "../domain/types";
 import type { QuickBookingOption } from "../domain/roomAvailability";
@@ -28,7 +33,8 @@ function nextBookingCopy(next: { start: Date } | null): string {
 }
 
 export function RoomsScreen() {
-  const todayRef = useRef(appNow());
+  const [now, setNow] = useState(appNow);
+  const todayRef = useRef(now);
   const [selectedTime, setSelectedTime] = useState<SelectedTime | null>(null);
   const [dialogSlot, setDialogSlot] = useState<SelectedTime | null>(null);
   const [announcement, setAnnouncement] = useState("");
@@ -39,6 +45,40 @@ export function RoomsScreen() {
    */
   const dayState = useAsync<Booking[]>(() => repo.listByDay(todayRef.current), []);
   const prefsState = useAsync<UserPrefs>(() => repo.getPrefs(), []);
+
+  useEffect(() => {
+    let timerId: number | null = null;
+
+    function observeClock() {
+      const current = appNow();
+      if (hasLocalDayChanged(todayRef.current, current)) {
+        todayRef.current = current;
+        dayState.reload();
+      }
+      setNow((previous) => previous.getTime() === current.getTime() ? previous : current);
+    }
+
+    function scheduleNextMinute() {
+      if (timerId !== null) window.clearTimeout(timerId);
+      timerId = window.setTimeout(() => {
+        observeClock();
+        scheduleNextMinute();
+      }, millisecondsUntilNextMinute(appNow()));
+    }
+
+    function handleVisibilityChange() {
+      if (document.visibilityState !== "visible") return;
+      observeClock();
+      scheduleNextMinute();
+    }
+
+    scheduleNextMinute();
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => {
+      if (timerId !== null) window.clearTimeout(timerId);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [dayState.reload]);
 
   const bookingsByRoom = useMemo(() => {
     const grouped = new Map<string, Booking[]>();
@@ -53,11 +93,27 @@ export function RoomsScreen() {
     return grouped;
   }, [dayState.data]);
 
+  const roomAvailabilities = useMemo(() => ROOMS.map((room) => ({
+    room,
+    availability: deriveRoomAvailability(bookingsByRoom.get(room.id) ?? [], now, POLICY),
+  })), [bookingsByRoom, now]);
+
+  useEffect(() => {
+    function isStillOffered(selection: SelectedTime): boolean {
+      const roomAvailability = roomAvailabilities.find(({ room }) => room.id === selection.roomId);
+      return roomAvailability
+        ? findExactQuickBookingOption(roomAvailability.availability.options, selection.option) !== null
+        : false;
+    }
+
+    if (selectedTime && !isStillOffered(selectedTime)) setSelectedTime(null);
+    if (dialogSlot && !isStillOffered(dialogSlot)) setDialogSlot(null);
+  }, [dialogSlot, roomAvailabilities, selectedTime]);
+
   const prefsPending = prefsState.data === null && prefsState.error === null;
   const prefsReady = prefsState.data !== null || prefsState.error !== null;
   const dialogPrefs = prefsState.data ?? (prefsState.error ? { defaultZoomUrl: null } : null);
   const hasBookings = dayState.data !== null;
-  const now = appNow();
   const liveMessage = hasBookings && dayState.loading ? "최신 상태를 확인하는 중…" : announcement;
 
   function reloadDay() {
@@ -133,12 +189,11 @@ export function RoomsScreen() {
       ) : null}
 
       <div className="rooms-grid">
-        {ROOMS.map((room) => {
+        {roomAvailabilities.map(({ room, availability }) => {
           const bookings = bookingsByRoom.get(room.id) ?? [];
-          const availability = deriveRoomAvailability(bookings, now, POLICY);
           const selectedOption =
             selectedTime?.roomId === room.id
-              ? availability.options.find((option) => option.id === selectedTime.option.id) ?? null
+              ? findExactQuickBookingOption(availability.options, selectedTime.option)
               : null;
           const actionReason = availability.unavailableReason ?? (
             prefsPending ? "사용자 설정을 확인하는 중이에요." : selectedOption ? null : "예약할 시간을 골라 주세요."
@@ -158,7 +213,7 @@ export function RoomsScreen() {
 
               <div className="rooms-card__choices" role="group" aria-label={`${room.name} 예약 시간 선택`}>
                 {availability.options.map((option) => {
-                  const isSelected = selectedTime?.roomId === room.id && selectedTime.option.id === option.id;
+                  const isSelected = selectedOption?.id === option.id;
                   return (
                     <button
                       key={option.id}

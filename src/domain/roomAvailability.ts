@@ -24,6 +24,29 @@ export interface RoomAvailability {
   unavailableReason: string | null;
 }
 
+export function millisecondsUntilNextMinute(now: Date): number {
+  return MINUTE - (now.getSeconds() * 1_000 + now.getMilliseconds());
+}
+
+export function hasLocalDayChanged(previous: Date, current: Date): boolean {
+  return (
+    previous.getFullYear() !== current.getFullYear() ||
+    previous.getMonth() !== current.getMonth() ||
+    previous.getDate() !== current.getDate()
+  );
+}
+
+export function findExactQuickBookingOption(
+  options: readonly QuickBookingOption[],
+  selected: QuickBookingOption,
+): QuickBookingOption | null {
+  return options.find((option) => (
+    option.id === selected.id &&
+    option.start.getTime() === selected.start.getTime() &&
+    option.end.getTime() === selected.end.getTime()
+  )) ?? null;
+}
+
 function atHour(day: Date, hour: number): Date {
   const value = new Date(day);
   value.setHours(hour, 0, 0, 0);

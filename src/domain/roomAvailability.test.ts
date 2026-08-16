@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { deriveRoomAvailability } from "./roomAvailability";
+import {
+  deriveRoomAvailability,
+  findExactQuickBookingOption,
+  hasLocalDayChanged,
+  millisecondsUntilNextMinute,
+} from "./roomAvailability";
 import type { Booking, Policy } from "./types";
 
 const POLICY: Policy = {
@@ -118,5 +123,35 @@ describe("deriveRoomAvailability", () => {
 
     expect(result.current).toEqual({ start: at(9, 30), end: at(10, 30) });
     expect(result.next).toEqual({ start: at(11, 0), end: at(12, 0) });
+  });
+});
+
+describe("room availability refresh boundaries", () => {
+  it("schedules the next refresh at the next whole minute", () => {
+    expect(millisecondsUntilNextMinute(new Date(2026, 7, 16, 10, 20, 59, 250))).toBe(750);
+    expect(millisecondsUntilNextMinute(new Date(2026, 7, 16, 10, 21, 0, 0))).toBe(60_000);
+  });
+
+  it("detects a local day rollover at midnight", () => {
+    expect(
+      hasLocalDayChanged(
+        new Date(2026, 7, 16, 23, 59, 59, 999),
+        new Date(2026, 7, 17, 0, 0, 0, 0),
+      ),
+    ).toBe(true);
+    expect(
+      hasLocalDayChanged(
+        new Date(2026, 7, 17, 0, 0, 0, 0),
+        new Date(2026, 7, 17, 23, 59, 59, 999),
+      ),
+    ).toBe(false);
+  });
+
+  it("does not match a selected interval after the minute tick shifts its start", () => {
+    const selected = deriveRoomAvailability([], at(10, 20), POLICY).options[0];
+    const offeredAfterTick = deriveRoomAvailability([], at(10, 21), POLICY).options;
+
+    expect(selected).toBeDefined();
+    expect(selected && findExactQuickBookingOption(offeredAfterTick, selected)).toBeNull();
   });
 });
