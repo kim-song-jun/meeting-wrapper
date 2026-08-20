@@ -348,11 +348,12 @@ function extractCssRules(source, contexts = []) {
       cursor += 1;
     }
     if (depth !== 0) throw new Error(`Unclosed CSS block after ${header}`);
-    const body = source.slice(index + 1, cursor - 1);
+    const rawBody = source.slice(index + 1, cursor - 1);
+    const body = stripCssComments(rawBody);
     if (header.startsWith("@")) {
       rules.push(...extractCssRules(body, [...contexts, header]));
     } else if (header.length > 0) {
-      rules.push({ selectors: header.split(",").map((selector) => selector.trim()), body, contexts });
+      rules.push({ selectors: header.split(",").map((selector) => selector.trim()), body, rawBody, contexts });
     }
     start = cursor;
     index = cursor;
@@ -503,8 +504,8 @@ const spacingProperty = /^(?:gap|row-gap|column-gap|margin(?:-[a-z]+)?|padding(?
 const forbiddenSpacingDimension = /(?<![\d.])(?:12|20)px(?![\d.])/;
 
 function declarations(rule) {
-  return [...rule.body.matchAll(/(?:^|[;\n])\s*([\w-]+)\s*:\s*([^;]+);/g)]
-    .map((match) => [match[1], match[2].replace(/\/\*[\s\S]*?\*\//g, "").trim()]);
+  return [...rule.body.matchAll(/(?:^|[;\n])\s*([\w-]+)\s*:\s*([^;\n]*?)\s*(?:;|$)/g)]
+    .map((match) => [match[1], match[2].trim()]);
 }
 
 function spacingContractFailures(sources) {
@@ -518,11 +519,13 @@ function spacingContractFailures(sources) {
   } else {
     const tokenRule = tokenRules[0];
     for (const [token, value, evidence] of spacingTokens) {
-      const matchingDeclarations = declarations(tokenRule).filter(([property, declared]) => property === token && declared === value);
-      const matchingLines = tokenRule.body.split(/\r?\n/).filter((line) =>
+      const tokenDeclarations = extractCssRules(tokens)
+        .flatMap((rule) => declarations(rule).filter(([property]) => property === token));
+      const rootDeclarations = declarations(tokenRule).filter(([property]) => property === token);
+      const matchingLines = tokenRule.rawBody.split(/\r?\n/).filter((line) =>
         new RegExp(`^\\s*${token}:\\s*${value};\\s*/\\*\\s*\\[${evidence}\\][^*]*\\*/\\s*$`).test(line),
       );
-      if (matchingDeclarations.length !== 1 || matchingLines.length !== 1) {
+      if (tokenDeclarations.length !== 1 || rootDeclarations.length !== 1 || rootDeclarations[0][1] !== value || matchingLines.length !== 1) {
         contractFailures.push(`src/styles/tokens.css: ${token} must be a unique base :root ${value} declaration with [${evidence}] evidence`);
       }
     }
@@ -539,38 +542,54 @@ function spacingContractFailures(sources) {
     }
   }
 
-  const ruleFor = (path, selector) => (ruleSets.get(path) ?? []).filter((rule) => rule.selectors.includes(selector));
-  const requireDeclarations = (path, selector, expected) => {
-    const rules = ruleFor(path, selector);
-    const relevantRules = rules.filter((rule) => {
-      const actual = declarations(rule);
-      return expected.some(([property]) => actual.some(([actualProperty]) => actualProperty === property));
-    });
-    if (relevantRules.length === 0 || relevantRules.some((rule) => {
-      const actual = declarations(rule);
-      return !expected.every(([property, value]) => actual.some(([actualProperty, actualValue]) => actualProperty === property && actualValue === value));
-    })) {
-      contractFailures.push(`${path}: ${selector} must declare ${expected.map(([property, value]) => `${property}: ${value}`).join(", ")}`);
-    }
-  };
-
-  for (const selector of [".mr-btn--primary", ".mr-btn--secondary", ".mr-btn--danger", ".mr-picker__team"]) {
-    requireDeclarations("src/styles/components.css", selector, [["padding-block", "0"], ["padding-inline", "var(--pad-action-inline)"]]);
+  const baseContext = [];
+  const mobileContext = ["@media (max-width: 767px)"];
+  const tabletContext = ["@media (min-width: 768px) and (max-width: 1023px)"];
+  const consumer = (path, selector, contexts, expected) => ({ path, selector, contexts, expected });
+  const spacingConsumers = [
+    ...[".mr-btn--primary", ".mr-btn--secondary", ".mr-btn--danger", ".mr-picker__team"].map((selector) =>
+      consumer("src/styles/components.css", selector, baseContext, [["padding-block", "0"], ["padding-inline", "var(--pad-action-inline)"]]),
+    ),
+    consumer("src/styles/components.css", ".mr-btn--compact", baseContext, [["padding-block", "0"], ["padding-inline", "var(--pad-action-compact-inline)"]]),
+    consumer("src/styles/grid.css", ".grid-viewswitch__btn", baseContext, [["padding-block", "0"], ["padding-inline", "var(--pad-action-inline)"]]),
+    ...[
+      ["src/styles/components.css", ".mr-card"], ["src/styles/grid.css", ".grid-mobile__item"], ["src/styles/mine.css", ".mine-item"],
+    ].map(([path, selector]) => consumer(path, selector, baseContext, [["padding", "var(--pad-card)"]])),
+    consumer("src/styles/landing.css", ".mr-landing__header", baseContext, [["padding-block", "0"], ["padding-inline", "var(--pad-mobile-inline)"]]),
+    consumer("src/styles/landing.css", ".mr-landing__main", baseContext, [["padding-block", "24px calc(48px + env(safe-area-inset-bottom))"], ["padding-inline", "var(--pad-mobile-inline)"]]),
+    consumer("src/styles/landing.css", ".mr-landing__main", ["@media (min-width: 768px)"], [["padding-top", "32px"]]),
+    consumer("src/styles/login.css", ".mr-login", baseContext, [["padding-block", "24px"], ["padding-inline", "var(--pad-mobile-inline)"], ["padding-top", "max(24px, env(safe-area-inset-top))"], ["padding-bottom", "max(24px, env(safe-area-inset-bottom))"]]),
+    consumer("src/styles/login.css", ".mr-login", mobileContext, [["padding-block", "16px"], ["padding-inline", "var(--pad-mobile-inline)"], ["padding-top", "max(16px, env(safe-area-inset-top))"], ["padding-bottom", "max(16px, env(safe-area-inset-bottom))"]]),
+    consumer("src/styles/navigation.css", ".mr-navlink", tabletContext, [["padding-block", "0"], ["padding-inline", "16px"]]),
+    consumer("src/styles/screens.css", ".mr-sidebar__room", baseContext, [["padding-block", "0"], ["padding-inline", "16px"]]),
+  ];
+  const contextMatches = (actual, expected) => actual.length === expected.length && actual.every((value, index) => value === expected[index]);
+  const isPaddingProperty = (property) => property === "padding" || property === "padding-block" || property === "padding-inline" || /^padding-(?:top|right|bottom|left)$/.test(property);
+  const consumerGroups = new Map();
+  for (const consumerDefinition of spacingConsumers) {
+    const key = `${consumerDefinition.path}\u0000${consumerDefinition.selector}`;
+    consumerGroups.set(key, [...(consumerGroups.get(key) ?? []), consumerDefinition]);
   }
-  requireDeclarations("src/styles/components.css", ".mr-btn--compact", [["padding-block", "0"], ["padding-inline", "var(--pad-action-compact-inline)"]]);
-  requireDeclarations("src/styles/grid.css", ".grid-viewswitch__btn", [["padding-block", "0"], ["padding-inline", "var(--pad-action-inline)"]]);
-  for (const [path, selector] of [
-    ["src/styles/components.css", ".mr-card"],
-    ["src/styles/grid.css", ".grid-mobile__item"],
-    ["src/styles/mine.css", ".mine-item"],
-  ]) requireDeclarations(path, selector, [["padding", "var(--pad-card)"]]);
-  for (const [path, selector] of [
-    ["src/styles/landing.css", ".mr-landing__header"],
-    ["src/styles/landing.css", ".mr-landing__main"],
-    ["src/styles/login.css", ".mr-login"],
-  ]) requireDeclarations(path, selector, [["padding-inline", "var(--pad-mobile-inline)"]]);
-  requireDeclarations("src/styles/navigation.css", ".mr-navlink", [["padding-block", "0"], ["padding-inline", "16px"]]);
-  requireDeclarations("src/styles/screens.css", ".mr-sidebar__room", [["padding-block", "0"], ["padding-inline", "16px"]]);
+  for (const definitions of consumerGroups.values()) {
+    const [{ path, selector }] = definitions;
+    const rules = (ruleSets.get(path) ?? []).filter((rule) => rule.selectors.includes(selector));
+    for (const { contexts, expected } of definitions) {
+      const expectedRule = rules.filter((rule) => contextMatches(rule.contexts, contexts));
+      if (expectedRule.length !== 1) {
+        contractFailures.push(`${path}: ${selector} must have one padding rule in ${contexts.join(" > ") || "base"}`);
+      }
+    }
+    for (const rule of rules) {
+      const paddingDeclarations = declarations(rule).filter(([property]) => isPaddingProperty(property));
+      if (paddingDeclarations.length === 0) continue;
+      const approved = definitions.find(({ contexts }) => contextMatches(rule.contexts, contexts));
+      if (!approved || paddingDeclarations.length !== approved.expected.length ||
+        approved.expected.some(([property, value]) => !paddingDeclarations.some(([actualProperty, actualValue]) => actualProperty === property && actualValue === value)) ||
+        paddingDeclarations.some(([property, value]) => !approved.expected.some(([expectedProperty, expectedValue]) => expectedProperty === property && expectedValue === value))) {
+        contractFailures.push(`${path}: ${selector} has an unapproved padding declaration in ${rule.contexts.join(" > ") || "base"}`);
+      }
+    }
+  }
 
   return contractFailures;
 }
@@ -585,13 +604,18 @@ forbidPattern(styleFiles, /--pad-(?:action|action-compact|content)(?=\s*[:),;])/
 const spacingMutations = [
   ["spacing token value", "src/styles/tokens.css", (source) => source.replace("--pad-action-inline: 20px;", "--pad-action-inline: 16px;")],
   ["spacing token evidence", "src/styles/tokens.css", (source) => source.replace("--pad-mobile-inline: 20px;          /* [local] */", "--pad-mobile-inline: 20px;          /* [toss] */")],
+  ["duplicate spacing token", "src/styles/tokens.css", (source) => `${source}\n@media (min-width: 1px) { :root { --pad-action-inline: 16px; } }\n`],
   ["one-line forbidden gap", "src/styles/components.css", (source) => `${source}\n.bad { gap: 12px; }\n`],
+  ["semicolonless forbidden gap", "src/styles/components.css", (source) => `${source}\n.bad { gap: 12px }\n`],
+  ["commented forbidden gap control", "src/styles/components.css", (source) => `${source}\n/* .bad { gap: 12px; } */\n`],
   ["normal action token swap", "src/styles/components.css", (source) => source.replace("padding-inline: var(--pad-action-inline);", "padding-inline: var(--pad-card);")],
   ["compact action token removal", "src/styles/components.css", (source) => source.replace("padding-inline: var(--pad-action-compact-inline);", "padding-inline: 16px;")],
   ["card token swap", "src/styles/components.css", (source) => source.replace("padding: var(--pad-card);", "padding: var(--pad-mobile-inline);")],
   ["mobile inline token removal", "src/styles/landing.css", (source) => source.replace("padding-inline: var(--pad-mobile-inline);", "padding-inline: 16px;")],
   ["navigation padding-block reset", "src/styles/navigation.css", (source) => source.replace("    padding-block: 0;\n", "")],
   ["sidebar padding-block reset", "src/styles/screens.css", (source) => source.replace("  padding-block: 0;\n  padding-inline: 16px;", "  padding-inline: 16px;")],
+  ["wrong action context", "src/styles/components.css", (source) => `${source}\n@media (max-width: 767px) { .mr-btn--primary { padding-block: 0; padding-inline: var(--pad-action-inline); } }\n`],
+  ["later action shorthand override", "src/styles/components.css", (source) => `${source}\n.mr-btn--primary { padding: 0; }\n`],
 ];
 for (const [label, path, mutate] of spacingMutations) {
   const mutated = mutate(spacingSources.get(path));
@@ -601,7 +625,8 @@ for (const [label, path, mutate] of spacingMutations) {
   }
   const mutatedSources = new Map(spacingSources);
   mutatedSources.set(path, mutated);
-  if (spacingContractFailures(mutatedSources).length === 0) {
+  const mutationFailures = spacingContractFailures(mutatedSources);
+  if (label === "commented forbidden gap control" ? mutationFailures.length !== 0 : mutationFailures.length === 0) {
     failures.push(`validator spacing negative mutation did not fail: ${label}`);
   }
 }
