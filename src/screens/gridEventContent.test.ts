@@ -12,4 +12,13 @@ describe("eventContentMode", () => {
     expect(eventContentMode(44)).toBe("organizer-time");
     expect(eventContentMode(48)).toBe("organizer-time");
   });
+
+  it.each([0, -1, Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY])(
+    "rejects invalid height %s",
+    (height) => {
+      expect(() => eventContentMode(height)).toThrow(
+        `Grid event height must be a positive number; received ${String(height)}`,
+      );
+    },
+  );
 });

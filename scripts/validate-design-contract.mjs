@@ -111,6 +111,52 @@ for (const [token, evidence] of [
   ["--r-event-touch", "local"], ["--c-now", "local"],
 ]) requireTokenEvidence(token, evidence);
 
+requirePattern(
+  "src/styles/tokens.css",
+  /@media \(min-width: 768px\) and \(hover: hover\) and \(pointer: fine\) \{\s*:root \{[\s\S]*?--grid-slot-block-size: var\(--grid-slot-fine\);[\s\S]*?--grid-week-single-column-min: var\(--grid-week-single-fine-min\);[\s\S]*?--t-grid-event-size: var\(--t-grid-fine-size\);[\s\S]*?--t-grid-axis-size: var\(--t-axis-fine-size\);[\s\S]*?--r-grid-event: var\(--r-event-fine\);/,
+  "exact fine-pointer query and active role mappings",
+);
+for (const [token, source] of [
+  ["--grid-slot-block-size", "--grid-slot-touch"],
+  ["--grid-week-single-column-min", "--grid-week-single-touch-min"],
+  ["--t-grid-event-size", "--t-grid-touch-size"],
+  ["--t-grid-axis-size", "--t-axis-touch-size"],
+  ["--r-grid-event", "--r-event-touch"],
+]) {
+  requirePattern(
+    "src/styles/tokens.css",
+    new RegExp(`${token}: var\\(${source}\\);`),
+    `touch-safe active mapping for ${token}`,
+  );
+}
+const gridScreen = read("src/screens/GridScreen.tsx");
+for (const [pattern, label] of [
+  [/minmax\(var\(--grid-day-column-min\), 1fr\)/, "day column token"],
+  [/split \? "var\(--grid-split-column-min\)" : "var\(--grid-week-single-column-min\)"/, "split and single-week column token selection"],
+  [/placeInGrid\([\s\S]*?POLICY\.slotMinutes,\s*slotPx,\s*\)/g, "day placeInGrid slot token"],
+]) {
+  if (!pattern.test(gridScreen)) failures.push(`src/screens/GridScreen.tsx: missing ${label}`);
+}
+const gridPlacements = gridScreen.match(/placeInGrid\([\s\S]*?POLICY\.slotMinutes,\s*slotPx,\s*\)/g) ?? [];
+if (gridPlacements.length < 2) {
+  failures.push("src/screens/GridScreen.tsx: both day and week event placements must use slotPx");
+}
+const eventCalls = gridScreen.match(/<GridEventBlock\b[\s\S]*?\/>/g) ?? [];
+if (eventCalls.length !== 2 || eventCalls.some((call) => !/roomName=\{room\.name\}/.test(call))) {
+  failures.push("src/screens/GridScreen.tsx: every GridEventBlock caller must pass roomName");
+}
+requirePattern(
+  "src/screens/GridScreen.tsx",
+  /const accessibleLabel = `\$\{booking\.organizerName\}, \$\{roomName\}, \$\{hhmm\(booking\.start\)\}~\$\{hhmm\(booking\.end\)\}\$\{noShow \? ", 미체크인" : ""\}`;/,
+  "complete grid event accessible label",
+);
+requirePattern(
+  "src/screens/GridScreen.tsx",
+  /contentMode === "organizer-only"[\s\S]*?grid-event__name[\s\S]*?grid-event__time/,
+  "height-driven grid event content rendering",
+);
+forbidPattern(["src/styles/grid.css"], /\.grid-week--split \.grid-event__time\s*\{\s*display:\s*none;\s*\}/g);
+
 if (failures.length > 0) {
   console.error(failures.join("\n"));
   process.exitCode = 1;
