@@ -504,7 +504,11 @@ const spacingProperty = /^(?:gap|row-gap|column-gap|margin(?:-[a-z]+)?|padding(?
 const forbiddenSpacingDimension = /(?<![\d.])(?:12|20)px(?![\d.])/;
 
 function declarations(rule) {
-  return [...rule.body.matchAll(/(?:^|[;\n])\s*([\w-]+)\s*:\s*([^;\n]*?)\s*(?:;|$)/g)]
+  return rule.body.split(";")
+    .map((segment) => segment.trim())
+    .filter(Boolean)
+    .map((segment) => segment.match(/^([\w-]+)\s*:\s*([\s\S]*?)\s*$/))
+    .filter(Boolean)
     .map((match) => [match[1], match[2].trim()]);
 }
 
@@ -564,7 +568,8 @@ function spacingContractFailures(sources) {
     consumer("src/styles/screens.css", ".mr-sidebar__room", baseContext, [["padding-block", "0"], ["padding-inline", "16px"]]),
   ];
   const contextMatches = (actual, expected) => actual.length === expected.length && actual.every((value, index) => value === expected[index]);
-  const isPaddingProperty = (property) => property === "padding" || property === "padding-block" || property === "padding-inline" || /^padding-(?:top|right|bottom|left)$/.test(property);
+  const isPaddingProperty = (property) => property === "padding" || property === "padding-block" || property === "padding-inline" ||
+    /^padding-(?:top|right|bottom|left|inline-(?:start|end)|block-(?:start|end))$/.test(property);
   const consumerGroups = new Map();
   for (const consumerDefinition of spacingConsumers) {
     const key = `${consumerDefinition.path}\u0000${consumerDefinition.selector}`;
@@ -574,7 +579,9 @@ function spacingContractFailures(sources) {
     const [{ path, selector }] = definitions;
     const rules = (ruleSets.get(path) ?? []).filter((rule) => rule.selectors.includes(selector));
     for (const { contexts, expected } of definitions) {
-      const expectedRule = rules.filter((rule) => contextMatches(rule.contexts, contexts));
+      const expectedRule = rules.filter((rule) =>
+        contextMatches(rule.contexts, contexts) && declarations(rule).some(([property]) => isPaddingProperty(property)),
+      );
       if (expectedRule.length !== 1) {
         contractFailures.push(`${path}: ${selector} must have one padding rule in ${contexts.join(" > ") || "base"}`);
       }
@@ -607,6 +614,7 @@ const spacingMutations = [
   ["duplicate spacing token", "src/styles/tokens.css", (source) => `${source}\n@media (min-width: 1px) { :root { --pad-action-inline: 16px; } }\n`],
   ["one-line forbidden gap", "src/styles/components.css", (source) => `${source}\n.bad { gap: 12px; }\n`],
   ["semicolonless forbidden gap", "src/styles/components.css", (source) => `${source}\n.bad { gap: 12px }\n`],
+  ["multiline forbidden gap", "src/styles/components.css", (source) => `${source}\n.bad {\n  gap:\n    12px;\n}\n`],
   ["commented forbidden gap control", "src/styles/components.css", (source) => `${source}\n/* .bad { gap: 12px; } */\n`],
   ["normal action token swap", "src/styles/components.css", (source) => source.replace("padding-inline: var(--pad-action-inline);", "padding-inline: var(--pad-card);")],
   ["compact action token removal", "src/styles/components.css", (source) => source.replace("padding-inline: var(--pad-action-compact-inline);", "padding-inline: 16px;")],
@@ -616,7 +624,10 @@ const spacingMutations = [
   ["sidebar padding-block reset", "src/styles/screens.css", (source) => source.replace("  padding-block: 0;\n  padding-inline: 16px;", "  padding-inline: 16px;")],
   ["wrong action context", "src/styles/components.css", (source) => `${source}\n@media (max-width: 767px) { .mr-btn--primary { padding-block: 0; padding-inline: var(--pad-action-inline); } }\n`],
   ["later action shorthand override", "src/styles/components.css", (source) => `${source}\n.mr-btn--primary { padding: 0; }\n`],
+  ["logical-side action override", "src/styles/components.css", (source) => `${source}\n.mr-btn--primary { padding-inline-start: 8px; }\n`],
+  ["non-padding selector control", "src/styles/components.css", (source) => `${source}\n.mr-btn--primary { min-width: 1px; }\n`],
 ];
+const acceptedMutationLabels = new Set(["commented forbidden gap control", "non-padding selector control"]);
 for (const [label, path, mutate] of spacingMutations) {
   const mutated = mutate(spacingSources.get(path));
   if (mutated === spacingSources.get(path)) {
@@ -626,11 +637,14 @@ for (const [label, path, mutate] of spacingMutations) {
   const mutatedSources = new Map(spacingSources);
   mutatedSources.set(path, mutated);
   const mutationFailures = spacingContractFailures(mutatedSources);
-  if (label === "commented forbidden gap control" ? mutationFailures.length !== 0 : mutationFailures.length === 0) {
+  if (acceptedMutationLabels.has(label) ? mutationFailures.length !== 0 : mutationFailures.length === 0) {
     failures.push(`validator spacing negative mutation did not fail: ${label}`);
   }
 }
 const acceptedDimensionMutation = `${spacingSources.get("src/styles/components.css")}\n.okay { gap: 112px; }\n`;
+if (acceptedDimensionMutation === spacingSources.get("src/styles/components.css")) {
+  failures.push("validator spacing 112px control mutation did not change source");
+}
 if (spacingContractFailures(new Map(spacingSources).set("src/styles/components.css", acceptedDimensionMutation)).length > 0) {
   failures.push("validator spacing 112px control mutation must remain accepted");
 }
