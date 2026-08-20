@@ -73,7 +73,7 @@
 .mr-login__failure .mr-alert div:focus-visible {
   outline: 2px solid var(--c-action);
   outline-offset: 2px;
-  border-radius: var(--r-md);
+  border-radius: var(--r-card);
 }
 
 /* 세션 확인 중(checking) — 로고만 화면 중앙에, 텍스트·스피너 없음 */

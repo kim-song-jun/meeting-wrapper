@@ -16,7 +16,7 @@
   z-index: 30;
   padding: 8px 16px;
   border: 1px solid var(--c-border);
-  border-radius: var(--r-md);
+  border-radius: var(--r-nav-item);
   background: var(--c-surface);
   color: var(--c-action);
   text-decoration: none;
@@ -54,7 +54,7 @@
     justify-content: center;
     min-height: 40px;
     padding: 0 12px;
-    border-radius: var(--r-seg);
+    border-radius: var(--r-nav-item);
     transition:
       background-color var(--dur-hover) var(--ease-out),
       color var(--dur-hover) var(--ease-out);
@@ -132,7 +132,7 @@
     justify-content: center;
     min-width: 0;
     min-height: var(--h-action);
-    border-radius: var(--r-md);
+    border-radius: var(--r-nav-item);
     color: var(--c-body);
     text-decoration: none;
     font-size: var(--t-small-size);

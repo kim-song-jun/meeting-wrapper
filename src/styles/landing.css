@@ -9,6 +9,15 @@
   background: var(--c-canvas);
 }
 
+.mr-landing__header {
+  display: flex;
+  align-items: center;
+  min-height: 56px;
+  padding: 0 20px;
+  border-bottom: 1px solid var(--c-border);
+  background: var(--c-surface);
+}
+
 .mr-landing__mark {
   flex: none;
   width: 18px;
@@ -169,7 +178,7 @@
   gap: 12px;
   background: var(--c-surface);
   border: 1px solid var(--c-border);
-  border-radius: var(--r-md);
+  border-radius: var(--r-card);
   padding: 10px 14px;
 }
 
@@ -201,13 +210,11 @@
   color: var(--c-body);
 }
 
-.mr-landing__footer {
-  margin-top: 40px;
-  text-align: center;
-}
-
 .mr-landing__gridlink {
+  margin-left: auto;
   color: var(--c-body);
+  font-size: var(--t-small-size);
+  line-height: var(--t-small-lh);
   text-decoration: none;
 }
 .mr-landing__gridlink:hover {
@@ -232,7 +239,7 @@
   min-height: var(--h-action);
   background: var(--c-surface);
   border: 1px solid var(--c-border);
-  border-radius: var(--r-md);
+  border-radius: var(--r-card);
   padding: 0 14px;
   color: var(--c-link);
   text-decoration: none;
@@ -251,8 +258,5 @@
 @media (min-width: 768px) {
   .mr-landing__main {
     padding-top: 32px;
-  }
-  .mr-landing__header {
-    justify-content: center;
   }
 }

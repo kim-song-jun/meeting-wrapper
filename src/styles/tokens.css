@@ -160,15 +160,18 @@
    *
    * **TDS 16px radius 와 toss.im 마케팅 7px radius 를 평균내지 말 것**(레퍼런스 §7).
    * 우리는 제품 UI 이므로 TDS 쪽 값만 쓴다. */
-  --r-sm: 14px;   /* [toss] 버튼 (large) */
-  --r-md: 12px;   /* [local] 입력 — TDS 는 변형만 문서화하고 수치를 주지 않는다 */
-  --r-lg: 16px;   /* [local] 카드·패널 */
-  --r-xl: 20px;   /* [local] 다이얼로그 */
-  --r-pill: 980px;/* [local] 배지 전용 */
+  --r-action: 14px;         /* [toss] */
+  --r-action-mobile: 16px;  /* [toss] */
+  --r-input: 12px;          /* [local] 입력 — TDS 는 변형만 문서화하고 수치를 주지 않는다 */
+  --r-filter: 12px;         /* [local] */
+  --r-segment: 12px;        /* [local] */
+  --r-nav-item: 12px;       /* [local] */
+  --r-card: 16px;           /* [local] 카드·패널 */
+  --r-dialog: 20px;         /* [local] 다이얼로그 */
+  --r-pill: 980px;          /* [local] badge/circle only */
   --r-event-fine: 4px;  /* [local] */
   --r-event-touch: 12px; /* [local] */
   --r-grid-event: var(--r-event-touch);
-  --r-seg: 10px;  /* [toss] 세그먼티드 조각 (medium) */
 
   --h-action: 48px;         /* [toss] TDS large */
   --h-action-compact: 48px; /* [toss] touch-safe base; fine pointer overrides to TDS medium */
@@ -277,8 +280,6 @@
     --h-input: 56px;          /* [toss] */
     --h-tab: 56px;
     --h-toolbar: 44px;        /* [a11y] 좁은 화면 터치 타깃 하한 */
-    --r-sm: 16px;             /* [toss] xlarge radius */
-    --r-md: 14px;
     --pad-content: 20px;      /* [local] 손가락 폭에서 16px 은 답답하다 */
   }
 }

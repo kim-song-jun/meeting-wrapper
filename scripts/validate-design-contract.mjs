@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 
 const root = process.cwd();
@@ -292,6 +292,22 @@ for (const [label, tokens, screen] of mutations) {
   }
 }
 forbidPattern(["src/styles/grid.css"], /\.grid-week--split \.grid-event__time\s*\{\s*display:\s*none;\s*\}/g);
+
+const styleFiles = readdirSync(join(root, "src/styles"), { withFileTypes: true })
+  .filter((entry) => entry.isFile() && entry.name.endsWith(".css"))
+  .map((entry) => `src/styles/${entry.name}`);
+requireText("src/styles/tokens.css", [
+  "--r-action: 14px;", "--r-action-mobile: 16px;", "--r-input: 12px;",
+  "--r-filter: 12px;", "--r-segment: 12px;", "--r-nav-item: 12px;",
+  "--r-card: 16px;", "--r-dialog: 20px;",
+]);
+forbidPattern(styleFiles, /--r-(?:sm|md|lg|xl|seg)(?=\s*[:),;])/g);
+for (const [token, evidence] of [
+  ["--r-action", "toss"], ["--r-action-mobile", "toss"],
+  ["--r-input", "local"], ["--r-filter", "local"],
+  ["--r-segment", "local"], ["--r-nav-item", "local"],
+  ["--r-card", "local"], ["--r-dialog", "local"],
+]) requireTokenEvidence(token, evidence);
 
 if (failures.length > 0) {
   console.error(failures.join("\n"));
