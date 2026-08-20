@@ -152,6 +152,31 @@ function extractCalls(source, name) {
   }
 }
 
+function extractDelimited(source, openIndex, open, close) {
+  if (source[openIndex] !== open) return null;
+  let depth = 0;
+  for (let index = openIndex; index < source.length; index += 1) {
+    if (source[index] === open) depth += 1;
+    if (source[index] === close) {
+      depth -= 1;
+      if (depth === 0) return { start: openIndex, end: index + 1, text: source.slice(openIndex, index + 1) };
+    }
+  }
+  throw new Error(`Unclosed ${open}${close} pair at index ${String(openIndex)}`);
+}
+
+function extractContentModeBranches(source) {
+  const condition = 'contentMode === "organizer-only"';
+  const conditionStart = source.indexOf(condition);
+  if (conditionStart === -1) return null;
+  const compactOpen = source.indexOf("(", source.indexOf("?", conditionStart + condition.length));
+  const compact = extractDelimited(source, compactOpen, "(", ")");
+  if (!compact) return null;
+  const fullOpen = source.indexOf("(", source.indexOf(":", compact.end));
+  const full = extractDelimited(source, fullOpen, "(", ")");
+  return full ? { compact, full } : null;
+}
+
 function extractFunctionBody(source, name) {
   const signature = extractBalancedCall(source, name, source.indexOf(`function ${name}`));
   if (!signature) return null;
@@ -205,8 +230,19 @@ function gridRuntimeContractFailures(tokens, screen) {
   if (!eventBlock?.includes("eventContentMode(placement.height)")) {
     contractFailures.push("src/screens/GridScreen.tsx: GridEventBlock must invoke eventContentMode(placement.height)");
   }
-  if (!/contentMode === "organizer-only"[\s\S]*?grid-event__name[\s\S]*?grid-event__time/.test(eventBlock ?? "")) {
-    contractFailures.push("src/screens/GridScreen.tsx: missing height-driven grid event content rendering");
+  const contentBranches = extractContentModeBranches(eventBlock ?? "");
+  if (!contentBranches) {
+    contractFailures.push("src/screens/GridScreen.tsx: missing content-mode render branches");
+  } else {
+    if (!contentBranches.compact.text.includes("grid-event__name")) {
+      contractFailures.push("src/screens/GridScreen.tsx: compact event branch must render organizer name");
+    }
+    if (contentBranches.compact.text.includes("grid-event__time")) {
+      contractFailures.push("src/screens/GridScreen.tsx: compact event branch must not render time");
+    }
+    if (!contentBranches.full.text.includes("grid-event__name") || !contentBranches.full.text.includes("grid-event__time")) {
+      contractFailures.push("src/screens/GridScreen.tsx: full event branch must render organizer name and time");
+    }
   }
   if (!/const accessibleLabel = `\$\{booking\.organizerName\}, \$\{roomName\}, \$\{hhmm\(booking\.start\)\}~\$\{hhmm\(booking\.end\)\}\$\{noShow \? ", 미체크인" : ""\}`;/.test(eventBlock ?? "")) {
     contractFailures.push("src/screens/GridScreen.tsx: missing complete grid event accessible label");
@@ -217,11 +253,40 @@ function gridRuntimeContractFailures(tokens, screen) {
 const gridTokens = read("src/styles/tokens.css");
 const gridScreen = read("src/screens/GridScreen.tsx");
 failures.push(...gridRuntimeContractFailures(gridTokens, gridScreen));
-for (const [label, tokens, screen] of [
-  ["event placement slotPx", gridTokens, gridScreen.replace("POLICY.slotMinutes,\n                          slotPx,", "POLICY.slotMinutes,\n                          slotPixels,")],
+const actualEventPlacement = extractCalls(gridScreen, "placeInGrid").find((call) =>
+  /\bclippedStart\s*,[\s\S]*?\bclippedEnd\s*,/.test(call.text),
+);
+const actualContentBranches = extractContentModeBranches(extractFunctionBody(gridScreen, "GridEventBlock") ?? "");
+const mutations = [
+  [
+    "event placement slotPx",
+    gridTokens,
+    actualEventPlacement
+      ? gridScreen.replace(actualEventPlacement.text, actualEventPlacement.text.replace("slotPx", "slotPixels"))
+      : gridScreen,
+  ],
   ["event line-height mapping", gridTokens.replace("--t-grid-event-lh: var(--t-grid-touch-lh);", "--t-grid-event-lh: var(--t-grid-touch-line-height);"), gridScreen],
   ["content-mode helper", gridTokens, gridScreen.replace("eventContentMode(placement.height)", "eventContentMode(placement.slots)")],
-]) {
+  [
+    "compact organizer name",
+    gridTokens,
+    actualContentBranches
+      ? gridScreen.replace(actualContentBranches.compact.text, actualContentBranches.compact.text.replace("grid-event__name", "grid-event__organizer"))
+      : gridScreen,
+  ],
+  [
+    "compact time insertion",
+    gridTokens,
+    actualContentBranches
+      ? gridScreen.replace(actualContentBranches.compact.text, actualContentBranches.compact.text.replace("</div>", '<span className="grid-event__time" /></div>'))
+      : gridScreen,
+  ],
+];
+for (const [label, tokens, screen] of mutations) {
+  if (tokens === gridTokens && screen === gridScreen) {
+    failures.push(`validator negative mutation did not change source: ${label}`);
+    continue;
+  }
   if (gridRuntimeContractFailures(tokens, screen).length === 0) {
     failures.push(`validator negative mutation did not fail: ${label}`);
   }
