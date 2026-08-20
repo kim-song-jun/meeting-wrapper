@@ -59,8 +59,8 @@ requirePattern(
 );
 requirePattern(
   designPath,
-  /### MolRoom Compact Action `local`\n- Height \*\*38px\*\*\(미세 포인터 데스크톱, TDS medium\) \/ \*\*48px\*\*\(터치·거친 포인터와 모바일, TDS large\) \/ Radius \*\*14px\*\*\(`--r-action`, 미세 포인터\) \/ \*\*16px\*\*\(`--r-action-mobile`, 터치·거친 포인터와 모바일\) \/ Padding `0 16px` \/ Font 14px/,
-  "Compact Action role radii",
+  /### MolRoom Compact Action `local`\n- Height \*\*36px\*\*\(미세 포인터\) \/ \*\*44px\*\*\(터치·거친 포인터\) \/ Radius \*\*14px\*\*\(`--r-action`, `>=768px` 데스크톱\) \/ \*\*16px\*\*\(`--r-action-mobile`, `<768px` 모바일\) \/ Padding `0 16px` \/ Font 14px\n- 높이는 입력 방식에 따라 바뀌고, radius는 뷰포트에 따라 바뀐다\./,
+  "Compact Action input-mode height and viewport radius boundary",
 );
 requirePattern(
   designPath,
@@ -69,6 +69,8 @@ requirePattern(
 );
 forbidPattern([designPath], /현재 시각[\s\S]{0,80}`#E42939`/g);
 forbidPattern([designPath], /### MolRoom Compact Action `local`[\s\S]*?Radius 10px \/ 12px/g);
+forbidPattern([designPath], /### MolRoom Compact Action `local`[\s\S]*?Height \*\*38px\*\*[\s\S]*?\*\*48px\*\*/g);
+forbidPattern([designPath], /### MolRoom Compact Action `local`[\s\S]*?`--r-action-mobile`, 터치·거친 포인터와 모바일/g);
 forbidPattern([designPath], /타입 스케일은 전 구간 동일하다\(§3\)\./g);
 
 if (failures.length > 0) {
