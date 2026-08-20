@@ -1,7 +1,14 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import type { CSSProperties } from "react";
 import { Alert, Badge, Button, ButtonWithReason, Dialog } from "../components/ui";
 import { BookingDialog } from "./BookingDialog";
+import { eventContentMode } from "./gridEventContent";
+import {
+  ScheduleFields,
+  scheduleDraftFrom,
+  scheduleDraftRange,
+  scheduleInputStepMinutes,
+} from "./ScheduleFields";
 import { ROOMS, POLICY, roomById } from "../app/config";
 import { useRoomVisibility } from "../app/roomVisibility";
 import { repo } from "../data";
@@ -120,7 +127,7 @@ function slotHourLabel(dayStart: Date, slotIndex: number, slotMinutes: number): 
 
 /**
  * 격자 슬롯 높이(px)를 CSS 토큰에서 직접 읽는다.
- * tokens.css 의 --grid-slot-h 가 단일 진실 소스이며, JS 에 숫자를 따로
+ * tokens.css 의 active grid-slot token이 단일 진실 소스이며, JS 에 숫자를 따로
  * 하드코딩하면 CSS 값이 바뀔 때 픽셀 배치가 조용히 어긋난다.
  */
 function readCssPx(varName: string): number {
@@ -509,7 +516,11 @@ interface EditDragState {
 /* ================================================================== */
 
 export function GridScreen() {
-  const [view, setView] = useState<ViewMode>("day");
+  const [view, setView] = useState<ViewMode>(() =>
+    typeof window !== "undefined" && window.matchMedia("(max-width: 767px)").matches
+      ? "agenda"
+      : "day",
+  );
   const [agendaGroup, setAgendaGroup] = useState<AgendaGroup>("time");
 
   /*
@@ -534,6 +545,13 @@ export function GridScreen() {
 
   const bookingsState = useAsync<Booking[]>(() => repo.listByDay(selectedDate), [dayKey]);
   /*
+   * 드래그 mouseup 리스너는 하루가 바뀔 때만 다시 등록된다. 첫 렌더 때 등록된
+   * 리스너가 당시의 null data 를 계속 붙들지 않도록, 저장 직전에는 이 ref 에서
+   * 가장 최근 목록을 읽는다.
+   */
+  const loadedBookingsRef = useRef<Booking[] | null>(bookingsState.data);
+  loadedBookingsRef.current = bookingsState.data;
+  /*
    * **첫 로드에만** 스켈레톤을 띄운다.
    *
    * 예전엔 loading 이 true 이기만 하면 이벤트를 전부 지우고 스켈레톤을 그렸다.
@@ -549,7 +567,7 @@ export function GridScreen() {
       : "예약 정보를 불러왔어요.";
   const prefsState = useAsync<UserPrefs>(() => repo.getPrefs(), []);
 
-  const slotPx = useCssPx("--grid-slot-h");
+  const slotPx = useCssPx("--grid-slot-block-size");
   const dayStart = useMemo(() => gridDayStart(selectedDate, POLICY), [selectedDate]);
   const slotCount = useMemo(() => gridSlotCount(POLICY), []);
   const dayEnd = useMemo(
@@ -739,6 +757,7 @@ export function GridScreen() {
    */
   const swallowClickRef = useRef(false);
   const [editError, setEditError] = useState<string | null>(null);
+  const [editStatus, setEditStatus] = useState<string | null>(null);
 
   /**
    * 이 방에서 `slot` 을 품고 있는 빈 구간의 양끝(둘 다 포함). 슬롯이 이미 예약돼
@@ -855,19 +874,6 @@ export function GridScreen() {
     return null;
   }
 
-  /** 한 방의 다음 빈 30분. 모바일의 방별 "예약" 버튼이 쓴다. */
-  function nextFreeRangeInRoom(roomId: string): { start: Date; end: Date } | null {
-    const startSlot = isToday
-      ? Math.max(0, Math.floor(slotIndexOf(now, dayStart, POLICY.slotMinutes)) + 1)
-      : 0;
-    for (let slot = startSlot; slot < slotCount; slot += 1) {
-      if (freeRangeAround(roomId, slot)) {
-        return { start: slotToDate(slot), end: slotToDate(slot + 1) };
-      }
-    }
-    return null;
-  }
-
   function startDrag(roomId: string, slot: number, colTop: number) {
     const range = freeRangeAround(roomId, slot);
     if (!range) return;
@@ -883,6 +889,7 @@ export function GridScreen() {
     const startSlot = slotIndexOf(booking.start, dayStart, POLICY.slotMinutes);
     const endSlot = slotIndexOf(booking.end, dayStart, POLICY.slotMinutes);
     setEditError(null);
+    setEditStatus(null);
     editReleasedRef.current = false;
     setEdit({
       bookingId: booking.id,
@@ -930,9 +937,16 @@ export function GridScreen() {
        * 가려는 방의 충돌을 못 본다.
        */
       const fresh = await repo.listByRoom(e.targetRoomId, newStart);
-      const target = fresh.find((b) => b.id === e.bookingId);
+      const source = (loadedBookingsRef.current ?? []).find(
+        (booking) => booking.id === e.bookingId,
+      );
+      if (!source) {
+        setEditError("옮길 예약을 최신 목록에서 찾지 못했어요. 화면을 새로고침한 뒤 다시 시도해 주세요.");
+        setEdit(null);
+        return;
+      }
       const verdict = canReschedule(
-        target ?? { ...(fresh[0] as Booking), id: e.bookingId },
+        source,
         fresh,
         newStart,
         newEnd,
@@ -955,6 +969,13 @@ export function GridScreen() {
           result.reason === "blocked"
             ? "방금 " + result.by + "님이 그 시간을 잡았어요. 다른 시간으로 옮겨주세요."
             : result.message,
+        );
+      } else {
+        const targetRoom = roomById(e.targetRoomId);
+        setEditStatus(
+          roomChanged
+            ? `${targetRoom?.name ?? e.targetRoomId} · ${hhmm(newStart)}으로 옮겼어요.`
+            : `${hhmm(newStart)}–${hhmm(newEnd)}으로 시간을 바꿨어요.`,
         );
       }
     } catch (err: unknown) {
@@ -988,7 +1009,11 @@ export function GridScreen() {
       const e = editRef.current;
       if (e) {
         editReleasedRef.current = true;
-        if (e.startSlot !== e.originStartSlot || e.endSlot !== e.originEndSlot) {
+        if (
+          e.startSlot !== e.originStartSlot ||
+          e.endSlot !== e.originEndSlot ||
+          e.targetRoomId !== e.roomId
+        ) {
           swallowClickRef.current = true;
         }
         void commitEdit(e);
@@ -1116,6 +1141,20 @@ export function GridScreen() {
   /* ---- event detail / cancel (모든 뷰 공유) ---- */
   const [detailBooking, setDetailBooking] = useState<Booking | null>(null);
   const [cancelTarget, setCancelTarget] = useState<Booking | null>(null);
+  const [rescheduleTarget, setRescheduleTarget] = useState<Booking | null>(null);
+
+  const mobileBookings = useMemo(
+    () =>
+      [...(bookingsState.data ?? [])]
+        .filter(
+          (booking) =>
+            visibleRooms.some((room) => room.id === booking.roomId) &&
+            (deptFilter === null || booking.organizerDepartment === deptFilter),
+        )
+        .sort((a, b) => a.start.getTime() - b.start.getTime()),
+    [bookingsState.data, deptFilter, visibleRooms],
+  );
+  const mobileNextFree = firstLoad ? null : nextFreeRange();
 
   function onDateInputChange(e: React.ChangeEvent<HTMLInputElement>) {
     const v = e.target.value;
@@ -1130,7 +1169,7 @@ export function GridScreen() {
   }
 
   const gridTemplateColumns =
-    "var(--grid-axis-w) repeat(" + String(visibleRooms.length) + ", minmax(var(--grid-col-min), 1fr))";
+    "var(--grid-axis-w) repeat(" + String(visibleRooms.length) + ", minmax(var(--grid-day-column-min), 1fr))";
 
   return (
     <div className="grid-screen">
@@ -1351,6 +1390,16 @@ export function GridScreen() {
           </Alert>
         </div>
       ) : null}
+      {editStatus ? (
+        <div style={{ marginTop: 16 }}>
+          <Alert tone="info">
+            {editStatus}{" "}
+            <button type="button" className="grid-retry" onClick={() => setEditStatus(null)}>
+              닫기
+            </button>
+          </Alert>
+        </div>
+      ) : null}
 
       {/*
         "옮기는 중…" 문단을 격자 위에 끼워 넣었었다. 그 한 줄이 나타났다 사라지면서
@@ -1565,6 +1614,7 @@ export function GridScreen() {
                             booking={
                               beingEdited ? { ...b, start: clippedStart, end: clippedEnd } : b
                             }
+                            roomName={room.name}
                             placement={placement}
                             now={now}
                             onSelect={(bk) => {
@@ -1595,72 +1645,62 @@ export function GridScreen() {
           </div>
 
           <div className="grid-mobile">
-            {/*
-              QR 이 모바일의 주 진입점이라는 것은 맞지만, 그 말만 적어두고 **예약을 만들
-              길을 하나도 두지 않았다.** 복도가 아니라 자리에서 폰으로 여는 경우에도
-              방을 잡을 수 있어야 한다. 방마다 "예약" 을 두고, 화면이 다음 빈 30분을
-              골라준다 — 좁은 화면에서 시간을 끌어 고르게 하지 않는다.
-            */}
             <p className="t-cap grid-mobile__hint">
               회의실 문에 붙은 QR 을 스캔하면 그 자리에서 바로 예약·체크인할 수 있어요.
             </p>
-            {visibleRooms.map((room) => {
-              const roomBookings = firstLoad
-                ? []
-                : (bookingsByRoom.get(room.id) ?? []).filter(matchesDept);
-              const free = firstLoad ? null : nextFreeRangeInRoom(room.id);
-              return (
-                <section key={room.id} className="grid-mobile__room">
-                  <header className="grid-mobile__room-head">
-                    <span className="t-body grid-mobile__room-name">{room.name}</span>
-                    <span className="t-cap t-muted">{room.floor}</span>
-                    {/* 비활성 사유를 상시 노출한다 — 오늘 남은 빈 시간이 없을 때 (DESIGN.md §4) */}
-                    <ButtonWithReason
-                      variant="secondary"
-                      onClick={() => {
-                        if (free) openBookingDialog(room.id, free.start, free.end);
-                      }}
-                      disabled={free === null}
-                      reason={free === null && !firstLoad ? "오늘은 남은 시간이 없어요" : null}
-                    >
-                      {free ? hhmm(free.start) + " 예약" : "예약"}
-                    </ButtonWithReason>
-                  </header>
-                  {firstLoad ? (
-                    <div className="grid-skeleton-card" aria-hidden="true" />
-                  ) : roomBookings.length === 0 ? (
-                    <p className="t-small t-muted">오늘 예약이 없어요</p>
-                  ) : (
-                    <div className="mr-stack">
-                      {roomBookings.map((b) => (
-                        /*
-                         * 카드가 눌리지 않아서, 모바일에서는 **내 예약도 취소·체크인할 수
-                         * 없었다.** 격자에서 블록을 누르는 것과 같은 상세를 연다.
-                         */
-                        <button
-                          key={b.id}
-                          type="button"
-                          className={cx("grid-mobile__item", b.isMine && "grid-mobile__item--mine")}
-                          onClick={() => setDetailBooking(b)}
-                        >
-                          <span className="mr-row" style={{ justifyContent: "space-between" }}>
-                            <span className="t-small grid-mobile__organizer">{b.organizerName}</span>
-                            <span className="t-small t-num grid-mobile__time">
-                              {hhmm(b.start)}–{hhmm(b.end)}
-                            </span>
-                          </span>
-                          {isNoShow(b, now, POLICY.checkInGraceMinutes) ? (
-                            <span style={{ marginTop: 6, display: "inline-flex" }}>
-                              <Badge tone="attn">미체크인</Badge>
-                            </span>
+            <section className="grid-mobile__schedule">
+              <header className="grid-mobile__schedule-head">
+                <div>
+                  <h2 className="t-section">오늘 예약</h2>
+                  {!firstLoad ? <p className="t-cap t-muted">시간순 · {mobileBookings.length}건</p> : null}
+                </div>
+                <ButtonWithReason
+                  variant="secondary"
+                  onClick={() => {
+                    if (mobileNextFree) {
+                      openBookingDialog(mobileNextFree.roomId, mobileNextFree.start, mobileNextFree.end);
+                    }
+                  }}
+                  disabled={mobileNextFree === null}
+                  reason={mobileNextFree === null && !firstLoad ? "오늘은 남은 시간이 없어요" : null}
+                >
+                  새 예약
+                </ButtonWithReason>
+              </header>
+              {firstLoad ? (
+                <div className="grid-skeleton-card" aria-hidden="true" />
+              ) : mobileBookings.length === 0 ? (
+                <p className="grid-mobile__empty">이 날에는 예약이 없어요. 위의 새 예약에서 빈 시간을 골라보세요.</p>
+              ) : (
+                <div className="grid-mobile__list">
+                  {mobileBookings.map((booking) => {
+                    const room = roomById(booking.roomId);
+                    return (
+                      <button
+                        key={booking.id}
+                        type="button"
+                        className={cx("grid-mobile__item", booking.isMine && "grid-mobile__item--mine")}
+                        onClick={() => setDetailBooking(booking)}
+                      >
+                        <span className="grid-mobile__item-head">
+                          <span className="grid-mobile__organizer">{booking.organizerName}</span>
+                          {booking.isMine ? <Badge tone="mine">내 예약</Badge> : null}
+                          {isNoShow(booking, now, POLICY.checkInGraceMinutes) ? (
+                            <Badge tone="attn">미체크인</Badge>
                           ) : null}
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </section>
-              );
-            })}
+                        </span>
+                        <span className="grid-mobile__item-meta">
+                          <span>{room?.name ?? booking.roomId}</span>
+                          <span className="t-num grid-mobile__time">
+                            {hhmm(booking.start)}–{hhmm(booking.end)}
+                          </span>
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </section>
           </div>
         </div>
       ) : view === "agenda" ? (
@@ -1717,8 +1757,9 @@ export function GridScreen() {
           end={dialogRange.end}
           prefs={prefsState.data ?? { defaultZoomUrl: null }}
           onClose={closeBookingDialog}
-          onCreated={() => {
+          onCreated={(_booking, notice) => {
             closeBookingDialog();
+            setEditStatus(notice ?? "예약을 만들었어요.");
             bookingsState.reload();
             weekState.reload();
             monthState.reload();
@@ -1743,9 +1784,27 @@ export function GridScreen() {
             weekState.reload();
             monthState.reload();
           }}
+          onRescheduleRequested={(booking) => {
+            setDetailBooking(null);
+            requestAnimationFrame(() => setRescheduleTarget(booking));
+          }}
           onCancelRequested={(b) => {
             setDetailBooking(null);
-            setCancelTarget(b);
+            requestAnimationFrame(() => setCancelTarget(b));
+          }}
+        />
+      ) : null}
+
+      {rescheduleTarget ? (
+        <RescheduleDialog
+          booking={rescheduleTarget}
+          onClose={() => setRescheduleTarget(null)}
+          onRescheduled={(message) => {
+            setRescheduleTarget(null);
+            setEditStatus(message);
+            bookingsState.reload();
+            weekState.reload();
+            monthState.reload();
           }}
         />
       ) : null}
@@ -1772,6 +1831,7 @@ export function GridScreen() {
 
 function GridEventBlock({
   booking,
+  roomName,
   placement,
   now,
   onSelect,
@@ -1779,6 +1839,7 @@ function GridEventBlock({
   editing = false,
 }: {
   booking: Booking;
+  roomName: string;
   placement: GridPlacement;
   now: Date;
   onSelect: (booking: Booking) => void;
@@ -1796,13 +1857,14 @@ function GridEventBlock({
   editing?: boolean;
 }) {
   const noShow = isNoShow(booking, now, POLICY.checkInGraceMinutes);
-  const compact = placement.slots <= 1;
+  const contentMode = eventContentMode(placement.height);
+  const accessibleLabel = `${booking.organizerName}, ${roomName}, ${hhmm(booking.start)}~${hhmm(booking.end)}${noShow ? ", 미체크인" : ""}`;
   const editable = booking.isMine && onBeginEdit !== undefined;
   return (
     <div
       role="button"
       tabIndex={0}
-      aria-label={booking.organizerName + " " + hhmm(booking.start) + "~" + hhmm(booking.end)}
+      aria-label={accessibleLabel}
       className={cx(
         "grid-event",
         booking.isMine ? "grid-event--mine" : "grid-event--other",
@@ -1839,16 +1901,9 @@ function GridEventBlock({
         }
       }}
     >
-      {compact ? (
+      {contentMode === "organizer-only" ? (
         <div className="grid-event__compact">
           <span className="grid-event__name">{booking.organizerName}</span>
-          {noShow ? (
-            <Badge tone="attn">미체크인</Badge>
-          ) : (
-            <span className="grid-event__time t-num">
-              {hhmm(booking.start)}–{hhmm(booking.end)}
-            </span>
-          )}
         </div>
       ) : (
         <div className="grid-event__full">
@@ -1928,53 +1983,12 @@ function WeekView({
   const axisDayStart = useMemo(() => gridDayStart(weekStart, POLICY), [weekStart]);
   const today = useMemo(() => startOfDay(now), [now]);
 
-  /*
-   * 모바일에서는 슬롯을 44px 로 유지한다. 24px 짜리 30분 블록은 손가락으로 누를 수 없다.
-   * 주간 뷰를 일간처럼 리스트로 무너뜨리지 않는 이유는 이 화면의 목적이
-   * "요일별로 같은 시간대가 비는 패턴" 을 보는 것이라 격자가 곧 정보이기 때문이다.
-   *
-   * 이 숫자는 JS 가 정하고 CSS 변수로 내려보낸다. CSS 에서 따로 바꾸면
-   * placeInGrid 가 쓰는 값과 갈라져 이벤트가 엉뚱한 시간에 그려진다.
-   */
-  const isNarrow = useIsNarrow();
-  const weekSlotPx = isNarrow ? Math.max(slotPx, 44) : slotPx;
-
-  // --grid-slot-h 를 인라인으로 내려준다. placeInGrid 에 넘기는 weekSlotPx 와
-  // 같은 숫자여야 CSS 행 높이와 이벤트 좌표가 갈라지지 않는다.
   const roomCount = Math.max(1, visibleRooms.length);
   const split = roomCount > 1;
 
-  /*
-   * 방을 쪼개면 열이 7개에서 7xN 개가 된다. 열 하한을 그대로 두면(160px) 방 둘에
-   * 1120px 이 되어 1440px 창에서도 가로 스크롤이 생긴다 — 주간의 목적은 "요일별
-   * 패턴을 한눈에" 라서 가로 스크롤이 그 목적을 정면으로 깎는다. 쪼갠 열은 하한을
-   * 낮춰(88px) 방 둘까지는 스크롤 없이 들어가게 한다. 대신 그 폭에는 시각을 함께
-   * 못 넣으므로 블록은 이름만 그린다(GridEventBlock 이 폭이 아니라 높이로 판단하던
-   * 것과 별개로, 여기서는 열 폭이 이미 좁다는 사실을 CSS 가 말줄임으로 처리한다).
-   */
-  const weekScrollStyle = {
-    marginTop: 16,
-    "--grid-slot-h": String(weekSlotPx) + "px",
-    // 좁은 화면은 어차피 가로 스크롤이므로 열을 더 좁히지 않는다 — 손가락으로 누를 폭이 먼저다
-    /*
-     * 열 하한. `minmax(하한, 1fr)` 이므로 폭이 남으면 열은 알아서 늘어난다 —
-     * 이 값은 "여기부터는 가로 스크롤" 을 정하는 바닥이다.
-     *
-     * 쪼갠 열의 바닥을 76px 로 뒀더니 1024px 창(사이드바가 켜지는 첫 폭)에서
-     * 가로 스크롤 394px 이 생겼다: 가용 685px / 14열 = 48.9px 밖에 안 된다.
-     * 76px 은 "1440px 에서 스크롤이 안 생기는 값" 이었지 바닥이어야 할 이유가
-     * 없었다 — 1440px 에서는 1fr 이 알아서 78px 로 늘린다.
-     *
-     * 바닥은 44px 로 내린다(터치 타깃 하한이자, 좌측 4px 막대 + 여백을 빼고도
-     * 이름 두 글자가 남는 최소). 그러면 1024px 에서도 48.9px 씩 들어가 스크롤이
-     * 사라진다. 좁은 화면은 반대로 96px 을 유지한다 — 거기서는 7일을 다 보는 것보다
-     * 손가락으로 누를 수 있는 것이 먼저고, 가로 스크롤이 원래 그 뷰의 동작이다.
-     */
-    "--grid-week-col-min": isNarrow ? (split ? "96px" : "108px") : split ? "44px" : "132px",
-  } as CSSProperties;
-
   const gridTemplateColumns =
-    "var(--grid-axis-w) repeat(" + String(7 * roomCount) + ", minmax(var(--grid-week-col-min), 1fr))";
+    "var(--grid-axis-w) repeat(" + String(7 * roomCount) + ", minmax(" +
+    (split ? "var(--grid-split-column-min)" : "var(--grid-week-single-column-min)") + ", 1fr))";
 
   return (
     <div>
@@ -2002,7 +2016,7 @@ function WeekView({
 
       {/* .grid-scroll 은 항상 마운트한다 — 로딩 중에만 사라지면 pane 모드의
        * flex:1 sizing 이 꺼졌다 켜지며 스크롤 위치와 페이지 높이가 튄다(day 뷰와 동일 이유). */}
-      <div className={cx("grid-scroll", "grid-week", split && "grid-week--split")} style={weekScrollStyle}>
+      <div className={cx("grid-scroll", "grid-week", split && "grid-week--split")} style={{ marginTop: 16 }}>
         <div className="grid-table" style={{ gridTemplateColumns }}>
           {/* 헤더가 2단이면 모서리도 2단을 덮어야 시간축 위가 뚫리지 않는다 */}
           <div className={cx("grid-corner", split && "grid-corner--tall")} />
@@ -2126,12 +2140,13 @@ function WeekView({
                       clippedEnd,
                       dStart,
                       POLICY.slotMinutes,
-                      weekSlotPx,
+                      slotPx,
                     );
                     return (
                       <GridEventBlock
                         key={b.id}
                         booking={b}
+                        roomName={room.name}
                         placement={placement}
                         now={now}
                         onSelect={onSelectBooking}
@@ -2320,6 +2335,7 @@ function EventDetail({
   onClose,
   onChanged,
   onRefresh,
+  onRescheduleRequested,
   onCancelRequested,
 }: {
   booking: Booking;
@@ -2329,12 +2345,14 @@ function EventDetail({
   onChanged: () => void;
   /** 다이얼로그를 닫지 않고 목록만 새로 읽는다 (체크인처럼 창을 유지해야 하는 동작) */
   onRefresh: () => void;
+  onRescheduleRequested: (booking: Booking) => void;
   onCancelRequested: (booking: Booking) => void;
 }) {
-  const [busyKind, setBusyKind] = useState<"extend" | "shorten" | "checkin" | null>(null);
+  const [busyKind, setBusyKind] = useState<"extend" | "shorten" | "checkin" | "end" | null>(null);
   const [extendReason, setExtendReason] = useState<string | null>(null);
   const [checkedInAt, setCheckedInAt] = useState<Date | null>(booking.checkedInAt);
   const [actionError, setActionError] = useState<string | null>(null);
+  const checkInStatusRef = useRef<HTMLParagraphElement>(null);
 
   /*
    * ±15분 연장 컨트롤의 지오메트리. DESIGN.md §4:
@@ -2405,10 +2423,28 @@ function EventDetail({
        */
       setCheckedInAt(appNow());
       onRefresh();
+      requestAnimationFrame(() => checkInStatusRef.current?.focus());
     } catch (e: unknown) {
       setActionError(
         e instanceof Error ? e.message : "체크인 중 문제가 생겼어요. 잠시 후 다시 시도해 주세요.",
       );
+    } finally {
+      setBusyKind(null);
+    }
+  }
+
+  async function handleEndNow() {
+    setBusyKind("end");
+    setActionError(null);
+    try {
+      const changed = await repo.changeEnd(booking.id, appNow());
+      if (!changed.ok) {
+        setActionError(changed.reason === "blocked" ? changed.by + "님 예약과 겹쳐요" : changed.message);
+        return;
+      }
+      onChanged();
+    } catch (e: unknown) {
+      setActionError(e instanceof Error ? e.message : "종료 중 문제가 생겼어요. 잠시 후 다시 시도해 주세요.");
     } finally {
       setBusyKind(null);
     }
@@ -2471,7 +2507,7 @@ function EventDetail({
       <div className="mr-stack" style={{ marginTop: 16 }}>
         <div className="mr-row" style={{ justifyContent: "space-between" }}>
           <span className="t-body" style={{ fontWeight: 600 }}>
-            {booking.organizerName}
+            {booking.isMine ? booking.title : booking.organizerName}
           </span>
           {noShow ? (
             <Badge tone="attn">미체크인</Badge>
@@ -2482,6 +2518,7 @@ function EventDetail({
 
         {/* 인원(모이는 사람)과 초대(알림 받는 사람)는 다른 값이다 */}
         <p className="t-small t-muted">
+          {booking.isMine ? `주최자 ${booking.organizerName} · ` : ""}
           인원 {booking.headcount}명
           {booking.attendeeCount > 0 ? " · 초대 " + String(booking.attendeeCount) + "명" : null}
         </p>
@@ -2500,7 +2537,14 @@ function EventDetail({
 
         {booking.isMine && !meetingEnded ? (
           checkedInAt ? (
-            <p className="t-small">체크인 완료 · {hhmm(checkedInAt)}</p>
+            <p
+              className="t-small"
+              role="status"
+              tabIndex={-1}
+              ref={checkInStatusRef}
+            >
+              체크인 완료 · {hhmm(checkedInAt)}
+            </p>
           ) : (
             /* 시작 전에는 누를 수 없다. 숨기지 않고 **언제부터 되는지**를 적는다 —
                비활성 컨트롤은 사유를 상시 노출한다(DESIGN.md §4·§10). */
@@ -2516,28 +2560,138 @@ function EventDetail({
         ) : null}
 
         {booking.isMine ? (
-          <div className="mr-row" style={{ marginTop: 8 }}>
-            <ButtonWithReason
-              variant={extendVariant}
-              onClick={handleShorten}
-              disabled={!canShortenNow || busyKind !== null}
-              reason={!canShortenNow ? "더 이상 줄일 수 없어요" : null}
-            >
-              {busyKind === "shorten" ? "줄이는 중…" : "-" + humanDuration(POLICY.extendStepMinutes)}
-            </ButtonWithReason>
-            {/* -15분과 +15분은 한 쌍이므로 같은 무게로 둔다. 이 다이얼로그의
-                유일한 채움 버튼은 안전한 기본 동작인 "닫기" 하나다 (DESIGN.md §12-2). */}
-            <ButtonWithReason
-              variant={extendVariant}
-              onClick={handleExtend}
-              disabled={busyKind !== null}
-              reason={extendReason}
-            >
-              {busyKind === "extend" ? "연장하는 중…" : "+" + humanDuration(POLICY.extendStepMinutes)}
-            </ButtonWithReason>
+          <div className="mr-stack" style={{ marginTop: 8 }}>
+            <div className="mr-row">
+              <Button
+                variant="secondary"
+                onClick={() => onRescheduleRequested(booking)}
+                disabled={busyKind !== null}
+              >
+                시간·회의실 변경
+              </Button>
+              {meetingStarted && !meetingEnded ? (
+                <Button variant="secondary" onClick={handleEndNow} disabled={busyKind !== null}>
+                  {busyKind === "end" ? "종료하는 중…" : "지금 종료하기"}
+                </Button>
+              ) : null}
+            </div>
+            <div className="mr-row">
+              <ButtonWithReason
+                variant={extendVariant}
+                onClick={handleShorten}
+                disabled={!canShortenNow || busyKind !== null}
+                reason={!canShortenNow ? "더 이상 줄일 수 없어요" : null}
+              >
+                {busyKind === "shorten" ? "줄이는 중…" : "-" + humanDuration(POLICY.extendStepMinutes)}
+              </ButtonWithReason>
+              {/* -15분과 +15분은 한 쌍이므로 같은 무게로 둔다. 이 다이얼로그의
+                  유일한 채움 버튼은 안전한 기본 동작인 "닫기" 하나다 (DESIGN.md §12-2). */}
+              <ButtonWithReason
+                variant={extendVariant}
+                onClick={handleExtend}
+                disabled={busyKind !== null}
+                reason={extendReason}
+              >
+                {busyKind === "extend" ? "연장하는 중…" : "+" + humanDuration(POLICY.extendStepMinutes)}
+              </ButtonWithReason>
+            </div>
           </div>
         ) : null}
       </div>
+    </Dialog>
+  );
+}
+
+/* ================================================================== */
+
+function RescheduleDialog({
+  booking,
+  onClose,
+  onRescheduled,
+}: {
+  booking: Booking;
+  onClose: () => void;
+  onRescheduled: (message: string) => void;
+}) {
+  const formId = useId();
+  const [schedule, setSchedule] = useState(() =>
+    scheduleDraftFrom(booking.roomId, booking.start, booking.end),
+  );
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const now = appNow();
+  const stepMinutes = scheduleInputStepMinutes(booking.start, booking.end);
+
+  async function submit() {
+    if (busy) return;
+    const range = scheduleDraftRange(schedule);
+    if (!range) {
+      setError("날짜와 시작·종료 시각을 모두 확인해 주세요.");
+      return;
+    }
+
+    setBusy(true);
+    setError(null);
+    try {
+      const fresh = await repo.listByRoom(schedule.roomId, range.start);
+      const verdict = canReschedule(booking, fresh, range.start, range.end, POLICY, now);
+      if (!verdict.ok) {
+        setError(rescheduleMessage(verdict));
+        return;
+      }
+      const roomChanged = schedule.roomId !== booking.roomId;
+      const result = await repo.reschedule(
+        booking.id,
+        range.start,
+        range.end,
+        roomChanged ? schedule.roomId : undefined,
+      );
+      if (!result.ok) {
+        setError(
+          result.reason === "blocked"
+            ? `방금 ${result.by}님이 그 시간을 잡았어요. 다른 시간을 골라주세요.`
+            : result.message,
+        );
+        return;
+      }
+      const room = roomById(schedule.roomId);
+      onRescheduled(`${room?.name ?? schedule.roomId} · ${hhmm(range.start)}–${hhmm(range.end)}으로 바꿨어요.`);
+    } catch (caught: unknown) {
+      setError(caught instanceof Error ? caught.message : "예약을 바꾸지 못했어요. 잠시 후 다시 시도해 주세요.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Dialog
+      title="시간·회의실 변경"
+      subtitle={`${roomById(booking.roomId)?.name ?? booking.roomId} · ${hhmm(booking.start)}–${hhmm(booking.end)}`}
+      onClose={onClose}
+      busy={busy}
+      dismissible={false}
+      actions={
+        <>
+          <Button variant="secondary" onClick={onClose} disabled={busy}>
+            그만두기
+          </Button>
+          <Button type="submit" form={formId} disabled={busy}>
+            {busy ? "변경하는 중…" : "이 시간으로 변경"}
+          </Button>
+        </>
+      }
+    >
+      <form
+        id={formId}
+        className="mr-form"
+        onSubmit={(event) => {
+          event.preventDefault();
+          void submit();
+        }}
+      >
+        {error ? <Alert>{error}</Alert> : null}
+        <ScheduleFields value={schedule} onChange={setSchedule} now={now} stepMinutes={stepMinutes} />
+      </form>
     </Dialog>
   );
 }
@@ -2592,12 +2746,13 @@ function CancelConfirmDialog({
     <Dialog
       title="예약 취소"
       onClose={onClose}
+      dismissible={false}
       /* 파괴적 확정 버튼을 안전한 기본 동작에서 떨어뜨린다 (DESIGN.md §4) */
       actionsLayout="split"
       actions={
         <>
           {/* 안전한 쪽(유지)이 주 액션이다. 파괴적인 쪽은 빨간 글자로만 둔다. */}
-          <Button onClick={onClose} disabled={busy}>
+          <Button data-dialog-initial-focus onClick={onClose} disabled={busy}>
             유지
           </Button>
           <Button
@@ -2624,7 +2779,7 @@ function CancelConfirmDialog({
       {isSeries && seriesId !== null ? (
         <div className="mr-stack" style={{ marginTop: 16 }}>
           <Alert tone="info">
-            이 예약은 반복 일정의 한 회차입니다. 위 버튼은 이 회차만 취소하고 나머지 회차는 그대로 둡니다.
+            “이 회차만 취소하기”는 선택한 회차만 지우고 나머지 반복 일정은 그대로 둡니다.
           </Alert>
           <Button
             variant="secondary"

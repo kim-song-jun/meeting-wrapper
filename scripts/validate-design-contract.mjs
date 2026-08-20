@@ -73,6 +73,44 @@ forbidPattern([designPath], /### MolRoom Compact Action `local`[\s\S]*?Height \*
 forbidPattern([designPath], /### MolRoom Compact Action `local`[\s\S]*?`--r-action-mobile`, 터치·거친 포인터와 모바일/g);
 forbidPattern([designPath], /타입 스케일은 전 구간 동일하다\(§3\)\./g);
 
+function requireTokenEvidence(token, evidence) {
+  const line = read("src/styles/tokens.css").split(/\r?\n/).find((candidate) => candidate.includes(`${token}:`));
+  if (!line || !line.includes(`[${evidence}]`)) {
+    failures.push(`src/styles/tokens.css: ${token} must carry [${evidence}] evidence`);
+  }
+}
+
+requireText("src/styles/tokens.css", [
+  "--grid-slot-fine: 24px;",
+  "--grid-slot-touch: 44px;",
+  "--grid-split-column-min: 76px;",
+  "--t-grid-fine-size: 12px;",
+  "--t-grid-touch-size: 14px;",
+  "--t-axis-fine-size: 11px;",
+  "--t-axis-touch-size: 13px;",
+  "--r-event-fine: 4px;",
+  "--r-event-touch: 12px;",
+  "--c-now: #4E5968;",
+]);
+forbidPattern(
+  ["src/styles/tokens.css", "src/styles/grid.css", "src/screens/GridScreen.tsx"],
+  /--(?:t-grid-size|t-grid-lh|t-axis-size|t-axis-lh|r-event|grid-slot-h|grid-col-min)(?=\s*[:),;])/g,
+);
+requirePattern("src/styles/grid.css", /\.grid-event\s*\{[\s\S]*?border-inline-start:\s*4px solid transparent;/, "grid ownership stripe geometry");
+requirePattern("src/styles/grid.css", /\.grid-mobile__item--mine::before[\s\S]*?inline-size:\s*4px;/, "mobile ownership pseudo stripe");
+requirePattern("src/styles/grid.css", /\.agenda-row--mine::before[\s\S]*?inline-size:\s*4px;/, "agenda ownership pseudo stripe");
+forbidPattern(["src/styles/grid.css"], /box-shadow:\s*inset 4px 0 0 var\(--c-mine-border\)/g);
+requirePattern("src/styles/tokens.css", /--grid-slot-fine:\s*24px;[^\n]*\[local\]/, "fine slot evidence");
+requirePattern("src/styles/tokens.css", /--grid-slot-touch:\s*44px;[^\n]*\[a11y\]/, "touch slot evidence");
+requirePattern("src/styles/tokens.css", /--c-now:\s*#4E5968;[^\n]*\[local\]/, "current-time evidence");
+for (const [token, evidence] of [
+  ["--grid-slot-fine", "local"], ["--grid-slot-touch", "a11y"],
+  ["--grid-split-column-min", "local"], ["--t-grid-fine-size", "local"],
+  ["--t-grid-touch-size", "local"], ["--t-axis-fine-size", "local"],
+  ["--t-axis-touch-size", "local"], ["--r-event-fine", "local"],
+  ["--r-event-touch", "local"], ["--c-now", "local"],
+]) requireTokenEvidence(token, evidence);
+
 if (failures.length > 0) {
   console.error(failures.join("\n"));
   process.exitCode = 1;
