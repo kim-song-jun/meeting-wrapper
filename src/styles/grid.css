@@ -692,6 +692,11 @@
   /* transform 은 넣지 않는다 — 24px 블록이 커지면 옆 블록과 겹쳐 보인다 */
   transition: background-color var(--dur-cell) var(--ease-out);
 }
+.grid-event:focus-visible {
+  outline: none;
+  box-shadow: var(--shadow-focus);
+  z-index: 2;
+}
 /*
  * 내 예약은 격자에서 직접 옮길 수 있다 — 잡을 수 있다는 것이 커서로 보여야 한다.
  * grab/grabbing 은 cursor 규칙(드래그 가능 = grab)에 해당한다.

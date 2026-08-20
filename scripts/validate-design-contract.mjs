@@ -512,6 +512,74 @@ function declarations(rule) {
     .map((match) => [match[1], match[2].trim()]);
 }
 
+function gridEventFocusContractFailures(source) {
+  const contractFailures = [];
+  const rules = extractCssRules(source);
+  const focusRules = rules.filter((rule) =>
+    rule.contexts.length === 0 && rule.selectors.length === 1 && rule.selectors[0] === ".grid-event:focus-visible",
+  );
+  if (focusRules.length !== 1) {
+    contractFailures.push("src/styles/grid.css: expected one base .grid-event:focus-visible rule");
+  } else {
+    const focusDeclarations = declarations(focusRules[0]);
+    const valuesFor = (property) => focusDeclarations
+      .filter(([candidate]) => candidate === property)
+      .map(([, value]) => value);
+    if (valuesFor("outline").join("|") !== "none") {
+      contractFailures.push("src/styles/grid.css: grid event focus must replace the global outline");
+    }
+    if (valuesFor("box-shadow").join("|") !== "var(--shadow-focus)") {
+      contractFailures.push("src/styles/grid.css: grid event focus must use --shadow-focus");
+    }
+    const zIndexes = valuesFor("z-index");
+    if (zIndexes.length !== 1 || !/^\d+$/.test(zIndexes[0]) || Number(zIndexes[0]) < 2) {
+      contractFailures.push("src/styles/grid.css: grid event focus must stack above adjacent grid content");
+    }
+  }
+  const eventRules = rules.filter((rule) =>
+    rule.contexts.length === 0 && rule.selectors.length === 1 && rule.selectors[0] === ".grid-event",
+  );
+  const ownershipBorders = eventRules.flatMap((rule) => declarations(rule))
+    .filter(([property]) => property === "border-inline-start")
+    .map(([, value]) => value);
+  if (ownershipBorders.join("|") !== "4px solid transparent") {
+    contractFailures.push("src/styles/grid.css: grid event must preserve the logical 4px ownership border contract");
+  }
+  return contractFailures;
+}
+
+const gridFocusSource = read("src/styles/grid.css");
+failures.push(...gridEventFocusContractFailures(gridFocusSource));
+
+const gridFocusPositiveFixture = `
+.grid-event {
+  border-inline-start: 4px solid transparent;
+}
+.grid-event:focus-visible {
+  outline: none;
+  box-shadow: var(--shadow-focus);
+  z-index: 2;
+}
+`;
+if (gridEventFocusContractFailures(gridFocusPositiveFixture).length !== 0) {
+  failures.push("validator grid focus positive fixture must pass");
+}
+const gridFocusMutations = [
+  ["missing event focus rule", (source) => source.replace(/\.grid-event:focus-visible\s*\{[\s\S]*?\}\s*/, "")],
+  ["wrong event focus token", (source) => source.replace("box-shadow: var(--shadow-focus);", "box-shadow: var(--shadow-modal);")],
+  ["removed logical ownership border", (source) => source.replace("border-inline-start: 4px solid transparent;", "border-inline-start: 0;")],
+];
+for (const [label, mutate] of gridFocusMutations) {
+  const mutated = mutate(gridFocusPositiveFixture);
+  if (mutated === gridFocusPositiveFixture) {
+    failures.push(`validator grid focus negative mutation did not change source: ${label}`);
+    continue;
+  }
+  if (gridEventFocusContractFailures(mutated).length === 0) {
+    failures.push(`validator grid focus negative mutation did not fail: ${label}`);
+  }
+}
+
 function spacingContractFailures(sources) {
   const contractFailures = [];
   const tokens = sources.get("src/styles/tokens.css");
@@ -648,6 +716,20 @@ if (acceptedDimensionMutation === spacingSources.get("src/styles/components.css"
 if (spacingContractFailures(new Map(spacingSources).set("src/styles/components.css", acceptedDimensionMutation)).length > 0) {
   failures.push("validator spacing 112px control mutation must remain accepted");
 }
+
+requireText("docs/design-examples/examples.css", [
+  "--radius-action: 14px;",
+  "--radius-action-mobile: 16px;",
+  "--radius-input: 12px;",
+  "--radius-filter: 12px;",
+  "--radius-segment: 12px;",
+  "--radius-nav-item: 12px;",
+  "--radius-card: 16px;",
+  "--radius-dialog: 20px;",
+  "--radius-event-fine: 4px;",
+  "--radius-event-touch: 12px;",
+  "--color-now: #4E5968;",
+]);
 
 if (failures.length > 0) {
   console.error(failures.join("\n"));

@@ -15,10 +15,25 @@
   --warn-bg: #fff3e5;
   --warn-fg: #8f4b00;
   --backdrop: rgba(0, 0, 0, 0.48);
-  --radius-button: 14px;
+  --radius-action: 14px;
+  --radius-action-mobile: 16px;
   --radius-input: 12px;
+  --radius-filter: 12px;
+  --radius-segment: 12px;
+  --radius-nav-item: 12px;
   --radius-card: 16px;
   --radius-dialog: 20px;
+  --radius-event-fine: 4px;
+  --radius-event-touch: 12px;
+  --color-now: #4E5968;
+  --grid-slot-fine: 24px;
+  --grid-slot-touch: 44px;
+  --grid-slot: var(--grid-slot-touch);
+  --event-font-size: 14px;
+  --event-line-height: 20px;
+  --axis-font-size: 13px;
+  --axis-line-height: 18px;
+  --radius-event: var(--radius-event-touch);
   --sidebar: 240px;
   --font: "Pretendard Variable", Pretendard, -apple-system, BlinkMacSystemFont, "Noto Sans KR", "Apple SD Gothic Neo", system-ui, sans-serif;
 }
@@ -143,12 +158,16 @@ svg {
   gap: 9px;
   padding: 0 12px;
   border: 0;
-  border-radius: var(--radius-input);
+  border-radius: var(--radius-nav-item);
   background: transparent;
   color: var(--fg);
   text-align: left;
   text-decoration: none;
   font-size: 16px;
+}
+
+.room-row {
+  border-radius: var(--radius-filter);
 }
 
 .side-link.active {
@@ -265,7 +284,7 @@ svg {
   gap: 7px;
   padding: 0 20px;
   border: 0;
-  border-radius: var(--radius-button);
+  border-radius: var(--radius-action);
   background: var(--blue);
   color: #fff;
   font-size: 16px;
@@ -292,7 +311,7 @@ svg {
 .button.compact {
   min-height: 36px;
   padding: 0 14px;
-  border-radius: 10px;
+  border-radius: var(--radius-action);
   font-size: 14px;
 }
 
@@ -301,7 +320,7 @@ svg {
   gap: 2px;
   padding: 3px;
   border: 1px solid var(--border);
-  border-radius: var(--radius-button);
+  border-radius: var(--radius-segment);
   background: var(--surface-muted);
 }
 
@@ -312,7 +331,7 @@ svg {
   align-items: center;
   justify-content: center;
   padding: 0 12px;
-  border-radius: 10px;
+  border-radius: var(--radius-segment);
   color: var(--body);
   font-size: 14px;
   font-weight: 650;
@@ -348,7 +367,7 @@ svg {
   align-items: center;
   justify-content: center;
   border: 0;
-  border-radius: 10px;
+  border-radius: var(--radius-action);
   background: transparent;
   color: var(--body);
   font-size: 20px;
@@ -382,7 +401,7 @@ svg {
 .calendar-board {
   display: grid;
   grid-template-columns: 58px repeat(2, minmax(220px, 1fr));
-  grid-template-rows: 50px 576px;
+  grid-template-rows: 50px calc(var(--grid-slot) * 24);
   min-width: 760px;
 }
 
@@ -430,8 +449,8 @@ svg {
   transform: translateY(-7px);
   color: var(--muted);
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 11px;
-  line-height: 14px;
+  font-size: var(--axis-font-size);
+  line-height: var(--axis-line-height);
 }
 
 .grid-column {
@@ -441,13 +460,16 @@ svg {
     repeating-linear-gradient(
       to bottom,
       transparent 0,
-      transparent 23px,
-      var(--surface-muted) 23px,
-      var(--surface-muted) 24px,
-      transparent 24px,
-      transparent 47px,
-      var(--border) 47px,
-      var(--border) 48px
+      transparent calc(var(--grid-slot) * 2 - 1px),
+      var(--border) calc(var(--grid-slot) * 2 - 1px),
+      var(--border) calc(var(--grid-slot) * 2)
+    ),
+    repeating-linear-gradient(
+      to bottom,
+      transparent 0,
+      transparent calc(var(--grid-slot) - 1px),
+      var(--surface-muted) calc(var(--grid-slot) - 1px),
+      var(--surface-muted) var(--grid-slot)
     );
 }
 
@@ -460,25 +482,40 @@ svg {
   right: 8px;
   left: 8px;
   overflow: hidden;
-  padding: 6px 8px 5px 10px;
-  border-left: 4px solid var(--border-strong);
-  border-radius: 4px;
+  padding: 6px 8px 5px 12px;
+  border: 0;
+  border-radius: var(--radius-event);
   background: var(--surface-muted);
   color: var(--fg);
-  font-size: 12px;
-  line-height: 14px;
+  font-size: var(--event-font-size);
+  line-height: var(--event-line-height);
+}
+
+.event::before {
+  content: "";
+  position: absolute;
+  inset-block: 0;
+  inset-inline-start: 0;
+  inline-size: 4px;
+  background: var(--border-strong);
 }
 
 .event.mine {
-  border-left-color: var(--blue);
   background: var(--blue-weak);
   color: var(--blue-weak-fg);
 }
 
+.event.mine::before {
+  background: var(--blue);
+}
+
 .event.attention {
-  border-left-color: var(--warn-fg);
   background: var(--warn-bg);
   color: var(--warn-fg);
+}
+
+.event.attention::before {
+  background: var(--warn-fg);
 }
 
 .event strong,
@@ -503,7 +540,7 @@ svg {
   right: 0;
   left: 0;
   height: 1px;
-  background: var(--danger);
+  background: var(--color-now);
   z-index: 5;
 }
 
@@ -515,7 +552,7 @@ svg {
   width: 9px;
   height: 9px;
   border-radius: 999px;
-  background: var(--danger);
+  background: var(--color-now);
 }
 
 .card {
@@ -1082,6 +1119,17 @@ svg {
   text-decoration: none;
 }
 
+@media (min-width: 768px) and (hover: hover) and (pointer: fine) {
+  :root {
+    --grid-slot: var(--grid-slot-fine);
+    --event-font-size: 12px;
+    --event-line-height: 14px;
+    --axis-font-size: 11px;
+    --axis-line-height: 14px;
+    --radius-event: var(--radius-event-fine);
+  }
+}
+
 @media (max-width: 1023px) {
   .app-shell {
     display: block;
@@ -1116,6 +1164,10 @@ svg {
 
   .app-main {
     padding: 18px 16px 104px;
+  }
+
+  .button {
+    border-radius: var(--radius-action-mobile);
   }
 
   .mobile-bottom-nav {
