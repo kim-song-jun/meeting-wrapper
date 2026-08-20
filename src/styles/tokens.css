@@ -180,9 +180,10 @@
   --h-badge: 24px;          /* [local] 14px 본문에 맞춘 값 */
   --h-sidebar-row: 48px;    /* [local] 액션 높이와 같게 */
 
-  --pad-action: 0 20px;            /* [toss] xlarge padding */
-  --pad-action-compact: 0 16px;    /* [toss] */
-  --pad-content: 16px;             /* [toss] spacing 스케일 */
+  --pad-action-inline: 20px;          /* [toss] xlarge padding */
+  --pad-action-compact-inline: 16px;  /* [toss] */
+  --pad-card: 16px;                   /* [toss] */
+  --pad-mobile-inline: 20px;          /* [local] */
 
   --w-sidebar: 240px;              /* [local] 16px 본문 + 48px 행이 들어가는 폭 */
 
@@ -214,7 +215,8 @@
   /* ================= 간격 =================
    * Toss 실측 클러스터: 4 · 6 · 8 · 16 · 24 · 32.
    * **12px 과 20px 은 이 스케일에 없다** — Apple 판본의 12px 리듬을 옮기지 말 것.
-   * (--pad-action 의 20px 은 예외: TDS 버튼 패딩 실측값이다.) */
+   * (--pad-action-inline 과 --pad-mobile-inline 의 20px 은 이름 있는
+   * component-geometry 예외다.) */
   --sp-1: 4px;
   --sp-2: 8px;
   --sp-3: 16px;
@@ -280,6 +282,5 @@
     --h-input: 56px;          /* [toss] */
     --h-tab: 56px;
     --h-toolbar: 44px;        /* [a11y] 좁은 화면 터치 타깃 하한 */
-    --pad-content: 20px;      /* [local] 손가락 폭에서 16px 은 답답하다 */
   }
 }

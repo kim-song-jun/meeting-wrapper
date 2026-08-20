@@ -13,7 +13,8 @@
   display: flex;
   align-items: center;
   min-height: 56px;
-  padding: 0 20px;
+  padding-block: 0;
+  padding-inline: var(--pad-mobile-inline);
   border-bottom: 1px solid var(--c-border);
   background: var(--c-surface);
 }
@@ -39,7 +40,8 @@
   margin: 0 auto;
   /* 상단 여백을 더 줘 방 이름이 헤더 바로 밑에 눌려 붙지 않게 한다 — Apple 은
    * 화면당 유일한 Display 앞에 숨 쉴 공간을 둔다. */
-  padding: 24px 20px calc(48px + env(safe-area-inset-bottom));
+  padding-block: 24px calc(48px + env(safe-area-inset-bottom));
+  padding-inline: var(--pad-mobile-inline);
 }
 
 /* Display Hero — DESIGN.md 상 이 화면의 회의실 이름에만 쓰는 유일한 자리.
@@ -99,11 +101,11 @@
   margin-top: 16px;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 8px;
 }
 
 .mr-landing__gapcard {
-  margin-top: 12px;
+  margin-top: 16px;
 }
 
 .mr-landing__gaplabel {
@@ -115,7 +117,7 @@
 }
 
 .mr-landing__gapaction {
-  margin-top: 12px;
+  margin-top: 16px;
 }
 
 .mr-landing__mine-head {
@@ -128,12 +130,12 @@
   margin-top: 16px;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 8px;
 }
 
 .mr-landing__mine-row {
   display: flex;
-  gap: 12px;
+  gap: 8px;
   flex-wrap: wrap;
 }
 .mr-landing__mine-row > * {
@@ -148,7 +150,7 @@
 }
 
 .mr-landing__alert {
-  margin-top: 12px;
+  margin-top: 16px;
 }
 
 .mr-landing__today {
@@ -158,7 +160,7 @@
 .mr-landing__today-title {
   font-weight: 600;
   color: var(--c-body);
-  margin-bottom: 12px;
+  margin-bottom: 16px;
 }
 
 .mr-landing__list {
@@ -175,7 +177,7 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
+  gap: 8px;
   background: var(--c-surface);
   border: 1px solid var(--c-border);
   border-radius: var(--r-card);

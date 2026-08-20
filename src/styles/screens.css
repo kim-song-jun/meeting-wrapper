@@ -347,7 +347,7 @@
   align-items: center;
   gap: 8px;
   min-height: var(--h-sidebar-row);
-  padding: 0 12px;
+  padding-inline: 16px;
   border: none;
   background: none;
   width: 100%;
@@ -429,7 +429,7 @@
 .mr-sidebar__note,
 .mr-sidebar__reason {
   margin: 0 0 4px;
-  padding: 0 12px;
+  padding-inline: 16px;
   color: var(--c-body);
 }
 .mr-sidebar__reason {

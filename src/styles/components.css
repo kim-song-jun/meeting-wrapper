@@ -35,7 +35,8 @@
   background: var(--c-action);
   color: var(--c-on-action);
   border-radius: var(--r-action);
-  padding: var(--pad-action);
+  padding-block: 0;
+  padding-inline: var(--pad-action-inline);
   height: var(--h-action);
   font-size: var(--t-body-size);
 }
@@ -54,7 +55,8 @@
   color: var(--c-action-weak-fg);
   border: none;
   border-radius: var(--r-action);
-  padding: var(--pad-action);
+  padding-block: 0;
+  padding-inline: var(--pad-action-inline);
   height: var(--h-action);
   font-size: var(--t-body-size);
 }
@@ -65,7 +67,8 @@
   background: var(--c-action);
   color: var(--c-on-action);
   border-radius: var(--r-action);
-  padding: var(--pad-action-compact);
+  padding-block: 0;
+  padding-inline: var(--pad-action-compact-inline);
   height: var(--h-action-compact);
   font-size: var(--t-small-size);
 }
@@ -133,7 +136,7 @@
 .mr-textarea {
   height: auto;
   min-height: 96px;
-  padding: 12px 16px;
+  padding: 8px 16px;
   line-height: var(--t-body-lh);
   resize: vertical;
   font-family: inherit;
@@ -176,7 +179,7 @@
 .mr-schedule__grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
+  gap: 16px;
 }
 .mr-booking-submit {
   min-width: 156px;
@@ -254,7 +257,7 @@
 .mr-card {
   background: var(--c-surface);
   border-radius: var(--r-card);
-  padding: var(--pad-content);
+  padding: var(--pad-card);
   border: 1px solid var(--c-border);
 }
 .mr-card--mine {
@@ -394,7 +397,7 @@
 .mr-dialog__actions {
   display: flex;
   justify-content: flex-end;
-  gap: 12px;
+  gap: 16px;
   margin-top: 24px;
 }
 
@@ -415,7 +418,8 @@
   color: var(--c-danger);
   border: none;
   border-radius: var(--r-action);
-  padding: var(--pad-action);
+  padding-block: 0;
+  padding-inline: var(--pad-action-inline);
   height: var(--h-action);
   font-size: var(--t-body-size);
 }
@@ -485,7 +489,7 @@
 /* ---------- 공통 알림 ---------- */
 .mr-alert {
   border-radius: var(--r-card);
-  padding: 12px 14px;
+  padding: 8px 16px;
   font-size: var(--t-small-size);
   line-height: var(--t-small-lh);
   background: var(--c-attn-bg);
@@ -502,7 +506,7 @@
 .mr-stepper {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 8px;
   flex-wrap: wrap;
 }
 /* 390px 화면에서 설명 문구가 스테퍼 옆에 끼면 두 줄로 깨진다. 아래 줄로 내린다. */
@@ -542,7 +546,8 @@
   align-items: center;
   gap: 6px;
   height: var(--h-action);
-  padding: var(--pad-action);
+  padding-block: 0;
+  padding-inline: var(--pad-action-inline);
   border-radius: var(--r-pill);
   border: 1px solid var(--c-action-weak-fg);
   background: transparent;
@@ -576,7 +581,7 @@
   width: 100%;
   /* 44px 터치 타깃 하한 */
   min-height: var(--h-action);
-  padding: 8px 12px;
+  padding: 8px 16px;
   border: none;
   background: transparent;
   text-align: left;
@@ -672,12 +677,12 @@
 .mr-stack {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 16px;
 }
 .mr-row {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 8px;
   flex-wrap: wrap;
 }
 
@@ -698,7 +703,7 @@
   flex-wrap: wrap;
   align-items: baseline;
   gap: 4px;
-  padding: 10px 12px;
+  padding: 8px 16px;
   font-size: var(--t-small-size);
   line-height: var(--t-small-lh);
   color: var(--c-fg);

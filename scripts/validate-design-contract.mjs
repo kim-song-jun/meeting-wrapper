@@ -492,6 +492,21 @@ for (const [label, path, mutate] of radiusMutations) {
   }
 }
 
+requireText("src/styles/tokens.css", [
+  "--pad-action-inline: 20px;",
+  "--pad-action-compact-inline: 16px;",
+  "--pad-card: 16px;",
+  "--pad-mobile-inline: 20px;",
+]);
+forbidPattern(styleFiles, /--pad-(?:action|action-compact|content)(?=\s*[:),;])/g);
+
+const layoutDeclaration = /^\s*(?:gap|row-gap|column-gap|margin(?:-[a-z]+)?|padding(?:-[a-z]+)?)\s*:[^;]*(?:12|20)px[^;]*;/gm;
+forbidPattern(styleFiles.filter((file) => file !== "src/styles/tokens.css"), layoutDeclaration);
+for (const [token, evidence] of [
+  ["--pad-action-inline", "toss"], ["--pad-action-compact-inline", "toss"],
+  ["--pad-card", "toss"], ["--pad-mobile-inline", "local"],
+]) requireTokenEvidence(token, evidence);
+
 if (failures.length > 0) {
   console.error(failures.join("\n"));
   process.exitCode = 1;

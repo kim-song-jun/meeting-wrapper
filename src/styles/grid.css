@@ -82,7 +82,8 @@
   /* 기본 높이는 액션 토큰(48/56px). 격자 화면의 툴바 안에서는 파일 끝
    * "툴바 재구성" 절이 이것을 --h-toolbar(36px)로 낮춘다 — 그 절에 근거가 있다. */
   height: var(--h-action);
-  padding: 0 20px;
+  padding-block: 0;
+  padding-inline: var(--pad-action-inline);
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -126,8 +127,8 @@
   flex-direction: row;
   align-items: center;
   flex-wrap: wrap;
-  gap: 8px 12px;
-  margin-bottom: 12px;
+  gap: 8px;
+  margin-bottom: 16px;
 }
 
 /* 필터와 날짜 탐색을 한 줄로 — 두 줄로 쌓으면 그만큼 격자가 짧아진다.
@@ -138,7 +139,7 @@
     flex-direction: row;
     align-items: center;
     flex-wrap: wrap;
-    gap: 8px 20px;
+    gap: 8px 16px;
   }
 }
 
@@ -506,7 +507,7 @@
   z-index: 2;
   background: var(--c-surface);
   border-bottom: 1px solid var(--c-border);
-  padding: 10px 12px;
+  padding: 8px;
   display: flex;
   flex-direction: column;
   gap: 2px;
@@ -732,7 +733,7 @@
   bottom: 2px;
   width: 24px;
   height: 2px;
-  margin-left: -12px;
+  transform: translateX(-50%);
   border-radius: 2px;
   background: var(--c-action);
   /* 평소엔 조용히, 손을 올리면 또렷하게 — 있다는 것만 알리고 시선을 끌지 않는다 */
@@ -1209,9 +1210,9 @@
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  gap: 12px;
+  gap: 8px;
   flex-wrap: wrap;
-  margin-bottom: 12px;
+  margin-bottom: 8px;
 }
 
 .grid-mobile__list {
@@ -1230,7 +1231,7 @@
   text-align: left;
   font: inherit;
   color: inherit;
-  padding: var(--pad-content);
+  padding: var(--pad-card);
   background: var(--c-surface);
   border: 0;
   cursor: pointer;
@@ -1637,7 +1638,7 @@
 }
 .grid-viewswitch--sm .grid-viewswitch__btn {
   height: var(--h-action-compact);
-  padding: 0 12px;
+  padding-inline: 16px;
 }
 
 /* 날짜 라벨은 **평문**이다. 22px 굵은 제목이면 컨트롤보다 먼저 읽히는데,
@@ -1667,7 +1668,7 @@
   font-family: var(--font-sans);
   font-size: var(--t-small-size);
   /* 오른쪽은 화살표 자리 */
-  padding: 0 28px 0 12px;
+  padding: 0 32px 0 16px;
   cursor: pointer;
   background-image: linear-gradient(45deg, transparent 50%, var(--c-body) 50%),
     linear-gradient(135deg, var(--c-body) 50%, transparent 50%);
@@ -1694,7 +1695,7 @@
   flex-direction: row;
   align-items: baseline;
   gap: 6px;
-  padding: 8px 12px;
+  padding: 8px;
 }
 .grid-room-header__name {
   font-size: var(--t-small-size);

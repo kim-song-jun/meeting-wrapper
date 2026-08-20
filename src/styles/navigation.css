@@ -53,7 +53,7 @@
     align-items: center;
     justify-content: center;
     min-height: 40px;
-    padding: 0 12px;
+    padding-inline: 16px;
     border-radius: var(--r-nav-item);
     transition:
       background-color var(--dur-hover) var(--ease-out),
