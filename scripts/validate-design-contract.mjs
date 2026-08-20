@@ -409,6 +409,15 @@ function radiusContractFailures(radiusSources) {
     ["src/styles/grid.css", ".grid-datepick"], ["src/styles/screens.css", ".mr-page-action"],
   ];
   for (const [path, selector] of actionSelectors) {
+    const actionRadiusRules = rulesFor(path, selector).filter((rule) => radiusDeclarations(rule).length > 0);
+    const hasOnlyPermittedActionRadii = actionRadiusRules.length === 2 && actionRadiusRules.every((rule) => {
+      const value = radiusDeclarations(rule).join("|");
+      return (rule.contexts.length === 0 && value === "var(--r-action)") ||
+        (rule.contexts.length === 1 && rule.contexts[0] === mobileRadiusQuery && value === "var(--r-action-mobile)");
+    });
+    if (!hasOnlyPermittedActionRadii) {
+      contractFailures.push(`${path}: ${selector} may use only base --r-action and the exact mobile override`);
+    }
     const mobileRules = mobileRulesFor(path, selector);
     if (mobileRules.length !== 1 || radiusDeclarations(mobileRules[0]).join("|") !== "var(--r-action-mobile)") {
       contractFailures.push(`${path}: ${selector} must use --r-action-mobile only in ${mobileRadiusQuery}`);
@@ -416,7 +425,7 @@ function radiusContractFailures(radiusSources) {
   }
   for (const [path, rules] of ruleSets) {
     for (const rule of rules) {
-      if (!radiusDeclarations(rule).includes("var(--r-action-mobile)")) continue;
+      if (!radiusDeclarations(rule).some((value) => /var\(\s*--r-action-mobile\b/.test(value))) continue;
       if (rule.contexts.length !== 1 || rule.contexts[0] !== mobileRadiusQuery ||
         rule.selectors.some((selector) => !actionSelectors.some(([actionPath, actionSelector]) => actionPath === path && actionSelector === selector))) {
         contractFailures.push(`${path}: --r-action-mobile is limited to required action selectors in ${mobileRadiusQuery}`);
@@ -434,6 +443,14 @@ function radiusContractFailures(radiusSources) {
   if (dialogMobileRules.length !== 1 || radiusDeclarations(dialogMobileRules[0]).join("|") !== "var(--r-dialog) var(--r-dialog) 0 0") {
     contractFailures.push("src/styles/components.css: mobile dialog top corners must use --r-dialog");
   }
+  const dialogRadiusRules = rulesFor("src/styles/components.css", ".mr-dialog").filter((rule) => radiusDeclarations(rule).length > 0);
+  if (dialogRadiusRules.length !== 2 || dialogRadiusRules.some((rule) => {
+    const value = radiusDeclarations(rule).join("|");
+    return !((rule.contexts.length === 0 && value === "var(--r-dialog)") ||
+      (rule.contexts.length === 1 && rule.contexts[0] === mobileRadiusQuery && value === "var(--r-dialog) var(--r-dialog) 0 0"));
+  })) {
+    contractFailures.push("src/styles/components.css: .mr-dialog may use only its base role and exact mobile top-corner shorthand");
+  }
 
   const pillAllowlist = new Map([
     ["src/styles/components.css", new Set([".mr-badge", ".mr-radio__dot", ".mr-radio__dot::after", ".mr-picker__team", ".mr-picker__chip", ".mr-picker__remove"])],
@@ -442,7 +459,7 @@ function radiusContractFailures(radiusSources) {
   ]);
   for (const [path, rules] of ruleSets) {
     for (const rule of rules) {
-      if (!radiusDeclarations(rule).includes("var(--r-pill)")) continue;
+      if (!radiusDeclarations(rule).some((value) => /var\(\s*--r-pill\b/.test(value))) continue;
       const allowedSelectors = pillAllowlist.get(path);
       if (!allowedSelectors || rule.selectors.some((selector) => !allowedSelectors.has(selector))) {
         contractFailures.push(`${path}: --r-pill consumer must be an approved capsule, badge, dot, or circle selector`);
@@ -457,8 +474,10 @@ failures.push(...radiusContractFailures(radiusSources));
 const radiusMutations = [
   ["radius role swap", "src/styles/components.css", (source) => source.replace("border-radius: var(--r-input);", "border-radius: var(--r-filter);")],
   ["mobile action override removal", "src/styles/components.css", (source) => source.replace("border-radius: var(--r-action-mobile);", "border-radius: var(--r-action);")],
+  ["non-mobile action override", "src/styles/components.css", (source) => `${source}\n@media (min-width: 1024px) { .mr-btn--primary { border-radius: var(--r-action-mobile); } }\n`],
   ["mobile dialog shorthand", "src/styles/components.css", (source) => source.replace("border-radius: var(--r-dialog) var(--r-dialog) 0 0;", "border-radius: var(--r-card) var(--r-card) 0 0;")],
   ["unapproved pill consumer", "src/styles/components.css", (source) => `${source}\n.radius-contract-negative { border-radius: var(--r-pill); }\n`],
+  ["unapproved pill fallback and multi-value consumer", "src/styles/components.css", (source) => `${source}\n.radius-contract-negative-fallback { border-radius: var(--r-pill, 980px) var(--r-pill); }\n`],
 ];
 for (const [label, path, mutate] of radiusMutations) {
   const mutated = mutate(radiusSources.get(path));
