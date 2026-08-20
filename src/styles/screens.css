@@ -347,6 +347,7 @@
   align-items: center;
   gap: 8px;
   min-height: var(--h-sidebar-row);
+  padding-block: 0;
   padding-inline: 16px;
   border: none;
   background: none;

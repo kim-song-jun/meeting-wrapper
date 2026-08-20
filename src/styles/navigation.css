@@ -53,6 +53,7 @@
     align-items: center;
     justify-content: center;
     min-height: 40px;
+    padding-block: 0;
     padding-inline: 16px;
     border-radius: var(--r-nav-item);
     transition:

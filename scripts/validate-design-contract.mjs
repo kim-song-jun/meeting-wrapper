@@ -492,20 +492,123 @@ for (const [label, path, mutate] of radiusMutations) {
   }
 }
 
-requireText("src/styles/tokens.css", [
-  "--pad-action-inline: 20px;",
-  "--pad-action-compact-inline: 16px;",
-  "--pad-card: 16px;",
-  "--pad-mobile-inline: 20px;",
+const spacingStylePaths = styleFiles.filter((path) => path !== "src/styles/tokens.css");
+const spacingTokens = [
+  ["--pad-action-inline", "20px", "toss"],
+  ["--pad-action-compact-inline", "16px", "toss"],
+  ["--pad-card", "16px", "toss"],
+  ["--pad-mobile-inline", "20px", "local"],
+];
+const spacingProperty = /^(?:gap|row-gap|column-gap|margin(?:-[a-z]+)?|padding(?:-[a-z]+)?)$/;
+const forbiddenSpacingDimension = /(?<![\d.])(?:12|20)px(?![\d.])/;
+
+function declarations(rule) {
+  return [...rule.body.matchAll(/(?:^|[;\n])\s*([\w-]+)\s*:\s*([^;]+);/g)]
+    .map((match) => [match[1], match[2].replace(/\/\*[\s\S]*?\*\//g, "").trim()]);
+}
+
+function spacingContractFailures(sources) {
+  const contractFailures = [];
+  const tokens = sources.get("src/styles/tokens.css");
+  const tokenRules = extractCssRules(tokens).filter((rule) =>
+    rule.contexts.length === 0 && rule.selectors.length === 1 && rule.selectors[0] === ":root",
+  );
+  if (tokenRules.length !== 1) {
+    contractFailures.push("src/styles/tokens.css: expected one base :root rule for spacing geometry");
+  } else {
+    const tokenRule = tokenRules[0];
+    for (const [token, value, evidence] of spacingTokens) {
+      const matchingDeclarations = declarations(tokenRule).filter(([property, declared]) => property === token && declared === value);
+      const matchingLines = tokenRule.body.split(/\r?\n/).filter((line) =>
+        new RegExp(`^\\s*${token}:\\s*${value};\\s*/\\*\\s*\\[${evidence}\\][^*]*\\*/\\s*$`).test(line),
+      );
+      if (matchingDeclarations.length !== 1 || matchingLines.length !== 1) {
+        contractFailures.push(`src/styles/tokens.css: ${token} must be a unique base :root ${value} declaration with [${evidence}] evidence`);
+      }
+    }
+  }
+
+  const ruleSets = new Map(spacingStylePaths.map((path) => [path, extractCssRules(sources.get(path))]));
+  for (const [path, rules] of ruleSets) {
+    for (const rule of rules) {
+      for (const [property, value] of declarations(rule)) {
+        if (spacingProperty.test(property) && forbiddenSpacingDimension.test(value)) {
+          contractFailures.push(`${path}: forbidden ${property}: ${value}; in ${rule.selectors.join(", ")}`);
+        }
+      }
+    }
+  }
+
+  const ruleFor = (path, selector) => (ruleSets.get(path) ?? []).filter((rule) => rule.selectors.includes(selector));
+  const requireDeclarations = (path, selector, expected) => {
+    const rules = ruleFor(path, selector);
+    const relevantRules = rules.filter((rule) => {
+      const actual = declarations(rule);
+      return expected.some(([property]) => actual.some(([actualProperty]) => actualProperty === property));
+    });
+    if (relevantRules.length === 0 || relevantRules.some((rule) => {
+      const actual = declarations(rule);
+      return !expected.every(([property, value]) => actual.some(([actualProperty, actualValue]) => actualProperty === property && actualValue === value));
+    })) {
+      contractFailures.push(`${path}: ${selector} must declare ${expected.map(([property, value]) => `${property}: ${value}`).join(", ")}`);
+    }
+  };
+
+  for (const selector of [".mr-btn--primary", ".mr-btn--secondary", ".mr-btn--danger", ".mr-picker__team"]) {
+    requireDeclarations("src/styles/components.css", selector, [["padding-block", "0"], ["padding-inline", "var(--pad-action-inline)"]]);
+  }
+  requireDeclarations("src/styles/components.css", ".mr-btn--compact", [["padding-block", "0"], ["padding-inline", "var(--pad-action-compact-inline)"]]);
+  requireDeclarations("src/styles/grid.css", ".grid-viewswitch__btn", [["padding-block", "0"], ["padding-inline", "var(--pad-action-inline)"]]);
+  for (const [path, selector] of [
+    ["src/styles/components.css", ".mr-card"],
+    ["src/styles/grid.css", ".grid-mobile__item"],
+    ["src/styles/mine.css", ".mine-item"],
+  ]) requireDeclarations(path, selector, [["padding", "var(--pad-card)"]]);
+  for (const [path, selector] of [
+    ["src/styles/landing.css", ".mr-landing__header"],
+    ["src/styles/landing.css", ".mr-landing__main"],
+    ["src/styles/login.css", ".mr-login"],
+  ]) requireDeclarations(path, selector, [["padding-inline", "var(--pad-mobile-inline)"]]);
+  requireDeclarations("src/styles/navigation.css", ".mr-navlink", [["padding-block", "0"], ["padding-inline", "16px"]]);
+  requireDeclarations("src/styles/screens.css", ".mr-sidebar__room", [["padding-block", "0"], ["padding-inline", "16px"]]);
+
+  return contractFailures;
+}
+
+const spacingSources = new Map([
+  ["src/styles/tokens.css", read("src/styles/tokens.css")],
+  ...spacingStylePaths.map((path) => [path, read(path)]),
 ]);
+failures.push(...spacingContractFailures(spacingSources));
 forbidPattern(styleFiles, /--pad-(?:action|action-compact|content)(?=\s*[:),;])/g);
 
-const layoutDeclaration = /^\s*(?:gap|row-gap|column-gap|margin(?:-[a-z]+)?|padding(?:-[a-z]+)?)\s*:[^;]*(?:12|20)px[^;]*;/gm;
-forbidPattern(styleFiles.filter((file) => file !== "src/styles/tokens.css"), layoutDeclaration);
-for (const [token, evidence] of [
-  ["--pad-action-inline", "toss"], ["--pad-action-compact-inline", "toss"],
-  ["--pad-card", "toss"], ["--pad-mobile-inline", "local"],
-]) requireTokenEvidence(token, evidence);
+const spacingMutations = [
+  ["spacing token value", "src/styles/tokens.css", (source) => source.replace("--pad-action-inline: 20px;", "--pad-action-inline: 16px;")],
+  ["spacing token evidence", "src/styles/tokens.css", (source) => source.replace("--pad-mobile-inline: 20px;          /* [local] */", "--pad-mobile-inline: 20px;          /* [toss] */")],
+  ["one-line forbidden gap", "src/styles/components.css", (source) => `${source}\n.bad { gap: 12px; }\n`],
+  ["normal action token swap", "src/styles/components.css", (source) => source.replace("padding-inline: var(--pad-action-inline);", "padding-inline: var(--pad-card);")],
+  ["compact action token removal", "src/styles/components.css", (source) => source.replace("padding-inline: var(--pad-action-compact-inline);", "padding-inline: 16px;")],
+  ["card token swap", "src/styles/components.css", (source) => source.replace("padding: var(--pad-card);", "padding: var(--pad-mobile-inline);")],
+  ["mobile inline token removal", "src/styles/landing.css", (source) => source.replace("padding-inline: var(--pad-mobile-inline);", "padding-inline: 16px;")],
+  ["navigation padding-block reset", "src/styles/navigation.css", (source) => source.replace("    padding-block: 0;\n", "")],
+  ["sidebar padding-block reset", "src/styles/screens.css", (source) => source.replace("  padding-block: 0;\n  padding-inline: 16px;", "  padding-inline: 16px;")],
+];
+for (const [label, path, mutate] of spacingMutations) {
+  const mutated = mutate(spacingSources.get(path));
+  if (mutated === spacingSources.get(path)) {
+    failures.push(`validator spacing negative mutation did not change source: ${label}`);
+    continue;
+  }
+  const mutatedSources = new Map(spacingSources);
+  mutatedSources.set(path, mutated);
+  if (spacingContractFailures(mutatedSources).length === 0) {
+    failures.push(`validator spacing negative mutation did not fail: ${label}`);
+  }
+}
+const acceptedDimensionMutation = `${spacingSources.get("src/styles/components.css")}\n.okay { gap: 112px; }\n`;
+if (spacingContractFailures(new Map(spacingSources).set("src/styles/components.css", acceptedDimensionMutation)).length > 0) {
+  failures.push("validator spacing 112px control mutation must remain accepted");
+}
 
 if (failures.length > 0) {
   console.error(failures.join("\n"));
