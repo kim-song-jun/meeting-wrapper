@@ -309,6 +309,170 @@ for (const [token, evidence] of [
   ["--r-card", "local"], ["--r-dialog", "local"],
 ]) requireTokenEvidence(token, evidence);
 
+const radiusStylePaths = [
+  "src/styles/components.css", "src/styles/grid.css", "src/styles/landing.css",
+  "src/styles/login.css", "src/styles/mine.css", "src/styles/navigation.css",
+  "src/styles/rooms.css", "src/styles/screens.css",
+];
+const mobileRadiusQuery = "@media (max-width: 767px)";
+
+function stripCssComments(source) {
+  return source.replace(/\/\*[\s\S]*?\*\//g, "");
+}
+
+function extractCssRules(source, contexts = []) {
+  const rules = [];
+  let start = 0;
+  let index = 0;
+  while (index < source.length) {
+    if (source.startsWith("/*", index)) {
+      const close = source.indexOf("*/", index + 2);
+      index = close === -1 ? source.length : close + 2;
+      continue;
+    }
+    if (source[index] !== "{") {
+      index += 1;
+      continue;
+    }
+    const header = stripCssComments(source.slice(start, index)).trim();
+    let depth = 1;
+    let cursor = index + 1;
+    while (cursor < source.length && depth > 0) {
+      if (source.startsWith("/*", cursor)) {
+        const close = source.indexOf("*/", cursor + 2);
+        cursor = close === -1 ? source.length : close + 2;
+        continue;
+      }
+      if (source[cursor] === "{") depth += 1;
+      if (source[cursor] === "}") depth -= 1;
+      cursor += 1;
+    }
+    if (depth !== 0) throw new Error(`Unclosed CSS block after ${header}`);
+    const body = source.slice(index + 1, cursor - 1);
+    if (header.startsWith("@")) {
+      rules.push(...extractCssRules(body, [...contexts, header]));
+    } else if (header.length > 0) {
+      rules.push({ selectors: header.split(",").map((selector) => selector.trim()), body, contexts });
+    }
+    start = cursor;
+    index = cursor;
+  }
+  return rules;
+}
+
+function radiusDeclarations(rule) {
+  return [...rule.body.matchAll(/\bborder-radius\s*:\s*([^;]+);/g)].map((match) => match[1].trim());
+}
+
+function radiusContractFailures(radiusSources) {
+  const contractFailures = [];
+  const ruleSets = new Map(radiusStylePaths.map((path) => [path, extractCssRules(radiusSources.get(path))]));
+  const rulesFor = (path, selector) => (ruleSets.get(path) ?? []).filter((rule) => rule.selectors.includes(selector));
+  const baseRulesFor = (path, selector) => rulesFor(path, selector).filter((rule) => rule.contexts.length === 0);
+  const mobileRulesFor = (path, selector) => rulesFor(path, selector).filter((rule) =>
+    rule.contexts.length === 1 && rule.contexts[0] === mobileRadiusQuery,
+  );
+  const requireExactRadius = (path, selector, token, label, requireBaseRule) => {
+    const matchingRules = (requireBaseRule ? baseRulesFor(path, selector) : rulesFor(path, selector))
+      .filter((rule) => radiusDeclarations(rule).length > 0);
+    if (matchingRules.length === 0 || matchingRules.some((rule) => radiusDeclarations(rule).join("|") !== `var(${token})`)) {
+      contractFailures.push(`${path}: ${label} must own exactly ${token}`);
+    }
+  };
+
+  for (const [path, selectors, token, requireBaseRule] of [
+    ["src/styles/components.css", [".mr-btn--primary", ".mr-btn--secondary", ".mr-btn--compact", ".mr-btn--danger"], "--r-action", true],
+    ["src/styles/grid.css", [".grid-viewswitch", ".grid-datestepper", ".grid-datepick"], "--r-action", true],
+    ["src/styles/screens.css", [".mr-page-action"], "--r-action", true],
+    ["src/styles/components.css", [".mr-input"], "--r-input"],
+    ["src/styles/grid.css", [".grid-deptselect__input"], "--r-input"],
+    ["src/styles/grid.css", [".grid-roomtoggle__btn", ".grid-deptchip"], "--r-filter"],
+    ["src/styles/rooms.css", [".rooms-time-option"], "--r-filter"],
+    ["src/styles/grid.css", [".grid-viewswitch__btn"], "--r-segment"],
+    ["src/styles/navigation.css", [".mr-skip-link", ".mr-navlink", ".mr-mobile-nav__item"], "--r-nav-item"],
+    ["src/styles/screens.css", [".mr-sidebar__item", ".mr-sidebar__room"], "--r-nav-item"],
+    ["src/styles/components.css", [".mr-card", ".mr-alert", ".mr-picker__results", ".mr-recur-fail__list"], "--r-card"],
+    ["src/styles/grid.css", [".grid-skeleton-card", ".grid-mobile__list", ".grid-mobile__empty", ".agenda__list", ".agenda__empty"], "--r-card"],
+    ["src/styles/landing.css", [".mr-landing__item", ".mr-landing__roomlink"], "--r-card"],
+    ["src/styles/login.css", [".mr-login__failure .mr-alert div:focus-visible"], "--r-card"],
+    ["src/styles/mine.css", [".mine-list"], "--r-card"],
+    ["src/styles/rooms.css", [".rooms-card"], "--r-card"],
+    ["src/styles/components.css", [".mr-dialog"], "--r-dialog", true],
+  ]) {
+    for (const selector of selectors) requireExactRadius(path, selector, token, selector, requireBaseRule);
+  }
+
+  const actionSelectors = [
+    ["src/styles/components.css", ".mr-btn--primary"], ["src/styles/components.css", ".mr-btn--secondary"],
+    ["src/styles/components.css", ".mr-btn--compact"], ["src/styles/components.css", ".mr-btn--danger"],
+    ["src/styles/grid.css", ".grid-viewswitch"], ["src/styles/grid.css", ".grid-datestepper"],
+    ["src/styles/grid.css", ".grid-datepick"], ["src/styles/screens.css", ".mr-page-action"],
+  ];
+  for (const [path, selector] of actionSelectors) {
+    const mobileRules = mobileRulesFor(path, selector);
+    if (mobileRules.length !== 1 || radiusDeclarations(mobileRules[0]).join("|") !== "var(--r-action-mobile)") {
+      contractFailures.push(`${path}: ${selector} must use --r-action-mobile only in ${mobileRadiusQuery}`);
+    }
+  }
+  for (const [path, rules] of ruleSets) {
+    for (const rule of rules) {
+      if (!radiusDeclarations(rule).includes("var(--r-action-mobile)")) continue;
+      if (rule.contexts.length !== 1 || rule.contexts[0] !== mobileRadiusQuery ||
+        rule.selectors.some((selector) => !actionSelectors.some(([actionPath, actionSelector]) => actionPath === path && actionSelector === selector))) {
+        contractFailures.push(`${path}: --r-action-mobile is limited to required action selectors in ${mobileRadiusQuery}`);
+      }
+    }
+  }
+
+  for (const [path, selector] of [["src/styles/components.css", ".mr-input"], ["src/styles/grid.css", ".grid-deptselect__input"]]) {
+    if (rulesFor(path, selector).some((rule) => radiusDeclarations(rule).some((value) => value !== "var(--r-input)"))) {
+      contractFailures.push(`${path}: ${selector} must remain --r-input in every context`);
+    }
+  }
+
+  const dialogMobileRules = mobileRulesFor("src/styles/components.css", ".mr-dialog");
+  if (dialogMobileRules.length !== 1 || radiusDeclarations(dialogMobileRules[0]).join("|") !== "var(--r-dialog) var(--r-dialog) 0 0") {
+    contractFailures.push("src/styles/components.css: mobile dialog top corners must use --r-dialog");
+  }
+
+  const pillAllowlist = new Map([
+    ["src/styles/components.css", new Set([".mr-badge", ".mr-radio__dot", ".mr-radio__dot::after", ".mr-picker__team", ".mr-picker__chip", ".mr-picker__remove"])],
+    ["src/styles/grid.css", new Set([".grid-roomtoggle__dot", ".grid-now__line::before", ".grid-month__daynum"])],
+    ["src/styles/screens.css", new Set([".mr-sidebar__roomdot"])],
+  ]);
+  for (const [path, rules] of ruleSets) {
+    for (const rule of rules) {
+      if (!radiusDeclarations(rule).includes("var(--r-pill)")) continue;
+      const allowedSelectors = pillAllowlist.get(path);
+      if (!allowedSelectors || rule.selectors.some((selector) => !allowedSelectors.has(selector))) {
+        contractFailures.push(`${path}: --r-pill consumer must be an approved capsule, badge, dot, or circle selector`);
+      }
+    }
+  }
+  return contractFailures;
+}
+
+const radiusSources = new Map(radiusStylePaths.map((path) => [path, read(path)]));
+failures.push(...radiusContractFailures(radiusSources));
+const radiusMutations = [
+  ["radius role swap", "src/styles/components.css", (source) => source.replace("border-radius: var(--r-input);", "border-radius: var(--r-filter);")],
+  ["mobile action override removal", "src/styles/components.css", (source) => source.replace("border-radius: var(--r-action-mobile);", "border-radius: var(--r-action);")],
+  ["mobile dialog shorthand", "src/styles/components.css", (source) => source.replace("border-radius: var(--r-dialog) var(--r-dialog) 0 0;", "border-radius: var(--r-card) var(--r-card) 0 0;")],
+  ["unapproved pill consumer", "src/styles/components.css", (source) => `${source}\n.radius-contract-negative { border-radius: var(--r-pill); }\n`],
+];
+for (const [label, path, mutate] of radiusMutations) {
+  const mutated = mutate(radiusSources.get(path));
+  if (mutated === radiusSources.get(path)) {
+    failures.push(`validator radius negative mutation did not change source: ${label}`);
+    continue;
+  }
+  const mutatedSources = new Map(radiusSources);
+  mutatedSources.set(path, mutated);
+  if (radiusContractFailures(mutatedSources).length === 0) {
+    failures.push(`validator radius negative mutation did not fail: ${label}`);
+  }
+}
+
 if (failures.length > 0) {
   console.error(failures.join("\n"));
   process.exitCode = 1;
