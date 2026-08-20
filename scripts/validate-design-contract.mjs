@@ -111,50 +111,121 @@ for (const [token, evidence] of [
   ["--r-event-touch", "local"], ["--c-now", "local"],
 ]) requireTokenEvidence(token, evidence);
 
-requirePattern(
-  "src/styles/tokens.css",
-  /@media \(min-width: 768px\) and \(hover: hover\) and \(pointer: fine\) \{\s*:root \{[\s\S]*?--grid-slot-block-size: var\(--grid-slot-fine\);[\s\S]*?--grid-week-single-column-min: var\(--grid-week-single-fine-min\);[\s\S]*?--t-grid-event-size: var\(--t-grid-fine-size\);[\s\S]*?--t-grid-axis-size: var\(--t-axis-fine-size\);[\s\S]*?--r-grid-event: var\(--r-event-fine\);/,
-  "exact fine-pointer query and active role mappings",
-);
-for (const [token, source] of [
-  ["--grid-slot-block-size", "--grid-slot-touch"],
-  ["--grid-week-single-column-min", "--grid-week-single-touch-min"],
-  ["--t-grid-event-size", "--t-grid-touch-size"],
-  ["--t-grid-axis-size", "--t-axis-touch-size"],
-  ["--r-grid-event", "--r-event-touch"],
-]) {
-  requirePattern(
-    "src/styles/tokens.css",
-    new RegExp(`${token}: var\\(${source}\\);`),
-    `touch-safe active mapping for ${token}`,
+function extractBalancedCall(source, name, startAt = 0) {
+  const start = source.indexOf(`${name}(`, startAt);
+  if (start === -1) return null;
+  let depth = 0;
+  for (let index = start + name.length; index < source.length; index += 1) {
+    if (source[index] === "(") depth += 1;
+    if (source[index] === ")") {
+      depth -= 1;
+      if (depth === 0) return { start, text: source.slice(start, index + 1) };
+    }
+  }
+  throw new Error(`Unclosed ${name} call at index ${String(start)}`);
+}
+
+function extractBalancedBlock(source, marker) {
+  const markerIndex = source.indexOf(marker);
+  if (markerIndex === -1) return null;
+  const brace = source.indexOf("{", markerIndex + marker.length);
+  if (brace === -1) return null;
+  let depth = 0;
+  for (let index = brace; index < source.length; index += 1) {
+    if (source[index] === "{") depth += 1;
+    if (source[index] === "}") {
+      depth -= 1;
+      if (depth === 0) return source.slice(brace + 1, index);
+    }
+  }
+  throw new Error(`Unclosed block after ${marker}`);
+}
+
+function extractCalls(source, name) {
+  const calls = [];
+  let offset = 0;
+  while (true) {
+    const call = extractBalancedCall(source, name, offset);
+    if (!call) return calls;
+    calls.push(call);
+    offset = call.start + call.text.length;
+  }
+}
+
+function extractFunctionBody(source, name) {
+  const signature = extractBalancedCall(source, name, source.indexOf(`function ${name}`));
+  if (!signature) return null;
+  return extractBalancedBlock(source.slice(signature.start + signature.text.length), "");
+}
+
+const activeMappings = [
+  ["--grid-slot-block-size", "--grid-slot-fine", "--grid-slot-touch"],
+  ["--grid-week-single-column-min", "--grid-week-single-fine-min", "--grid-week-single-touch-min"],
+  ["--t-grid-event-size", "--t-grid-fine-size", "--t-grid-touch-size"],
+  ["--t-grid-event-lh", "--t-grid-fine-lh", "--t-grid-touch-lh"],
+  ["--t-grid-axis-size", "--t-axis-fine-size", "--t-axis-touch-size"],
+  ["--t-grid-axis-lh", "--t-axis-fine-lh", "--t-axis-touch-lh"],
+  ["--r-grid-event", "--r-event-fine", "--r-event-touch"],
+];
+
+function gridRuntimeContractFailures(tokens, screen) {
+  const contractFailures = [];
+  const fineRoot = extractBalancedBlock(tokens, "@media (min-width: 768px) and (hover: hover) and (pointer: fine)");
+  if (!fineRoot) {
+    contractFailures.push("src/styles/tokens.css: missing exact fine-pointer query");
+  } else {
+    for (const [active, fine] of activeMappings) {
+      if (!new RegExp(`${active}: var\\(${fine}\\);`).test(fineRoot)) {
+        contractFailures.push(`src/styles/tokens.css: missing fine active mapping for ${active}`);
+      }
+    }
+  }
+  for (const [active, , touch] of activeMappings) {
+    if (!new RegExp(`${active}: var\\(${touch}\\);`).test(tokens)) {
+      contractFailures.push(`src/styles/tokens.css: missing touch-safe active mapping for ${active}`);
+    }
+  }
+  if (!/minmax\(var\(--grid-day-column-min\), 1fr\)/.test(screen)) {
+    contractFailures.push("src/screens/GridScreen.tsx: missing day column token");
+  }
+  if (!/split \? "var\(--grid-split-column-min\)" : "var\(--grid-week-single-column-min\)"/.test(screen)) {
+    contractFailures.push("src/screens/GridScreen.tsx: missing split and single-week column token selection");
+  }
+  const eventPlacements = extractCalls(screen, "placeInGrid").filter((call) =>
+    /\bclippedStart\s*,[\s\S]*?\bclippedEnd\s*,/.test(call.text),
   );
+  if (eventPlacements.length !== 2 || eventPlacements.some((call) => !/,\s*slotPx\s*,?\s*\)$/.test(call.text))) {
+    contractFailures.push("src/screens/GridScreen.tsx: day and week event placeInGrid calls must each use slotPx");
+  }
+  const eventCalls = screen.match(/<GridEventBlock\b[\s\S]*?\/>/g) ?? [];
+  if (eventCalls.length !== 2 || eventCalls.some((call) => !/roomName=\{room\.name\}/.test(call))) {
+    contractFailures.push("src/screens/GridScreen.tsx: every GridEventBlock caller must pass roomName");
+  }
+  const eventBlock = extractFunctionBody(screen, "GridEventBlock");
+  if (!eventBlock?.includes("eventContentMode(placement.height)")) {
+    contractFailures.push("src/screens/GridScreen.tsx: GridEventBlock must invoke eventContentMode(placement.height)");
+  }
+  if (!/contentMode === "organizer-only"[\s\S]*?grid-event__name[\s\S]*?grid-event__time/.test(eventBlock ?? "")) {
+    contractFailures.push("src/screens/GridScreen.tsx: missing height-driven grid event content rendering");
+  }
+  if (!/const accessibleLabel = `\$\{booking\.organizerName\}, \$\{roomName\}, \$\{hhmm\(booking\.start\)\}~\$\{hhmm\(booking\.end\)\}\$\{noShow \? ", 미체크인" : ""\}`;/.test(eventBlock ?? "")) {
+    contractFailures.push("src/screens/GridScreen.tsx: missing complete grid event accessible label");
+  }
+  return contractFailures;
 }
+
+const gridTokens = read("src/styles/tokens.css");
 const gridScreen = read("src/screens/GridScreen.tsx");
-for (const [pattern, label] of [
-  [/minmax\(var\(--grid-day-column-min\), 1fr\)/, "day column token"],
-  [/split \? "var\(--grid-split-column-min\)" : "var\(--grid-week-single-column-min\)"/, "split and single-week column token selection"],
-  [/placeInGrid\([\s\S]*?POLICY\.slotMinutes,\s*slotPx,\s*\)/g, "day placeInGrid slot token"],
+failures.push(...gridRuntimeContractFailures(gridTokens, gridScreen));
+for (const [label, tokens, screen] of [
+  ["event placement slotPx", gridTokens, gridScreen.replace("POLICY.slotMinutes,\n                          slotPx,", "POLICY.slotMinutes,\n                          slotPixels,")],
+  ["event line-height mapping", gridTokens.replace("--t-grid-event-lh: var(--t-grid-touch-lh);", "--t-grid-event-lh: var(--t-grid-touch-line-height);"), gridScreen],
+  ["content-mode helper", gridTokens, gridScreen.replace("eventContentMode(placement.height)", "eventContentMode(placement.slots)")],
 ]) {
-  if (!pattern.test(gridScreen)) failures.push(`src/screens/GridScreen.tsx: missing ${label}`);
+  if (gridRuntimeContractFailures(tokens, screen).length === 0) {
+    failures.push(`validator negative mutation did not fail: ${label}`);
+  }
 }
-const gridPlacements = gridScreen.match(/placeInGrid\([\s\S]*?POLICY\.slotMinutes,\s*slotPx,\s*\)/g) ?? [];
-if (gridPlacements.length < 2) {
-  failures.push("src/screens/GridScreen.tsx: both day and week event placements must use slotPx");
-}
-const eventCalls = gridScreen.match(/<GridEventBlock\b[\s\S]*?\/>/g) ?? [];
-if (eventCalls.length !== 2 || eventCalls.some((call) => !/roomName=\{room\.name\}/.test(call))) {
-  failures.push("src/screens/GridScreen.tsx: every GridEventBlock caller must pass roomName");
-}
-requirePattern(
-  "src/screens/GridScreen.tsx",
-  /const accessibleLabel = `\$\{booking\.organizerName\}, \$\{roomName\}, \$\{hhmm\(booking\.start\)\}~\$\{hhmm\(booking\.end\)\}\$\{noShow \? ", 미체크인" : ""\}`;/,
-  "complete grid event accessible label",
-);
-requirePattern(
-  "src/screens/GridScreen.tsx",
-  /contentMode === "organizer-only"[\s\S]*?grid-event__name[\s\S]*?grid-event__time/,
-  "height-driven grid event content rendering",
-);
 forbidPattern(["src/styles/grid.css"], /\.grid-week--split \.grid-event__time\s*\{\s*display:\s*none;\s*\}/g);
 
 if (failures.length > 0) {
