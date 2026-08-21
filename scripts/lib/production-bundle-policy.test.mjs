@@ -20,6 +20,23 @@ afterEach(async () => {
 });
 
 describe("production bundle policy", () => {
+  it("rejects a nonexistent scan root", async () => {
+    const parent = await makeBundleRoot();
+    const missingRoot = join(parent, "missing");
+
+    await expect(scanProductionBundle(missingRoot)).rejects.toThrow(
+      `Production bundle scan root does not exist: ${missingRoot}`,
+    );
+  });
+
+  it("rejects an existing empty scan root", async () => {
+    const emptyRoot = await makeBundleRoot();
+
+    await expect(scanProductionBundle(emptyRoot)).rejects.toThrow(
+      `Production bundle scan root is empty: ${emptyRoot}`,
+    );
+  });
+
   it("accepts public configuration without treating it as a mock runtime marker", async () => {
     const cleanRoot = await makeBundleRoot();
     await mkdir(join(cleanRoot, "assets"));
