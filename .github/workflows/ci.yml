@@ -26,8 +26,17 @@ jobs:
       - name: Set up Node
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
-          node-version: 22
+          node-version-file: .node-version
           cache: npm
+
+      - name: Pin npm
+        run: npm install --global npm@11.17.0
+
+      - name: Verify toolchain
+        run: npm run verify:toolchain
+
+      - name: Install
+        run: npm ci
 
       - name: Rebuild standalone design examples
         run: node scripts/build-design-standalone.mjs
@@ -39,9 +48,6 @@ jobs:
 
       - name: Validate design examples
         run: node scripts/validate-design-examples.mjs
-
-      - name: Install
-        run: npm ci
 
       - name: Typecheck
         run: npm run typecheck

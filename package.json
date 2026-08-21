@@ -3,6 +3,11 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
+  "packageManager": "npm@11.17.0",
+  "engines": {
+    "node": "24.19.0",
+    "npm": "11.17.0"
+  },
   "description": "molcube 사내 회의실 예약 — Google Calendar 위에 얹는 서버리스 정적 SPA",
   "scripts": {
     "dev": "vite",
@@ -10,7 +15,8 @@
     "preview": "vite preview",
     "typecheck": "tsc -b --noEmit",
     "test": "vitest run --pool=threads --maxWorkers=1 --minWorkers=1",
-    "validate:design-contract": "node scripts/validate-design-contract.mjs"
+    "validate:design-contract": "node scripts/validate-design-contract.mjs",
+    "verify:toolchain": "node scripts/verify-toolchain.mjs"
   },
   "dependencies": {
     "react": "^19.2.0",
