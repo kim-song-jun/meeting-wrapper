@@ -2,11 +2,14 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { BrowserRouter } from "react-router-dom";
 import { App } from "./App";
+import { assertBrowserConfiguration } from "./app/env";
 import { RoomVisibilityProvider } from "./app/roomVisibility";
 import "./styles/base.css";
 import "./styles/components.css";
 import "./styles/screens.css";
 import "./styles/navigation.css";
+
+assertBrowserConfiguration(import.meta.env);
 
 const host = document.getElementById("root");
 if (!host) throw new Error("#root 를 찾을 수 없습니다");
