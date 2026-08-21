@@ -1,4 +1,4 @@
-<!-- omd:deprecated
+<!-- Deprecated design record
 replaced_at: 2026-07-27
 replaced_by: ./DESIGN.md (rederived from toss)
 reason: 사용자 결정 — macOS 앱 문법에서 Toss 문법으로 전면 피봇
@@ -7,11 +7,7 @@ note: 이 판본은 apple.com 마케팅 판본(DESIGN_DEPRECATED.md)을 macOS �
 -->
 
 ---
-omd: 0.1
 brand: MolRoom
-bootstrapped_from: apple
-rederived_from: apple
-rederived_at: 2026-07-26
 note: MolCube 파생 판본은 DESIGN_DEPRECATED_MOLCUBE.md 에 보존
 ---
 
@@ -23,7 +19,7 @@ Apple 은 디자인 언어가 둘이다 — `apple.com` **마케팅 문법**(pil
 
 MolCube 에서 가져오는 것은 **로고 하나**다. 그 이전 MolCube 파생 판본은 `DESIGN_DEPRECATED_MOLCUBE.md` 에 남겨 뒀다.
 
-**출처:** `DESIGN_DEPRECATED.md` 에 박제된 apple.com · Apple Store · Apple HIG 실측 토큰(oh-my-design `apple` 레퍼런스). 로고 색은 MolCube 로고 이미지 픽셀에서 추출.
+**출처:** `DESIGN_DEPRECATED.md` 에 박제된 apple.com · Apple Store · Apple HIG 실측 토큰. 로고 색은 MolCube 로고 이미지 픽셀에서 추출.
 
 ## 증거 등급
 

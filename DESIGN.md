@@ -1,6 +1,6 @@
 ---
 brand: MolRoom
-note: Apple 판본은 DESIGN_DEPRECATED_APPLE_APP.md, MolCube 판본은 DESIGN_DEPRECATED_MOLCUBE.md 에 보존
+note: Apple 판본은 docs/archive/design/DESIGN_DEPRECATED_APPLE_APP.md, MolCube 판본은 docs/archive/design/DESIGN_DEPRECATED_MOLCUBE.md 에 보존
 ---
 
 # MolRoom Design System

@@ -1,14 +1,10 @@
-<!-- omd:deprecated
+<!-- Deprecated design record
 replaced_at: 2026-07-26
 replaced_by: ./DESIGN.md (Apple 파생, 로고만 MolCube)
 reason: 사용자 결정 — 팔레트·타입·지오메트리를 Apple 로 전환하고 로고만 유지
 -->
 ---
-omd: 0.1
 brand: MolRoom
-bootstrapped_from: apple
-rederived_from: molcube-web
-rederived_at: 2026-07-26
 ---
 
 # MolRoom Design System

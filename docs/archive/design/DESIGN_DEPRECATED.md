@@ -1,7 +1,7 @@
-<!-- omd:deprecated
+<!-- Deprecated design record
 replaced_at: 2026-07-26
 replaced_by: ./DESIGN.md (bootstrapped from apple)
-reason: omd:init bootstrap
+reason: initial Apple reference extraction
 -->
 ---
 id: apple
@@ -14,7 +14,6 @@ logo:
   type: simpleicons
   slug: apple
 verified: "2026-07-11"
-omd: "0.1"
 ds:
   name: Human Interface Guidelines
   url: "https://developer.apple.com/design/human-interface-guidelines"
