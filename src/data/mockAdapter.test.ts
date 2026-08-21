@@ -59,6 +59,11 @@ async function expectErrorAfter(
   }
 }
 
+async function settle<T>(promise: Promise<T>): Promise<T> {
+  await vi.runAllTimersAsync();
+  return promise;
+}
+
 describe("mockAdapter DEV QA fixtures", () => {
   beforeEach(() => {
     vi.useFakeTimers();
@@ -184,5 +189,161 @@ describe("mockAdapter DEV QA fixtures", () => {
     await vi.advanceTimersByTimeAsync(1);
     await expect(save).resolves.toMatchObject({ ok: true });
     expect(warn).not.toHaveBeenCalled();
+  });
+});
+
+describe("mockAdapter schedule mutations", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-08-20T11:30:00+09:00"));
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.unstubAllEnvs();
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+
+  it("creates and persists the requested room, time, title, and ownership", async () => {
+    const adapter = await importAdapter("");
+    const requested = {
+      ...draft(),
+      roomId: "room-small",
+      title: "계약 테스트 회의",
+      start: new Date("2026-08-20T16:00:00+09:00"),
+      end: new Date("2026-08-20T16:30:00+09:00"),
+    };
+
+    const result = await settle(adapter.create(requested));
+    expect(result).toMatchObject({
+      ok: true,
+      booking: {
+        roomId: "room-small",
+        title: "계약 테스트 회의",
+        start: requested.start,
+        end: requested.end,
+        isMine: true,
+      },
+    });
+
+    const persisted = await settle(adapter.listByRoom("room-small", requested.start));
+    expect(persisted).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          roomId: "room-small",
+          title: "계약 테스트 회의",
+          start: requested.start,
+          end: requested.end,
+          isMine: true,
+        }),
+      ]),
+    );
+  });
+
+  it("moves a booking across rooms and removes it from the old room", async () => {
+    const adapter = await importAdapter("");
+    const day = new Date("2026-08-20T00:00:00+09:00");
+    const seeded = (await settle(adapter.listByDay(day))).find(
+      (booking) => booking.title === "주간 기획회의",
+    );
+    expect(seeded).toBeDefined();
+    if (!seeded) throw new Error("seeded booking missing");
+
+    const newStart = new Date("2026-08-20T11:00:00+09:00");
+    const newEnd = new Date("2026-08-20T12:00:00+09:00");
+    const result = await settle(
+      adapter.reschedule(seeded.id, newStart, newEnd, "room-small"),
+    );
+    expect(result).toMatchObject({
+      ok: true,
+      booking: { id: seeded.id, roomId: "room-small", start: newStart, end: newEnd },
+    });
+
+    const oldRoom = await settle(adapter.listByRoom("room-large", day));
+    const destination = await settle(adapter.listByRoom("room-small", day));
+    expect(oldRoom.some((booking) => booking.id === seeded.id)).toBe(false);
+    expect(destination).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: seeded.id,
+          roomId: "room-small",
+          start: newStart,
+          end: newEnd,
+        }),
+      ]),
+    );
+  });
+
+  it("rejects a destination overlap without mutating the original booking", async () => {
+    const adapter = await importAdapter("");
+    const day = new Date("2026-08-20T00:00:00+09:00");
+    const seeded = (await settle(adapter.listByDay(day))).find(
+      (booking) => booking.title === "주간 기획회의",
+    );
+    expect(seeded).toBeDefined();
+    if (!seeded) throw new Error("seeded booking missing");
+
+    const result = await settle(
+      adapter.reschedule(
+        seeded.id,
+        new Date("2026-08-20T09:30:00+09:00"),
+        new Date("2026-08-20T10:30:00+09:00"),
+        "room-small",
+      ),
+    );
+    expect(result).toMatchObject({ ok: false, reason: "blocked", by: "이영희" });
+
+    const oldRoom = await settle(adapter.listByRoom("room-large", day));
+    const destination = await settle(adapter.listByRoom("room-small", day));
+    expect(oldRoom).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: seeded.id,
+          roomId: seeded.roomId,
+          start: seeded.start,
+          end: seeded.end,
+        }),
+      ]),
+    );
+    expect(destination.some((booking) => booking.id === seeded.id)).toBe(false);
+  });
+
+  it("shortens an active booking and rejects an extension into another booking", async () => {
+    const adapter = await importAdapter("");
+    const day = new Date("2026-08-20T00:00:00+09:00");
+    const seeded = (await settle(adapter.listByDay(day))).find(
+      (booking) => booking.title === "주간 기획회의",
+    );
+    expect(seeded).toBeDefined();
+    if (!seeded) throw new Error("seeded booking missing");
+
+    const shortenedEnd = new Date("2026-08-20T12:00:00+09:00");
+    const shortened = await settle(adapter.changeEnd(seeded.id, shortenedEnd));
+    expect(shortened).toMatchObject({
+      ok: true,
+      booking: { id: seeded.id, start: seeded.start, end: shortenedEnd },
+    });
+
+    const blocker = await settle(
+      adapter.create({
+        ...draft(),
+        roomId: "room-large",
+        title: "연장 차단 회의",
+        start: new Date("2026-08-20T13:00:00+09:00"),
+        end: new Date("2026-08-20T14:00:00+09:00"),
+      }),
+    );
+    expect(blocker).toMatchObject({ ok: true });
+
+    const rejected = await settle(
+      adapter.changeEnd(seeded.id, new Date("2026-08-20T13:30:00+09:00")),
+    );
+    expect(rejected).toMatchObject({ ok: false, reason: "blocked" });
+
+    const persisted = (await settle(adapter.listByRoom("room-large", day))).find(
+      (booking) => booking.id === seeded.id,
+    );
+    expect(persisted?.end).toEqual(shortenedEnd);
   });
 });
