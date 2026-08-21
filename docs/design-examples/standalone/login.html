@@ -33,6 +33,10 @@
   --radius-dialog: 20px;
   --radius-event-fine: 4px;
   --radius-event-touch: 12px;
+  --h-action-compact-fine: 36px;
+  --h-action-compact-touch: 44px;
+  --h-action-compact: var(--h-action-compact-touch);
+  --pad-action-compact-inline: 16px;
   --color-now: #4E5968;
   --grid-slot-fine: 24px;
   --grid-slot-touch: 44px;
@@ -325,8 +329,8 @@ svg {
 }
 
 .button.compact {
-  min-height: 36px;
-  padding: 0 14px;
+  min-height: var(--h-action-compact);
+  padding: 0 var(--pad-action-compact-inline);
   font-size: 14px;
 }
 
@@ -1139,6 +1143,7 @@ svg {
     --axis-font-size: var(--axis-font-size-fine);
     --axis-line-height: var(--axis-line-height-fine);
     --radius-event: var(--radius-event-fine);
+    --h-action-compact: var(--h-action-compact-fine);
   }
 }
 

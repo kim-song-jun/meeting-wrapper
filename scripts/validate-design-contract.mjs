@@ -916,6 +916,7 @@ function canonicalExampleContractFailures(source) {
     ["--axis-font-size", "--axis-font-size-fine", "--axis-font-size-touch"],
     ["--axis-line-height", "--axis-line-height-fine", "--axis-line-height-touch"],
     ["--radius-event", "--radius-event-fine", "--radius-event-touch"],
+    ["--h-action-compact", "--h-action-compact-fine", "--h-action-compact-touch"],
   ];
   for (const [active, fine, touch] of mappings) {
     contractFailures.push(...activeMappingFailures(
@@ -929,6 +930,8 @@ function canonicalExampleContractFailures(source) {
   for (const [token, value] of [
     ["--grid-slot-fine", "24px"], ["--grid-slot-touch", "44px"],
     ["--radius-event-fine", "4px"], ["--radius-event-touch", "12px"],
+    ["--h-action-compact-fine", "36px"], ["--h-action-compact-touch", "44px"],
+    ["--pad-action-compact-inline", "16px"],
     ["--event-font-size-fine", "12px"], ["--event-font-size-touch", "14px"],
     ["--event-line-height-fine", "14px"], ["--event-line-height-touch", "20px"],
     ["--axis-font-size-fine", "11px"], ["--axis-font-size-touch", "13px"],
@@ -977,6 +980,8 @@ function canonicalExampleContractFailures(source) {
   exactProperty(".event", "line-height", "var(--event-line-height)");
   exactProperty(".time-label", "font-size", "var(--axis-font-size)");
   exactProperty(".time-label", "line-height", "var(--axis-line-height)");
+  exactProperty(".button.compact", "min-height", "var(--h-action-compact)");
+  exactProperty(".button.compact", "padding", "0 var(--pad-action-compact-inline)");
   return contractFailures;
 }
 
@@ -1009,6 +1014,58 @@ const canonicalNegativeMutations = [
     "compact action radius bypass",
     `${canonicalExampleSource}\n.button.compact { border-radius: var(--radius-action); }\n`,
     "docs/design-examples/examples.css: .button.compact must inherit the shared action role instead of overriding radius",
+  ],
+  [
+    "compact fine source duplicate",
+    canonicalExampleSource.replace(
+      "--h-action-compact-fine: 36px;",
+      "--h-action-compact-fine: 36px;\n  --h-action-compact-fine: 99px;",
+    ),
+    "docs/design-examples/examples.css: --h-action-compact-fine must be declared exactly once as 36px in top-level :root",
+  ],
+  [
+    "compact touch source wrong context",
+    `${canonicalExampleSource}\n@media (max-width: 767px) { :root { --h-action-compact-touch: 44px; } }\n`,
+    "docs/design-examples/examples.css: --h-action-compact-touch must be declared exactly once as 44px in top-level :root",
+  ],
+  [
+    "compact base active mapping duplicate",
+    canonicalExampleSource.replace(
+      "--h-action-compact: var(--h-action-compact-touch);",
+      "--h-action-compact: var(--h-action-compact-touch);\n  --h-action-compact: 99px;",
+    ),
+    "docs/design-examples/examples.css: --h-action-compact must have exactly one base active mapping as var(--h-action-compact-touch)",
+  ],
+  [
+    "compact fine active mapping duplicate",
+    canonicalExampleSource.replace(
+      "--h-action-compact: var(--h-action-compact-fine);",
+      "--h-action-compact: var(--h-action-compact-fine);\n    --h-action-compact: 99px;",
+    ),
+    "docs/design-examples/examples.css: --h-action-compact must have exactly one fine active mapping as var(--h-action-compact-fine)",
+  ],
+  [
+    "compact padding source duplicate",
+    canonicalExampleSource.replace(
+      "--pad-action-compact-inline: 16px;",
+      "--pad-action-compact-inline: 16px;\n  --pad-action-compact-inline: 99px;",
+    ),
+    "docs/design-examples/examples.css: --pad-action-compact-inline must be declared exactly once as 16px in top-level :root",
+  ],
+  [
+    "compact padding source wrong context",
+    `${canonicalExampleSource}\n@media (max-width: 767px) { :root { --pad-action-compact-inline: 16px; } }\n`,
+    "docs/design-examples/examples.css: --pad-action-compact-inline must be declared exactly once as 16px in top-level :root",
+  ],
+  [
+    "compact height consumer bypass",
+    `${canonicalExampleSource}\n.button.compact { min-height: 36px; }\n`,
+    "docs/design-examples/examples.css: .button.compact must consume var(--h-action-compact) for min-height",
+  ],
+  [
+    "compact padding consumer bypass",
+    `${canonicalExampleSource}\n.button.compact { padding: 0 14px; }\n`,
+    "docs/design-examples/examples.css: .button.compact must consume 0 var(--pad-action-compact-inline) for padding",
   ],
   ...[
     ["--grid-slot-fine", "24px"], ["--grid-slot-touch", "44px"],
