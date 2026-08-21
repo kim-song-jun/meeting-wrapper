@@ -68,7 +68,7 @@ scripts/              # Design example generator and validator
 - Use `placeInGrid()` and tokenized grid geometry; never hand-calculate event pixels in screens.
 - Treat `policy.json`, `currentUser.ts`, and `tokens.css` as their domains' single sources of truth.
 - `useAsync` preserves previous data during reload and surfaces errors; do not replace this with silent catches.
-- Current tests run in Node and include only `src/**/*.test.ts`; they do not validate React or browser interactions.
+- Current tests run in Node and discover `src/**/*.test.{ts,tsx}` plus `scripts/**/*.test.mjs`; they remain non-browser tests and do not validate React or browser interactions.
 
 ## PROJECT ANTI-PATTERNS
 
