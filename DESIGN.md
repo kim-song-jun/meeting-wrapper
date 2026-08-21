@@ -283,6 +283,15 @@ Toss 레퍼런스가 "카드를 발명하지 말라" 고 명시한 자리다. �
 - 데이터 입력·파괴적 확인 다이얼로그는 **배경 클릭으로 닫히지 않는다**
 - 파괴적 동작은 안전한 기본 동작에서 **떨어뜨린다**(space-between)
 
+### MolRoom Success Toast `local`
+시간 이동·길이 변경처럼 결과가 화면에 이미 반영된 **비차단 성공**만 알린다.
+
+- viewport에 고정해 문서·격자 레이아웃에 참여하지 않는다 — 나타나고 사라져도 격자의 위치와 높이는 바뀌지 않아야 한다
+- Weak 쌍(`#E8F3FF` + `#1B64DA`) / Radius `--r-card` / Padding 16px / 그림자 없음
+- `role="status"` + polite live region으로 알리고, **닫기 버튼 없이 4초 뒤 자동으로 사라진다**
+- 실패·충돌·부분 성공처럼 사용자가 읽고 대응해야 하는 결과는 토스트로 보내지 않고 기존 인라인 Alert 또는 Dialog에 남긴다
+- 모바일에서는 고정 하단 내비게이션과 safe area 위에 둔다
+
 ## 5. Layout Principles
 
 - layout spacing은 **4 · 8 · 16 · 24 · 32px** `toss`다. 좁은 격자 내부의 micro spacing에만 6px을 쓴다. **12px은 layout spacing이 아니며**, **20px은 `--pad-action-inline`과 `--pad-mobile-inline`처럼 이름 있는 component-geometry token에서만** 허용한다 — Apple 판본의 12px 리듬을 그대로 옮기지 말 것

@@ -366,6 +366,47 @@
   cursor: pointer;
 }
 
+/* ---------- 성공 토스트 ----------
+ * 시간 이동·길이 변경은 이미 격자에서 결과가 보이는 비차단 성공이다. 격자 위에
+ * 일반 문단으로 끼워 넣으면 나타나고 사라질 때마다 유일한 스크롤러가 밀린다.
+ * viewport에 고정해 레이아웃에는 참여하지 않고, 실패처럼 대응이 필요한 알림만
+ * 기존 인라인 Alert 자리를 유지한다. 그림자는 쓰지 않는다(DESIGN.md §6). */
+.grid-success-toast {
+  position: fixed;
+  right: max(24px, env(safe-area-inset-right));
+  bottom: max(24px, env(safe-area-inset-bottom));
+  z-index: 40; /* 고정 내비게이션 위, 다이얼로그 backdrop(50) 아래 */
+  width: min(360px, calc(100vw - 32px));
+  padding: 16px;
+  border-radius: var(--r-card);
+  background: var(--c-mine-bg);
+  color: var(--c-mine-fg);
+  font-size: var(--t-small-size);
+  line-height: var(--t-small-lh);
+  pointer-events: none;
+  animation: grid-success-toast-enter var(--dur-hover) var(--ease-out);
+}
+
+@keyframes grid-success-toast-enter {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@media (max-width: 767px) {
+  .grid-success-toast {
+    right: max(16px, env(safe-area-inset-right));
+    bottom: calc(96px + env(safe-area-inset-bottom));
+    left: max(16px, env(safe-area-inset-left));
+    width: auto;
+  }
+}
+
 /* ---------- 뷰 공통 필터 바 (인원·부서) ---------- */
 
 .grid-filterbar.mr-row {

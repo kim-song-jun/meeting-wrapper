@@ -34,6 +34,8 @@ import "../styles/grid.css";
 const cx = (...parts: Array<string | false | null | undefined>): string =>
   parts.filter(Boolean).join(" ");
 
+const GRID_SUCCESS_TOAST_MS = 4_000;
+
 const READ_ERROR_MESSAGE = "예약 정보를 불러오지 못했어요. 네트워크 상태를 확인하고 다시 시도해 주세요.";
 
 /* ---------------- date helpers ---------------- */
@@ -744,6 +746,12 @@ export function GridScreen() {
   const [editError, setEditError] = useState<string | null>(null);
   const [editStatus, setEditStatus] = useState<string | null>(null);
 
+  useEffect(() => {
+    if (!editStatus) return;
+    const timeoutId = window.setTimeout(() => setEditStatus(null), GRID_SUCCESS_TOAST_MS);
+    return () => window.clearTimeout(timeoutId);
+  }, [editStatus]);
+
   /**
    * 이 방에서 `slot` 을 품고 있는 빈 구간의 양끝(둘 다 포함). 슬롯이 이미 예약돼
    * 있으면 null.
@@ -1376,13 +1384,13 @@ export function GridScreen() {
         </div>
       ) : null}
       {editStatus ? (
-        <div style={{ marginTop: 16 }}>
-          <Alert tone="info">
-            {editStatus}{" "}
-            <button type="button" className="grid-retry" onClick={() => setEditStatus(null)}>
-              닫기
-            </button>
-          </Alert>
+        <div
+          className="grid-success-toast"
+          role="status"
+          aria-live="polite"
+          aria-atomic="true"
+        >
+          {editStatus}
         </div>
       ) : null}
 
