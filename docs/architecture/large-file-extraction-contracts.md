@@ -1,0 +1,129 @@
+# MolRoom large-file extraction contracts
+
+## Rules shared by every extraction
+
+This is a Wave 0 characterization contract, not authorization to move runtime code. The source snapshot below was recorded on 2026-08-21. Wave 2 may start a runtime extraction only after the committed Wave 1 Google-spike reports establish the static-SPA/runtime boundary, including token reconnection, organizer/room event locators, shared series-ID readback, the verified administrator writer path, and the directory-search result. If a spike invalidates an assumed boundary, stop the extraction and return the architecture decision to the user.
+
+For every move, preserve the current public import path and callable signature until every current consumer has moved in the same change. A preserved module is a real composition owner: it may coordinate its extracted children, but may not become a source-only compatibility barrel. Do not retain duplicate implementations, deprecated aliases, or re-export shims that have no live consumer. Delete the old implementation in the same commit once the replacement is green.
+
+Characterization is ordered: first make the stated behavior fail through a focused, temporary mutation; then restore the behavior and run the named focused command green; then take the named live screenshots. The temporary mutation is never committed. Node tests prove pure/repository contracts only. Screens and CSS also require browser interaction and screenshots at 390x844, 1024x768, and 1440x1000. Keep the grid's desktop single-scroll-container behavior, the mobile dialog bottom-sheet behavior, visible disabled reasons, and the rule that booking-grid cells do not expose meeting titles.
+
+No extraction may import an adapter implementation into a screen, duplicate domain scheduling arithmetic, replace surfaced errors with empty data, or make an adapter switch before the Wave 1 result permits it. `BookingRepository`, `repo`, and the existing UI import paths remain the current seams until the separately approved runtime-composition migration replaces them.
+
+## GridScreen.tsx
+
+**Baseline.** `src/screens/GridScreen.tsx` is 2,783 lines. Its only public export is `GridScreen(): JSX.Element`, imported by `src/App.tsx` for `/`. It imports React hooks and `CSSProperties`; `Alert`, `Badge`, `Button`, `ButtonWithReason`, and `Dialog` from `../components/ui`; `BookingDialog`, `eventContentMode`, and ScheduleFields helpers; app configuration, room visibility, `repo`, `useAsync`, and `appNow`; domain grid/time helpers and `Booking`, `Room`, and `UserPrefs`; and side-effect imports `../styles/grid.css`. `scripts/validate-design-contract.mjs` also reads this file as text for the grid design contract.
+
+**Responsibility groups.** The current file combines date/range/query orchestration and loading/error/reload state; room/department filtering; pointer selection, drag, resize, keyboard and reschedule state; create/edit/detail/cancel dialog orchestration; day grid and agenda rendering; week rendering; month rendering; event placement/content/accessibility; and reschedule/cancel confirmation UI.
+
+**Target files.** Keep `GridScreen.tsx` as the live route composition owner. Extract `src/screens/grid/gridDateRange.ts` for date/range helpers and typed view state, `src/screens/grid/GridToolbar.tsx` for range/day-mode/filter controls, `src/screens/grid/GridPointerInteraction.ts` for slot selection/drag/resize transitions, `src/screens/grid/GridDayView.tsx` for day-grid and agenda view, `src/screens/grid/GridWeekView.tsx`, `src/screens/grid/GridMonthView.tsx`, `src/screens/grid/GridEventBlock.tsx`, and `src/screens/grid/GridDialogs.tsx` for event detail, reschedule, and cancellation dialogs. Domain calls such as `placeInGrid`, `canExtend`, `canShorten`, and `canReschedule` stay in `src/domain/time.ts`; they are not copied into the new files.
+
+**Preserved signatures and behavior.** `GridScreen` remains the sole export consumed by `App`. Its current `repo` calls, `useAsync` error/reload behavior, room-visibility context use, `BookingDialog` entry behavior, `GridEventBlock` placement (`placeInGrid` with CSS slot geometry), compact/full event-content decision, keyboard-accessible slots/events, drag/resize final commit, and success/error messages remain observationally unchanged. The Wave 2 runtime migration may replace the data source only through its separately approved composition seam; this extraction must not do so.
+
+**RED/GREEN characterization.** Run `npm test -- src/domain/time.test.ts src/screens/gridEventContent.test.ts src/screens/ScheduleFields.test.ts` green after proving each focused mutation red: change one `placeInGrid` call to omit `slotPx`; make a compact event render its time; make a split-week event render its time; and change a ScheduleFields range boundary. Run `node scripts/validate-design-contract.mjs` green after each corresponding in-memory validator mutation reports its exact target failure. The existing tests cover placement, schedule-field conversion, and event-content thresholds; no existing React rendering test covers the orchestration.
+
+**Required live evidence.** On `/`, capture day-grid, day-agenda, week, and month at all three viewports. Capture an owned-event detail dialog, an unavailable action with its visible reason, a create-dialog entry from a selectable empty slot, a drag/resize preview and its committed outcome, and a cancel/reschedule confirmation. Verify no grid event cell reveals a meeting title and desktop retains one scrollable grid pane.
+
+**Forbidden compatibility exports.** Do not export `Segmented`, `AgendaView`, `DateStepper`, `GridEventBlock`, `WeekView`, `MonthView`, `EventDetail`, `RescheduleDialog`, `CancelConfirmDialog`, date helpers, pointer helpers, or an old-file re-export of any extracted child. They are private implementation details; only the live `GridScreen` route entry is public.
+
+## grid.css
+
+**Baseline.** `src/styles/grid.css` is 1,745 lines. It exports no JavaScript/CSS-module symbols. `GridScreen.tsx` is its direct side-effect importer; `src/App.tsx` and `src/styles/screens.css` describe dependent shell/scroll behavior, and `scripts/validate-design-contract.mjs` reads its text as a design-contract input.
+
+**Responsibility groups.** The stylesheet currently contains grid toolbar/control styling, axis and room-header geometry, slots and selection, event/content/focus/ownership styling, day-grid and week view layout, month view, mobile list and agenda view, interaction/drag feedback, filters, and responsive/reduced-motion media queries.
+
+**Target files.** Keep `grid.css` as the single stylesheet imported by `GridScreen.tsx`. Split internal sections into `src/styles/grid-axis.css` (scroll/table, sticky corner, axis, room headers, slots), `src/styles/grid-event.css` (event placement, ownership stripe, content modes, focus, selection and drag feedback), `src/styles/grid-views.css` (day, agenda, week, month, and mobile-list rules), and `src/styles/grid-interactions.css` (toolbar/filter controls and responsive/reduced-motion media queries). `grid.css` must own the ordered `@import` composition, not duplicate declarations.
+
+**Preserved signatures and behavior.** The side-effect import remains `import "../styles/grid.css"` from `GridScreen.tsx`. Preserve all current `.grid-*` selectors, custom-property consumption, logical 4px ownership stripe, CSS-driven placement geometry, focus-visible treatment, sticky-axis behavior, and the current media-query breakpoints. The import order must preserve the cascade used by the desktop grid, mobile list, and agenda.
+
+**RED/GREEN characterization.** Run `node scripts/validate-design-contract.mjs` green after proving red with the validator's existing source mutations: remove the `.grid-event` logical 4px border, make split-week event time visible through CSS, duplicate a governed radius/spacing declaration, or bypass the focus outline contract. This validator already checks baseline design contracts and that its negative mutations independently produce target failures. There is no direct CSS-unit-test file; the visual checks below are the layout characterization.
+
+**Required live evidence.** On `/`, capture day-grid, day-agenda, week, and month at all three viewports, plus a keyboard-focused event, an owned/other event pair, a selected slot, and a drag/drop target. Confirm the 390px view uses the mobile list rather than desktop grid, 1024px retains horizontal grid behavior, and 1440px preserves the single grid scroll container.
+
+**Forbidden compatibility exports.** Do not create `grid-legacy.css`, selector alias blocks, duplicate old/new selector rules, or an unused `@import` re-export layer. Do not rename or alias a live `.grid-*` selector merely to keep an extracted file addressable.
+
+## MyBookingsScreen.tsx
+
+**Baseline.** `src/screens/MyBookingsScreen.tsx` is 750 lines. Its only public export is `MyBookingsScreen(): JSX.Element`, imported by `src/App.tsx` for `/me`. It imports React hooks, `Link`, `Alert`, `Badge`, `Button`, `Dialog`, `Field`, `Tabs`, and `TabItem`; app/config/data/async/clock helpers; time and summary-export helpers; `Booking` and `UserPrefs`; and side-effect imports `../styles/mine.css`. There is no direct adjacent React/browser test for this screen.
+
+**Responsibility groups.** The file coordinates top-level mine/past/all/settings tabs and their reads; renders upcoming booking items; edits and deletes past-meeting summaries; runs a destructive cancellation dialog; renders administrator booking management; and saves user settings including the default conference URL.
+
+**Target files.** Keep `MyBookingsScreen.tsx` as the `/me` route composition owner. Extract `src/screens/my-bookings/BookingItem.tsx`, `src/screens/my-bookings/PastSummaryEditor.tsx`, `src/screens/my-bookings/CancelBookingDialog.tsx`, `src/screens/my-bookings/AdminBookingsTab.tsx`, and `src/screens/my-bookings/SettingsTab.tsx`. The top-level file retains tab selection and the shared async refresh boundary; data calls still go through the current `repo` seam until runtime composition is separately migrated.
+
+**Preserved signatures and behavior.** `MyBookingsScreen` remains the only public screen export. Preserve `MineTab`, `PastTab`, `AllTab`, and `SettingsTab` user-visible tab order; future/past sorting and `PAST_LIMIT`; cancellation confirmation and error recovery; summary markdown export/save/delete behavior; admin-only controls; field label/hint/error semantics; and preference persistence. Current dirty product behavior in this file is characterization input, not scope to discard or silently rewrite.
+
+**RED/GREEN characterization.** Before moving each child, add a browser characterization spec at `e2e/my-bookings-characterization.spec.ts` and make it fail by temporarily removing one asserted behavior: hide an admin cancellation action, save an untrimmed/empty summary incorrectly, close the cancellation dialog without its explicit user action, or lose the saved default conference URL after refresh. Restore the behavior and run `npx playwright test e2e/my-bookings-characterization.spec.ts` green once the Wave 1 browser harness is committed. Continue to run the focused repository proof `npm test -- src/data/mockAdapter.test.ts` for the backing mutation contract; it does not substitute for the browser test.
+
+**Required live evidence.** On `/me`, capture Mine, Past, All-as-admin, and Settings at all three viewports. Capture a populated booking item, past-summary edit/save/delete, cancellation confirmation and successful return to the list, administrator cancellation state, settings validation/error state, and saved default-conference state after reload. Confirm a non-admin account does not receive the admin tab/action before screenshot approval.
+
+**Forbidden compatibility exports.** Do not export `MineTab`, `BookingItem`, `PastTab`, `PastBookingItem`, `CancelDialog`, `AllTab`, `AdminBookingItem`, `SettingsTab`, `SettingsForm`, `LoadError`, or an old-file re-export of an extracted child. `MyBookingsScreen` is the public route seam.
+
+## mockAdapter.ts
+
+**Baseline.** `src/data/mockAdapter.ts` is 612 lines. Its sole public export is `mockAdapter: BookingRepository`. `src/data/index.ts` imports it to expose the `repo` singleton, and `src/data/mockAdapter.test.ts` dynamically imports it. It imports `BookingRepository` result types; booking/user/directory types; `overlaps`, `expandRecurrence`, rooms JSON, the shared mock identity, and `appNow`.
+
+**Responsibility groups.** The file captures development QA query fixtures and controlled failures/delays; builds deterministic seeded bookings and directory data; owns mutable in-memory read/prefs state and clone helpers; implements reads and directory search; and implements create, recurring create, cancellation, extend, reschedule, summary, check-in, and preference mutations.
+
+**Target files.** Keep `mockAdapter.ts` as the concrete `BookingRepository` object owner until the approved runtime factory replaces it. Extract `src/data/mock/seedFixtures.ts`, `src/data/mock/faultFixtures.ts`, `src/data/mock/readModel.ts`, and `src/data/mock/mutations.ts`. The adapter object composes those modules against one injected store/fixture state; it must not create separate stores that make reads and mutations disagree.
+
+**Preserved signatures and behavior.** Preserve the exact `BookingRepository` methods currently implemented: `getCurrentUser`, `listByDay`, `listByRoom`, `listMine`, `listByRange`, `create`, `createRecurring`, `cancelSeries`, `changeEnd`, `reschedule`, `cancel`, `listMinePast`, `saveSummary`, `checkIn`, `getPrefs`, `savePrefs`, and `searchDirectory`. Retain cloned `Booking`/`Date` values, shared `MOCK_IDENTITY`, QA fixture trigger semantics, conflict detection with `overlaps`, per-occurrence recurring partial results, ownership restriction for summaries, and read errors that surface as `Error`.
+
+**RED/GREEN characterization.** Run `npm test -- src/data/mockAdapter.test.ts` green after proving each mutation red: return a store reference rather than a clone, omit the destination-room conflict check in `reschedule`, convert a recurring conflict into a whole-series success, allow another user's summary save, or consume a one-shot QA read/prefs failure more than once. The current test file covers QA fixtures, schedule mutations, persistence, cross-room movement, and blocked updates; extend it in the same extraction change only where a moved behavior has no focused assertion.
+
+**Required live evidence.** Capture `/` after a successful create and a blocked reschedule, `/me` after summary/prefs save and cancellation, and `/r/:roomId` after check-in at all three viewport sizes only where the extraction changes their rendered state. These screenshots prove consumers still surface repository results; the adapter's primary proof remains its focused Node contract test.
+
+**Forbidden compatibility exports.** Do not export `ME`, `DIRECTORY`, mutable `store`, mutable `prefs`, `seed`, fixture readers, delay constants, clone helpers, or a legacy mock-module barrel. Do not leave a second adapter object or unused re-export that lets production composition pull mock fixtures into its bundle.
+
+## ui.tsx
+
+**Baseline.** `src/components/ui.tsx` is 516 lines. It publicly exports `Button`, `ButtonWithReason`, `Field`, `TextAreaField`, `RadioOption`, `RadioGroup`, `Card`, `Badge`, `TabItem`, `Tabs`, `Dialog`, and `Alert`. Direct consumers are `LoginScreen`, `AttendeePicker`, `BookingDialog`, `GridScreen`, `MyBookingsScreen`, `RecurrenceResult`, `RoomLandingScreen`, and `RoomsScreen`. It imports React hooks plus button/input/textarea attribute types and `ReactNode`.
+
+**Responsibility groups.** The file contains button/display primitives; labelled input and textarea primitives; radio and tab navigation primitives; card and badge display primitives; and dialog lifecycle behavior including initial focus, focus trap, Escape/backdrop dismissal, background inert/aria-hidden isolation, body scroll lock with scrollbar compensation, and trigger-focus restoration.
+
+**Target files.** Keep `ui.tsx` as the current public component module because every current consumer imports that path. Extract `src/components/ui/inputPrimitives.tsx`, `src/components/ui/dialogLifecycle.ts`, and `src/components/ui/navigationDisplay.tsx`. `ui.tsx` remains a live API composition module that exports the existing named primitives exactly once; it may not retain copied component bodies or aliases after a child owns them.
+
+**Preserved signatures and behavior.** Preserve the exact named exports and their current prop contracts, including button variants, visible `ButtonWithReason` text, automatic field IDs and `aria-describedby`, generic radio options, tab roving keyboard behavior, `Card`'s `mine`/style behavior, and the Dialog props `title`, `subtitle`, `onClose`, `children`, `actions`, `actionsLayout`, `dismissible`, and `busy`. Preserve dialog focus trapping, Escape behavior while busy, background isolation cleanup, scroll-lock cleanup, and return focus to the original trigger.
+
+**RED/GREEN characterization.** Add `e2e/ui-dialog-characterization.spec.ts` with a focused Dialog harness that fails when Shift+Tab leaves the panel, Escape closes a busy dialog, the background remains interactive while open, body styles remain locked after close, or focus does not return to the trigger. Restore the behavior and run `npx playwright test e2e/ui-dialog-characterization.spec.ts` green once the Wave 1 browser harness is committed. Also exercise current consumers through their routes; existing Node tests do not render these primitives.
+
+**Required live evidence.** Capture `/login`, `/`, `/rooms`, `/me`, and `/r/:roomId` at all three viewports wherever an extraction changes a shared primitive. Capture at least one input with hint/error, radio group, keyboard-operated tablist, disabled button with reason, alert, and each dialog state used by booking, cancellation, recurrence result, and room actions. Verify focus returns to the triggering control and mobile dialogs remain bottom sheets.
+
+**Forbidden compatibility exports.** Do not export `cx`, `FOCUSABLE_SELECTOR`, `getFocusable`, `useBackgroundInert`, `useBodyScrollLock`, `ButtonProps`, `FieldProps`, `TextAreaFieldProps`, or deprecated visual aliases such as `glass`. Do not preserve old duplicate component definitions or an unused legacy UI barrel.
+
+## validate-design-contract.mjs
+
+**Baseline.** `scripts/validate-design-contract.mjs` is 1,116 lines. It has no module exports or source importers. Its public seam is the package script `npm run validate:design-contract`, which runs `node scripts/validate-design-contract.mjs` with an optional `DESIGN.md` path argument. The CLI imports Node `fs` and `path`, exits nonzero with newline-separated failures, and prints `MolRoom design contract: valid` on success.
+
+**Responsibility groups.** The file parses source text and balanced calls/blocks; applies runtime grid/token/CSS rules; applies radius and spacing token rules; validates canonical design-example rules; executes in-memory negative mutations to prove each rule can fail; aggregates failures; and owns CLI output/status.
+
+**Target files.** Keep `scripts/validate-design-contract.mjs` as the executable CLI composition owner. Extract `scripts/lib/design-contract/parser.mjs`, `scripts/lib/design-contract/runtime-rules.mjs`, `scripts/lib/design-contract/canonical-example-rules.mjs`, and `scripts/lib/design-contract/negative-mutations.mjs`. All rules receive source text and return failure strings; only the CLI reads files, decides exit status, and prints the final line.
+
+**Preserved signatures and behavior.** Preserve the package-script command, optional design-path argument, working-directory-relative file lookup, all current baseline source inputs, one-target-failure-per-negative-mutation behavior, failure aggregation order, stdout success text, stderr failure text, and nonzero status on any failure. Continue to validate the grid runtime contract against `tokens.css`, `grid.css`, `components.css`, and `GridScreen.tsx`.
+
+**RED/GREEN characterization.** Run `node scripts/validate-design-contract.mjs` green on the current repository. Prove red by changing a temporary source copy in the parser/rule test fixture so a required grid token/placement/content rule, a governed radius/spacing rule, or a canonical example rule fails with its exact existing message; prove the restored source returns zero. The extraction must retain and execute the current `mutations`, `radiusMutations`, `spacingMutations`, and `canonicalNegativeMutations` independently so an unrelated baseline failure cannot satisfy a mutation's expected failure.
+
+**Required live evidence.** No route screenshot applies: this is a static validator. Its extracted runtime-grid rules still gate the `/` screenshots required by the GridScreen and grid.css entries; a validator green result is never a substitute for those live checks.
+
+**Forbidden compatibility exports.** Do not add a second CLI, a legacy wrapper, globally exported parser/rule helpers, or an unused re-export file. Do not retain duplicated rule implementations in both the CLI and extracted modules.
+
+## Ordered Wave 2 extraction sequence
+
+1. Commit and review the Wave 1 spike reports first. Confirm the static SPA remains valid, shared series-ID readback works on organizer and room copies, the verified admin writer path is known, token reconnect behavior is accepted, and the directory-search decision is recorded. If any item changes runtime composition, obtain the required architecture decision before touching the listed runtime files.
+2. Freeze this document's baseline with focused RED/GREEN evidence. Add the two browser characterization specs only after the Wave 1 browser harness is committed; do not pretend that Node tests render React behavior.
+3. Extract the validator parser/rules first and run its CLI green. This has no runtime import surface and preserves the design contract used by later grid work.
+4. Extract `grid.css` by ordered stylesheet composition, then extract GridScreen children one responsibility at a time: range/query and toolbar, pointer interaction, day/agenda, week, month, event block, then dialogs. After each responsibility, run the relevant focused command and `/` screenshot matrix before the next move.
+5. Extract `ui.tsx` lifecycle and primitive internals while preserving every live named import from `../components/ui`; validate the dialog browser characterization on all consumer routes affected by the move.
+6. Extract `MyBookingsScreen` children while its route owner retains tab state and its data seam; validate `/me` before proceeding.
+7. Extract mock fixtures, read model, and mutations only while the object remains the current `BookingRepository` implementation. Keep this move separate from replacing mock runtime composition with Google services.
+8. In the separately approved runtime migration, move consumers to the new composition root and remove obsolete mock-only production reachability. At every stage, delete old code in the same change and prohibit unused re-export shims, duplicate compatibility exports, and old/new implementation pairs.
+
+## Characterization command matrix
+
+| Surface | Focused RED mutation | GREEN command | Required live evidence |
+| --- | --- | --- | --- |
+| GridScreen.tsx | Omit `slotPx`, render compact time, or break a ScheduleFields boundary | `npm test -- src/domain/time.test.ts src/screens/gridEventContent.test.ts src/screens/ScheduleFields.test.ts` and `node scripts/validate-design-contract.mjs` | `/`: day, agenda, week, month; dialog, pointer edit, 390x844/1024x768/1440x1000 |
+| grid.css | Remove the logical ownership stripe, focus rule, or governed token use | `node scripts/validate-design-contract.mjs` | `/`: grid/mobile/agenda, focused event, selected slot and drag target at all three viewports |
+| MyBookingsScreen.tsx | Break one asserted admin, summary, cancellation, or prefs behavior | `npx playwright test e2e/my-bookings-characterization.spec.ts` after the Wave 1 harness commit; `npm test -- src/data/mockAdapter.test.ts` for backing data behavior | `/me`: Mine, Past, All-admin, Settings, dialog/error/saved state at all three viewports |
+| mockAdapter.ts | Break clone isolation, destination conflict, partial recurrence, ownership, or one-shot fixture behavior | `npm test -- src/data/mockAdapter.test.ts` | `/`, `/me`, and `/r/:roomId` only for changed consumer states |
+| ui.tsx | Break focus trap, busy Escape, inert cleanup, scroll cleanup, or focus restoration | `npx playwright test e2e/ui-dialog-characterization.spec.ts` after the Wave 1 harness commit | `/login`, `/`, `/rooms`, `/me`, `/r/:roomId`; primitive and dialog states at all three viewports |
+| validate-design-contract.mjs | Make one parser/rule fixture violate its exact required contract | `node scripts/validate-design-contract.mjs` | None; use the GridScreen/grid.css route evidence |
