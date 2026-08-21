@@ -31,9 +31,10 @@ type ReadErrorFixture = "grid-once" | "room-once" | "my-bookings-once";
 function captureQaFixtures(): {
   saveDelayMs: number | null;
   readError: ReadErrorFixture | null;
+  prefsSaveError: "once" | null;
 } {
   if (!import.meta.env.DEV || typeof window === "undefined") {
-    return { saveDelayMs: null, readError: null };
+    return { saveDelayMs: null, readError: null, prefsSaveError: null };
   }
 
   const params = new URLSearchParams(window.location.search);
@@ -62,11 +63,21 @@ function captureQaFixtures(): {
     }
   }
 
-  return { saveDelayMs, readError };
+  let prefsSaveError: "once" | null = null;
+  if (params.has("mockPrefsSaveError")) {
+    if (params.get("mockPrefsSaveError") === "once") {
+      prefsSaveError = "once";
+    } else {
+      console.warn("[MolRoom QA] invalid mockPrefsSaveError");
+    }
+  }
+
+  return { saveDelayMs, readError, prefsSaveError };
 }
 
 const qaFixtures = captureQaFixtures();
 let readErrorArmed = true;
+let prefsSaveErrorArmed = true;
 let pendingReadErrorResolutions: Array<(fail: boolean) => void> = [];
 let readErrorBatchScheduled = false;
 
@@ -583,6 +594,10 @@ export const mockAdapter: BookingRepository = {
 
   async savePrefs(next) {
     await sleep(100);
+    if (qaFixtures.prefsSaveError === "once" && prefsSaveErrorArmed) {
+      prefsSaveErrorArmed = false;
+      throw new Error("QA fixture: preference save failed");
+    }
     prefs = { ...next };
   },
 

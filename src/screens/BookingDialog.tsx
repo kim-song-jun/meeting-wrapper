@@ -1,4 +1,4 @@
-import { useId, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { Alert, Button, Dialog, Field, RadioGroup } from "../components/ui";
 import { POLICY, roomById } from "../app/config";
 import { appNow } from "../app/clock";
@@ -17,6 +17,12 @@ import type { Booking, BookingDraft, Conference, DirectoryPerson, UserPrefs } fr
 import type { RecurringCreateResult } from "../data/BookingRepository";
 import { AttendeePicker } from "./AttendeePicker";
 import { RecurrenceResult } from "./RecurrenceResult";
+import {
+  acknowledgePreferenceWarning,
+  acknowledgeRecurrenceResult,
+  completionAfterBooking,
+} from "./bookingCompletion";
+import type { BookingCompletion } from "./bookingCompletion";
 import {
   ScheduleFields,
   scheduleDraftFrom,
@@ -83,6 +89,41 @@ export interface BookingDialogProps {
   onCreated: (booking: Booking, notice?: string) => void;
 }
 
+function PreferenceWarningDialog({ booking, onCreated }: { booking: Booking; onCreated: (booking: Booking) => void }) {
+  const acknowledged = useRef(false);
+
+  // Dialog 자체의 초기 포커스가 패널에 머무는 판본에서도, 자식 effect가 끝난 뒤
+  // 경고를 닫는 유일한 행동으로 포커스를 옮긴다.
+  useEffect(() => {
+    let cancelled = false;
+    queueMicrotask(() => {
+      if (!cancelled) document.getElementById("molroom-preference-warning-close")?.focus();
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  function acknowledge() {
+    if (acknowledged.current) return;
+    acknowledged.current = true;
+    onCreated(acknowledgePreferenceWarning({ kind: "preference-warning", booking }).booking);
+  }
+
+  return (
+    <Dialog
+      title="예약은 완료됐어요"
+      onClose={acknowledge}
+      dismissible={false}
+      actions={<Button id="molroom-preference-warning-close" onClick={acknowledge}>예약 화면 닫기</Button>}
+    >
+      <Alert tone="info">
+        예약은 완료됐지만 기본 Zoom 링크는 저장하지 못했어요. 이번 예약에는 입력한 링크가 들어갔어요. 설정에서 다시 저장해 주세요.
+      </Alert>
+    </Dialog>
+  );
+}
+
 export function BookingDialog({ roomId, start, end, prefs, onClose, onCreated }: BookingDialogProps) {
   const formId = useId();
   const [schedule, setSchedule] = useState(() => scheduleDraftFrom(roomId, start, end));
@@ -98,7 +139,7 @@ export function BookingDialog({ roomId, start, end, prefs, onClose, onCreated }:
   const [busy, setBusy] = useState(false);
   const [failure, setFailure] = useState<string | null>(null);
   const [recurrenceResult, setRecurrenceResult] = useState<RecurringCreateResult | null>(null);
-  const [recurrenceWarning, setRecurrenceWarning] = useState<string | null>(null);
+  const [completion, setCompletion] = useState<BookingCompletion | null>(null);
   const [zoomTouched, setZoomTouched] = useState(false);
   const [attemptedSubmit, setAttemptedSubmit] = useState(false);
 
@@ -189,14 +230,14 @@ export function BookingDialog({ roomId, start, end, prefs, onClose, onCreated }:
       if (recurrence !== null) {
         const result = await repo.createRecurring(draft);
 
-        let preferenceWarning: string | null = null;
+        let preferenceSaveFailed = false;
         // 예약 결과와 개인 설정 저장은 서로 다른 계약이다. 설정 저장 실패가 이미
         // 만들어진 회차를 숨기거나 사용자가 다시 제출하게 만들면 중복 예약이 된다.
         if (result.booked.length > 0 && vc === "zoom" && saveZoom) {
           try {
             await repo.savePrefs({ defaultZoomUrl: zoomUrl.trim() });
           } catch {
-            preferenceWarning = "예약은 완료됐지만 기본 Zoom 링크는 저장하지 못했어요. 설정에서 다시 저장해 주세요.";
+            preferenceSaveFailed = true;
           }
         }
 
@@ -204,14 +245,27 @@ export function BookingDialog({ roomId, start, end, prefs, onClose, onCreated }:
         // 결과 화면을 보여준다. "12회 다 잡혔겠지" 하고 넘어가면 그 방에 갔을 때
         // 다른 팀이 앉아 있다.
         if (result.rejected.length > 0) {
-          setRecurrenceWarning(preferenceWarning);
+          const first = result.booked[0];
+          if (first) {
+            setCompletion(
+              completionAfterBooking(first, {
+                hasRejectedOccurrences: true,
+                preferenceSaveFailed,
+              }),
+            );
+          }
           setRecurrenceResult(result);
           return;
         }
 
         const first = result.booked[0];
         if (first) {
-          onCreated(first, preferenceWarning ?? undefined);
+          const next = completionAfterBooking(first, {
+            hasRejectedOccurrences: false,
+            preferenceSaveFailed,
+          });
+          if (next.kind === "created") onCreated(next.booking);
+          else setCompletion(next);
         } else {
           setFailure("반복 예약을 만들지 못했어요. 잠시 후 다시 시도해 주세요.");
         }
@@ -221,15 +275,20 @@ export function BookingDialog({ roomId, start, end, prefs, onClose, onCreated }:
       const result = await repo.create(draft);
 
       if (result.ok) {
-        let preferenceWarning: string | null = null;
+        let preferenceSaveFailed = false;
         if (vc === "zoom" && saveZoom) {
           try {
             await repo.savePrefs({ defaultZoomUrl: zoomUrl.trim() });
           } catch {
-            preferenceWarning = "예약은 완료됐지만 기본 Zoom 링크는 저장하지 못했어요. 설정에서 다시 저장해 주세요.";
+            preferenceSaveFailed = true;
           }
         }
-        onCreated(result.booking, preferenceWarning ?? undefined);
+        const next = completionAfterBooking(result.booking, {
+          hasRejectedOccurrences: false,
+          preferenceSaveFailed,
+        });
+        if (next.kind === "created") onCreated(next.booking);
+        else setCompletion(next);
         return;
       }
 
@@ -255,15 +314,21 @@ export function BookingDialog({ roomId, start, end, prefs, onClose, onCreated }:
         booked={recurrenceResult.booked}
         rejected={recurrenceResult.rejected}
         onConfirm={() => {
-          const first = recurrenceResult.booked[0];
-          if (first) {
-            onCreated(first, recurrenceWarning ?? undefined);
-          } else {
+          if (completion?.kind !== "recurrence-result") {
             onClose();
+            return;
           }
+          const next = acknowledgeRecurrenceResult(completion);
+          setRecurrenceResult(null);
+          if (next.kind === "created") onCreated(next.booking);
+          else setCompletion(next);
         }}
       />
     );
+  }
+
+  if (completion?.kind === "preference-warning") {
+    return <PreferenceWarningDialog booking={completion.booking} onCreated={onCreated} />;
   }
 
   const subtitle =
@@ -278,6 +343,7 @@ export function BookingDialog({ roomId, start, end, prefs, onClose, onCreated }:
 
   return (
     <Dialog
+      key="booking-form"
       title="회의실 예약"
       subtitle={subtitle}
       onClose={onClose}

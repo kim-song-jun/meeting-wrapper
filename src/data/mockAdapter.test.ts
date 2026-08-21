@@ -110,6 +110,26 @@ describe("mockAdapter DEV QA fixtures", () => {
     await expect(save).resolves.toMatchObject({ booked: expect.any(Array), rejected: [] });
   });
 
+  it("fails the first preference save once, then persists the retry", async () => {
+    const adapter = await importAdapter("?mockPrefsSaveError=once");
+
+    await expectErrorAfter(adapter.savePrefs({ defaultZoomUrl: "https://zoom.us/j/first" }), 100, "QA fixture: preference save failed");
+    await expect(settle(adapter.getPrefs())).resolves.toEqual({ defaultZoomUrl: "https://zoom.us/j/1234567890" });
+
+    await settle(adapter.savePrefs({ defaultZoomUrl: "https://zoom.us/j/second" }));
+    await expect(settle(adapter.getPrefs())).resolves.toEqual({ defaultZoomUrl: "https://zoom.us/j/second" });
+  });
+
+  it("warns once for an invalid mockPrefsSaveError value and saves preferences normally", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const adapter = await importAdapter("?mockPrefsSaveError=always");
+
+    await settle(adapter.savePrefs({ defaultZoomUrl: "https://zoom.us/j/valid" }));
+    await expect(settle(adapter.getPrefs())).resolves.toEqual({ defaultZoomUrl: "https://zoom.us/j/valid" });
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(warn).toHaveBeenCalledWith("[MolRoom QA] invalid mockPrefsSaveError");
+  });
+
   it.each(["5001", "1.5", "abc"])(
     "warns once for invalid mockSaveDelayMs=%s and preserves the existing create latency",
     async (value) => {
@@ -184,7 +204,7 @@ describe("mockAdapter DEV QA fixtures", () => {
   it("ignores all query fixtures in production", async () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
     const adapter = await importAdapter(
-      "?mockNow=2024-01-01T00%3A00%3A00Z&mockSaveDelayMs=2000&mockReadError=grid-once",
+      "?mockNow=2024-01-01T00%3A00%3A00Z&mockSaveDelayMs=2000&mockReadError=grid-once&mockPrefsSaveError=once",
       false,
     );
     const day = new Date("2026-07-29T00:00:00+09:00");
@@ -198,6 +218,9 @@ describe("mockAdapter DEV QA fixtures", () => {
     await expectPendingFor(save, 219);
     await vi.advanceTimersByTimeAsync(1);
     await expect(save).resolves.toMatchObject({ ok: true });
+
+    await settle(adapter.savePrefs({ defaultZoomUrl: "https://zoom.us/j/production" }));
+    await expect(settle(adapter.getPrefs())).resolves.toEqual({ defaultZoomUrl: "https://zoom.us/j/production" });
     expect(warn).not.toHaveBeenCalled();
   });
 });
