@@ -16,7 +16,8 @@
     "typecheck": "tsc -b --noEmit",
     "test": "vitest run --pool=threads --maxWorkers=1 --minWorkers=1",
     "validate:design-contract": "node scripts/validate-design-contract.mjs",
-    "verify:toolchain": "node scripts/verify-toolchain.mjs"
+    "verify:toolchain": "node scripts/verify-toolchain.mjs",
+    "scan:production-bundle": "node scripts/scan-production-bundle.mjs dist"
   },
   "dependencies": {
     "react": "^19.2.0",

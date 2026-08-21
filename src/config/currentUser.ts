@@ -12,6 +12,7 @@
  * 토큰이고, mockAdapter 도 함께 실물 어댑터로 교체된다.
  */
 export const MOCK_IDENTITY = {
+  runtimeSource: "molroom.mock.identity",
   email: "sungjun@molcube.com",
   name: "성준",
 } as const;
