@@ -25,10 +25,11 @@ import {
 } from "./ScheduleFields";
 import type { ScheduleDraft, ScheduleFieldErrors } from "./ScheduleFields";
 
-const PROBLEM_TEXT: Record<string, string> = {
+const PROBLEM_TEXT: Record<DraftProblem["code"], string> = {
   "too-long": "한 번에 " + humanDuration(POLICY.maxDurationMinutes) + "까지 예약할 수 있어요",
+  "too-short": "최소 " + humanDuration(POLICY.slotMinutes) + "부터 예약할 수 있어요",
   "too-far": String(POLICY.maxAdvanceDays) + "일 뒤까지만 예약할 수 있어요",
-  "in-past": "이미 지난 시간이에요",
+  "in-past": "시작 시각을 지금 이후로 선택해 주세요",
   "end-before-start": "종료 시각이 시작 시각보다 이르네요",
 };
 
@@ -63,8 +64,10 @@ function scheduleFieldErrors(
       errors.endTime = "종료 시각은 시작 시각보다 뒤여야 해요.";
     } else if (problem.code === "too-long") {
       errors.endTime = `한 번에 ${humanDuration(problem.maxMinutes)}까지 예약할 수 있어요.`;
+    } else if (problem.code === "too-short") {
+      errors.endTime = `최소 ${humanDuration(problem.minMinutes)}부터 예약할 수 있어요.`;
     } else if (problem.code === "in-past") {
-      errors.endTime = "이미 지난 시각이에요.";
+      errors.startTime = "시작 시각을 지금 이후로 선택해 주세요.";
     }
   }
 
@@ -301,29 +304,30 @@ export function BookingDialog({ roomId, start, end, prefs, onClose, onCreated }:
           void submit();
         }}
       >
-        {problems.length > 0 ? <Alert>{problems.map((p) => PROBLEM_TEXT[p.code]).join(" · ")}</Alert> : null}
+        <fieldset className="mr-booking-fields" disabled={busy}>
+          {problems.length > 0 ? <Alert>{problems.map((p) => PROBLEM_TEXT[p.code]).join(" · ")}</Alert> : null}
 
-        {failure ? <Alert>{failure}</Alert> : null}
+          {failure ? <Alert>{failure}</Alert> : null}
 
-        <ScheduleFields
-          value={schedule}
-          onChange={setSchedule}
-          now={now}
-          stepMinutes={scheduleStepMinutes}
-          errors={fieldErrors}
-        />
+          <ScheduleFields
+            value={schedule}
+            onChange={setSchedule}
+            now={now}
+            stepMinutes={scheduleStepMinutes}
+            errors={fieldErrors}
+          />
 
-        <Field
-          label="회의 제목"
-          placeholder="주간 기획회의"
-          value={title}
-          onChange={(e) => setTitle(e.target.value)}
-          hint="격자에는 주최자만 보이고 제목은 표시되지 않아요"
-        />
+          <Field
+            label="회의 제목"
+            placeholder="주간 기획회의"
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            hint="격자에는 주최자만 보이고 제목은 표시되지 않아요"
+          />
 
-        {/* 인원은 항상 받는다 — 정원 검사의 기준이고, 초대와는 다른 값이다.
+          {/* 인원은 항상 받는다 — 정원 검사의 기준이고, 초대와는 다른 값이다.
             ± 스테퍼라 QR 모바일에서 타이핑 없이 정할 수 있다. */}
-        <div>
+          <div>
           <span className="mr-field__label">인원</span>
           <div className="mr-stepper">
             {/* 함수형 업데이터를 쓴다. setHeadcount(headcount + 1) 로 하면 연타할 때
@@ -351,9 +355,9 @@ export function BookingDialog({ roomId, start, end, prefs, onClose, onCreated }:
                 무엇에 쓰이는지만 밝힌다. */}
             <span className="mr-stepper__note">참석 인원 기록용 — 초대와 별개예요</span>
           </div>
-        </div>
+          </div>
 
-        <div>
+          <div>
           <button
             type="button"
             className="mr-disclosure"
@@ -429,29 +433,35 @@ export function BookingDialog({ roomId, start, end, prefs, onClose, onCreated }:
 
               {vc === "zoom" ? (
                 <div className="mr-subsection">
-                  <Field
-                    id="molroom-zoom-url"
-                    label="Zoom 링크"
-                    type="url"
-                    inputMode="url"
-                    autoComplete="url"
-                    placeholder="https://zoom.us/j/..."
-                    value={zoomUrl}
-                    onChange={(event) => {
-                      setZoomUrl(event.target.value);
-                      setZoomTouched(true);
-                    }}
-                    onBlur={() => setZoomTouched(true)}
-                    aria-invalid={showZoomProblem || undefined}
-                    hint={
-                      showZoomProblem
+                  <label className="mr-field" htmlFor="molroom-zoom-url">
+                    <span className="mr-field__label">Zoom 링크</span>
+                    <input
+                      id="molroom-zoom-url"
+                      className="mr-input"
+                      type="url"
+                      inputMode="url"
+                      autoComplete="url"
+                      placeholder="https://zoom.us/j/..."
+                      value={zoomUrl}
+                      onChange={(event) => {
+                        setZoomUrl(event.target.value);
+                        setZoomTouched(true);
+                      }}
+                      onBlur={() => setZoomTouched(true)}
+                      aria-invalid={showZoomProblem || undefined}
+                      aria-describedby="molroom-zoom-url-hint"
+                    />
+                    <span
+                      id="molroom-zoom-url-hint"
+                      className={`mr-field__hint${showZoomProblem ? " mr-field__hint--warn" : ""}`}
+                    >
+                      {showZoomProblem
                         ? (zoomProblem ?? undefined)
                         : prefs.defaultZoomUrl && zoomUrl === prefs.defaultZoomUrl
                           ? "저장된 기본 링크를 불러왔어요"
-                          : "회의에 사용할 zoom.us 초대 링크를 붙여넣어 주세요"
-                    }
-                    hintTone={showZoomProblem ? "warn" : "muted"}
-                  />
+                          : "회의에 사용할 zoom.us 초대 링크를 붙여넣어 주세요"}
+                    </span>
+                  </label>
                   <label className="mr-row" style={{ gap: 8, marginTop: 8 }}>
                     <input
                       type="checkbox"
@@ -464,7 +474,8 @@ export function BookingDialog({ roomId, start, end, prefs, onClose, onCreated }:
               ) : null}
             </div>
           ) : null}
-        </div>
+          </div>
+        </fieldset>
       </form>
     </Dialog>
   );

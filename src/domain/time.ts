@@ -55,6 +55,7 @@ export function placeInGrid(
 
 export type DraftProblem =
   | { code: "too-long"; maxMinutes: number }
+  | { code: "too-short"; minMinutes: number }
   | { code: "too-far"; maxDays: number }
   | { code: "in-past" }
   | { code: "end-before-start" };
@@ -76,11 +77,13 @@ export function validateDraft(
 
   if (durationMin <= 0) {
     problems.push({ code: "end-before-start" });
+  } else if (durationMin < policy.slotMinutes) {
+    problems.push({ code: "too-short", minMinutes: policy.slotMinutes });
   } else if (durationMin > policy.maxDurationMinutes) {
     problems.push({ code: "too-long", maxMinutes: policy.maxDurationMinutes });
   }
 
-  if (draft.end.getTime() <= now.getTime()) {
+  if (draft.start.getTime() < now.getTime()) {
     problems.push({ code: "in-past" });
   }
 

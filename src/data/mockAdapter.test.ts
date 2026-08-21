@@ -64,6 +64,16 @@ async function settle<T>(promise: Promise<T>): Promise<T> {
   return promise;
 }
 
+function localDateTime(
+  year: number,
+  month: number,
+  day: number,
+  hour: number,
+  minute = 0,
+): Date {
+  return new Date(year, month - 1, day, hour, minute, 0, 0);
+}
+
 describe("mockAdapter DEV QA fixtures", () => {
   beforeEach(() => {
     vi.useFakeTimers();
@@ -195,7 +205,7 @@ describe("mockAdapter DEV QA fixtures", () => {
 describe("mockAdapter schedule mutations", () => {
   beforeEach(() => {
     vi.useFakeTimers();
-    vi.setSystemTime(new Date("2026-08-20T11:30:00+09:00"));
+    vi.setSystemTime(localDateTime(2026, 8, 20, 11, 30));
   });
 
   afterEach(() => {
@@ -211,8 +221,8 @@ describe("mockAdapter schedule mutations", () => {
       ...draft(),
       roomId: "room-small",
       title: "계약 테스트 회의",
-      start: new Date("2026-08-20T16:00:00+09:00"),
-      end: new Date("2026-08-20T16:30:00+09:00"),
+      start: localDateTime(2026, 8, 20, 16),
+      end: localDateTime(2026, 8, 20, 16, 30),
     };
 
     const result = await settle(adapter.create(requested));
@@ -243,15 +253,15 @@ describe("mockAdapter schedule mutations", () => {
 
   it("moves a booking across rooms and removes it from the old room", async () => {
     const adapter = await importAdapter("");
-    const day = new Date("2026-08-20T00:00:00+09:00");
+    const day = localDateTime(2026, 8, 20, 0);
     const seeded = (await settle(adapter.listByDay(day))).find(
       (booking) => booking.title === "주간 기획회의",
     );
     expect(seeded).toBeDefined();
     if (!seeded) throw new Error("seeded booking missing");
 
-    const newStart = new Date("2026-08-20T11:00:00+09:00");
-    const newEnd = new Date("2026-08-20T12:00:00+09:00");
+    const newStart = localDateTime(2026, 8, 20, 11);
+    const newEnd = localDateTime(2026, 8, 20, 12);
     const result = await settle(
       adapter.reschedule(seeded.id, newStart, newEnd, "room-small"),
     );
@@ -277,7 +287,7 @@ describe("mockAdapter schedule mutations", () => {
 
   it("rejects a destination overlap without mutating the original booking", async () => {
     const adapter = await importAdapter("");
-    const day = new Date("2026-08-20T00:00:00+09:00");
+    const day = localDateTime(2026, 8, 20, 0);
     const seeded = (await settle(adapter.listByDay(day))).find(
       (booking) => booking.title === "주간 기획회의",
     );
@@ -287,8 +297,8 @@ describe("mockAdapter schedule mutations", () => {
     const result = await settle(
       adapter.reschedule(
         seeded.id,
-        new Date("2026-08-20T09:30:00+09:00"),
-        new Date("2026-08-20T10:30:00+09:00"),
+        localDateTime(2026, 8, 20, 9, 30),
+        localDateTime(2026, 8, 20, 10, 30),
         "room-small",
       ),
     );
@@ -311,14 +321,14 @@ describe("mockAdapter schedule mutations", () => {
 
   it("shortens an active booking and rejects an extension into another booking", async () => {
     const adapter = await importAdapter("");
-    const day = new Date("2026-08-20T00:00:00+09:00");
+    const day = localDateTime(2026, 8, 20, 0);
     const seeded = (await settle(adapter.listByDay(day))).find(
       (booking) => booking.title === "주간 기획회의",
     );
     expect(seeded).toBeDefined();
     if (!seeded) throw new Error("seeded booking missing");
 
-    const shortenedEnd = new Date("2026-08-20T12:00:00+09:00");
+    const shortenedEnd = localDateTime(2026, 8, 20, 12);
     const shortened = await settle(adapter.changeEnd(seeded.id, shortenedEnd));
     expect(shortened).toMatchObject({
       ok: true,
@@ -330,14 +340,14 @@ describe("mockAdapter schedule mutations", () => {
         ...draft(),
         roomId: "room-large",
         title: "연장 차단 회의",
-        start: new Date("2026-08-20T13:00:00+09:00"),
-        end: new Date("2026-08-20T14:00:00+09:00"),
+        start: localDateTime(2026, 8, 20, 13),
+        end: localDateTime(2026, 8, 20, 14),
       }),
     );
     expect(blocker).toMatchObject({ ok: true });
 
     const rejected = await settle(
-      adapter.changeEnd(seeded.id, new Date("2026-08-20T13:30:00+09:00")),
+      adapter.changeEnd(seeded.id, localDateTime(2026, 8, 20, 13, 30)),
     );
     expect(rejected).toMatchObject({ ok: false, reason: "blocked" });
 

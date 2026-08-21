@@ -171,6 +171,17 @@
   flex-direction: column;
   gap: 16px;
 }
+/* 저장 중 폼 전체를 네이티브 fieldset 으로 잠근다. 브라우저 기본 fieldset 지오메트리를
+ * 걷고 기존 .mr-form 과 같은 16px 리듬을 이어받아 잠금 전후 레이아웃이 움직이지 않는다. */
+.mr-booking-fields {
+  min-inline-size: 0;
+  border: 0;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
 .mr-schedule {
   border: 0;
   margin: 0;

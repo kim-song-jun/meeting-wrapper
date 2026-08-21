@@ -312,6 +312,11 @@ describe("validateDraft", () => {
     expect(p.map((x) => x.code)).toContain("too-long");
   });
 
+  it("정책 슬롯보다 짧으면 too-short", () => {
+    const p = validateDraft({ start: at(11), end: at(11, 29) }, POLICY, now);
+    expect(p).toContainEqual({ code: "too-short", minMinutes: 30 });
+  });
+
   it("종료가 시작보다 이르면 end-before-start", () => {
     const p = validateDraft({ start: at(12), end: at(11) }, POLICY, now);
     expect(p.map((x) => x.code)).toContain("end-before-start");
@@ -319,6 +324,11 @@ describe("validateDraft", () => {
 
   it("이미 지난 시간은 in-past", () => {
     const p = validateDraft({ start: at(8), end: at(9) }, POLICY, now);
+    expect(p.map((x) => x.code)).toContain("in-past");
+  });
+
+  it("시작만 지났고 종료가 미래여도 in-past", () => {
+    const p = validateDraft({ start: at(9, 30), end: at(10, 30) }, POLICY, now);
     expect(p.map((x) => x.code)).toContain("in-past");
   });
 
