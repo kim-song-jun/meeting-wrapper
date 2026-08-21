@@ -163,21 +163,6 @@ function useCssPx(varName: string): number {
   return value;
 }
 
-/** 모바일 폭 여부. grid.css 의 767px 브레이크포인트와 같은 값을 쓴다. */
-function useIsNarrow(): boolean {
-  const [narrow, setNarrow] = useState(
-    () => typeof window !== "undefined" && window.matchMedia("(max-width: 767px)").matches,
-  );
-  useEffect(() => {
-    const mq = window.matchMedia("(max-width: 767px)");
-    const onChange = (e: MediaQueryListEvent) => setNarrow(e.matches);
-    mq.addEventListener("change", onChange);
-    setNarrow(mq.matches);
-    return () => mq.removeEventListener("change", onChange);
-  }, []);
-  return narrow;
-}
-
 /* ---------------- 뷰 전환 ---------------- */
 
 type ViewMode = "day" | "agenda" | "week" | "month";
@@ -1616,6 +1601,7 @@ export function GridScreen() {
                             }
                             roomName={room.name}
                             placement={placement}
+                            timeLineFitsInline={true}
                             now={now}
                             onSelect={(bk) => {
                               if (swallowClickRef.current) {
@@ -1833,6 +1819,7 @@ function GridEventBlock({
   booking,
   roomName,
   placement,
+  timeLineFitsInline,
   now,
   onSelect,
   onBeginEdit,
@@ -1841,6 +1828,7 @@ function GridEventBlock({
   booking: Booking;
   roomName: string;
   placement: GridPlacement;
+  timeLineFitsInline: boolean;
   now: Date;
   onSelect: (booking: Booking) => void;
   /**
@@ -1857,7 +1845,7 @@ function GridEventBlock({
   editing?: boolean;
 }) {
   const noShow = isNoShow(booking, now, POLICY.checkInGraceMinutes);
-  const contentMode = eventContentMode(placement.height);
+  const contentMode = eventContentMode(placement.height, timeLineFitsInline);
   const accessibleLabel = `${booking.organizerName}, ${roomName}, ${hhmm(booking.start)}~${hhmm(booking.end)}${noShow ? ", 미체크인" : ""}`;
   const editable = booking.isMine && onBeginEdit !== undefined;
   return (
@@ -2148,6 +2136,7 @@ function WeekView({
                         booking={b}
                         roomName={room.name}
                         placement={placement}
+                        timeLineFitsInline={!split}
                         now={now}
                         onSelect={onSelectBooking}
                       />
@@ -2353,15 +2342,6 @@ function EventDetail({
   const [checkedInAt, setCheckedInAt] = useState<Date | null>(booking.checkedInAt);
   const [actionError, setActionError] = useState<string | null>(null);
   const checkInStatusRef = useRef<HTMLParagraphElement>(null);
-
-  /*
-   * ±15분 연장 컨트롤의 지오메트리. DESIGN.md §4:
-   * compact(36px)는 데스크톱 격자 인접 컨텍스트 전용이고, "모바일의 같은 연장 컨트롤은
-   * Compact 가 아니라 Secondary(44px)를 쓴다 — 36px 는 터치 타깃 하한을 밑돈다".
-   * 이 다이얼로그는 데스크톱 격자뿐 아니라 모바일 주간 뷰에서도 열리므로 폭에 따라 바꾼다.
-   */
-  const isNarrow = useIsNarrow();
-  const extendVariant = isNarrow ? "secondary" : "compact-quiet";
 
   // 방금 이 창에서 체크인했다면 배지도 함께 내려간다 — booking 은 갱신되지 않는 스냅샷이다.
   const noShow = isNoShow({ ...booking, checkedInAt }, now, POLICY.checkInGraceMinutes);
@@ -2577,7 +2557,7 @@ function EventDetail({
             </div>
             <div className="mr-row">
               <ButtonWithReason
-                variant={extendVariant}
+                variant="compact-quiet"
                 onClick={handleShorten}
                 disabled={!canShortenNow || busyKind !== null}
                 reason={!canShortenNow ? "더 이상 줄일 수 없어요" : null}
@@ -2587,7 +2567,7 @@ function EventDetail({
               {/* -15분과 +15분은 한 쌍이므로 같은 무게로 둔다. 이 다이얼로그의
                   유일한 채움 버튼은 안전한 기본 동작인 "닫기" 하나다 (DESIGN.md §12-2). */}
               <ButtonWithReason
-                variant={extendVariant}
+                variant="compact-quiet"
                 onClick={handleExtend}
                 disabled={busyKind !== null}
                 reason={extendReason}

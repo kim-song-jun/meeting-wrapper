@@ -173,8 +173,10 @@
   --r-event-touch: 12px; /* [local] */
   --r-grid-event: var(--r-event-touch);
 
-  --h-action: 48px;         /* [toss] TDS large */
-  --h-action-compact: 48px; /* [toss] touch-safe base; fine pointer overrides to TDS medium */
+  --h-action: 48px;               /* [toss] TDS large */
+  --h-action-compact-fine: 36px;  /* [local] grid-adjacent fine-pointer action */
+  --h-action-compact-touch: 44px; /* [a11y] touch target floor */
+  --h-action-compact: var(--h-action-compact-touch);
   --h-input: 48px;          /* [toss] */
   --h-tab: 48px;            /* [local] 탭은 TDS 미문서 — 액션 높이에 맞춘다 */
   --h-badge: 24px;          /* [local] 14px 본문에 맞춘 값 */
@@ -257,14 +259,7 @@
     --t-grid-axis-lh: var(--t-axis-fine-lh);
     --r-grid-event: var(--r-event-fine);
     --h-toolbar: 36px;
-    --h-action-compact: 38px;
-  }
-}
-
-@media (hover: none), (pointer: coarse) {
-  :root {
-    --h-toolbar: 44px;
-    --h-action-compact: 48px;
+    --h-action-compact: var(--h-action-compact-fine);
   }
 }
 
@@ -278,7 +273,6 @@
 @media (max-width: 767px) {
   :root {
     --h-action: 56px;         /* [toss] TDS xlarge — 문서상 모바일 기본 사이즈 */
-    --h-action-compact: 48px; /* [toss] TDS large */
     --h-input: 56px;          /* [toss] */
     --h-tab: 56px;
     --h-toolbar: 44px;        /* [a11y] 좁은 화면 터치 타깃 하한 */
