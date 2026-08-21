@@ -70,6 +70,8 @@ describe("parseAppConfig", () => {
   test.each([
     ["VITE_ADAPTER", { VITE_ADAPTER: "mock" }],
     ["VITE_GOOGLE_CLIENT_ID", { VITE_GOOGLE_CLIENT_ID: "" }],
+    ["VITE_GOOGLE_CLIENT_ID", { VITE_GOOGLE_CLIENT_ID: ".apps.googleusercontent.com" }],
+    ["VITE_GOOGLE_CLIENT_ID", { VITE_GOOGLE_CLIENT_ID: " \t.apps.googleusercontent.com" }],
     ["VITE_GOOGLE_CLIENT_ID", { VITE_GOOGLE_CLIENT_ID: "client.example.com" }],
     ["VITE_ALLOWED_HD", { VITE_ALLOWED_HD: "example.com" }],
   ] as const)("rejects invalid production %s", (field, overrides) => {
@@ -95,6 +97,25 @@ describe("parseAppConfig", () => {
   });
 
   test.each([
+    ["id", { ...rooms[0]!, id: 1 }],
+    ["name", { ...rooms[0]!, name: null }],
+    ["email", { ...rooms[0]!, email: [] }],
+  ])("rejects malformed room %s without a native type error", (_field, malformedRoom) => {
+    expect(() => parseAppConfig({ rooms: [malformedRoom] as unknown as readonly Room[] })).toThrow(
+      "Invalid configuration: rooms",
+    );
+  });
+
+  test("reports malformed rooms as production configuration errors", () => {
+    expect(() =>
+      parseAppConfig({
+        commandEnv: productionEnv,
+        rooms: [{ ...rooms[0]!, id: null }] as unknown as readonly Room[],
+      }),
+    ).toThrow("Invalid production configuration: rooms");
+  });
+
+  test.each([
     ["non-integer values", { ...policy, slotMinutes: 30.5 }],
     ["non-positive durations", { ...policy, maxDurationMinutes: 0 }],
     ["reversed grid hours", { ...policy, gridStartHour: 20, gridEndHour: 20 }],
@@ -104,6 +125,19 @@ describe("parseAppConfig", () => {
     ["extension step not dividing slots", { ...policy, extendStepMinutes: 20 }],
   ])("rejects policy with %s", (_reason, invalidPolicy) => {
     expect(() => configuration({ policy: invalidPolicy })).toThrow("Invalid configuration: policy");
+  });
+
+  test.each([
+    ["missing admins", (() => {
+      const malformedPolicy = { ...policy } as Record<string, unknown>;
+      delete malformedPolicy.admins;
+      return malformedPolicy;
+    })()],
+    ["non-array admins", { ...policy, admins: "admin@molcube.com" }],
+  ])("rejects policy with %s without a native type error", (_reason, malformedPolicy) => {
+    expect(() => parseAppConfig({ policy: malformedPolicy as unknown as Policy })).toThrow(
+      "Invalid configuration: policy",
+    );
   });
 
   test("returns deeply frozen tracked configuration copies", () => {

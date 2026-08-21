@@ -44,6 +44,36 @@ function isNonEmptyString(value: string): boolean {
   return value.trim().length > 0;
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+function isRoomShape(value: unknown): value is Room {
+  return (
+    isRecord(value) &&
+    typeof value.id === "string" &&
+    typeof value.email === "string" &&
+    typeof value.name === "string" &&
+    typeof value.short === "string" &&
+    typeof value.floor === "string"
+  );
+}
+
+function isPolicyShape(value: unknown): value is Policy {
+  return (
+    isRecord(value) &&
+    typeof value.maxDurationMinutes === "number" &&
+    typeof value.maxAdvanceDays === "number" &&
+    typeof value.gridStartHour === "number" &&
+    typeof value.gridEndHour === "number" &&
+    typeof value.slotMinutes === "number" &&
+    typeof value.checkInGraceMinutes === "number" &&
+    typeof value.extendStepMinutes === "number" &&
+    Array.isArray(value.admins) &&
+    [...value.admins].every((admin) => typeof admin === "string")
+  );
+}
+
 function validateRooms(rooms: readonly Room[], deployment: Deployment): void {
   const ids = new Set<string>();
   const names = new Set<string>();
@@ -61,6 +91,12 @@ function validateRooms(rooms: readonly Room[], deployment: Deployment): void {
     ids.add(room.id);
     names.add(room.name);
     emails.add(room.email);
+  }
+}
+
+function validateRoomsShape(rooms: unknown, deployment: Deployment): asserts rooms is readonly Room[] {
+  if (!Array.isArray(rooms) || !Array.from(rooms).every(isRoomShape)) {
+    invalid(deployment, "rooms");
   }
 }
 
@@ -95,6 +131,21 @@ function validatePolicy(policy: Policy, deployment: Deployment): void {
   }
 }
 
+function validatePolicyShape(policy: unknown, deployment: Deployment): asserts policy is Policy {
+  if (!isPolicyShape(policy)) {
+    invalid(deployment, "policy");
+  }
+}
+
+function isValidGoogleClientId(googleClientId: string | null): boolean {
+  const suffix = ".apps.googleusercontent.com";
+  return (
+    typeof googleClientId === "string" &&
+    googleClientId.endsWith(suffix) &&
+    googleClientId.slice(0, -suffix.length).trim().length > 0
+  );
+}
+
 function freeze<T>(value: T): T {
   if (value !== null && typeof value === "object" && !Object.isFrozen(value)) {
     for (const child of Object.values(value)) {
@@ -123,15 +174,19 @@ export function parseAppConfig(input: ParseAppConfigInput = {}): AppConfig {
   if (deployment === "production" && adapter !== "google") {
     invalid(deployment, "VITE_ADAPTER");
   }
-  if (adapter === "google" && (!googleClientId || !googleClientId.endsWith(".apps.googleusercontent.com"))) {
+  if (adapter === "google" && !isValidGoogleClientId(googleClientId)) {
     invalid(deployment, "VITE_GOOGLE_CLIENT_ID");
   }
   if (deployment === "production" && allowedHostedDomain !== "molcube.com") {
     invalid(deployment, "VITE_ALLOWED_HD");
   }
 
-  const rooms = (input.rooms ?? roomsJson).map((room) => ({ ...room }));
-  const policySource = input.policy ?? policyJson;
+  const roomsSource: unknown = input.rooms === undefined ? roomsJson : input.rooms;
+  const policySource: unknown = input.policy === undefined ? policyJson : input.policy;
+  validateRoomsShape(roomsSource, deployment);
+  validatePolicyShape(policySource, deployment);
+
+  const rooms = roomsSource.map((room) => ({ ...room }));
   const policy: Policy = { ...policySource, admins: [...policySource.admins] };
   validateRooms(rooms, deployment);
   validatePolicy(policy, deployment);
