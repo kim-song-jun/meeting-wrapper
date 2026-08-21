@@ -32,4 +32,4 @@ The booking persistence boundary. `BookingRepository` is the stable UI contract;
 
 ## COVERAGE NOTE
 
-`mockAdapter.ts` has no direct tests despite serving every screen. Repository changes should add focused contract tests when they protect conflict, recurrence, cancellation, or ownership behavior.
+`src/data/mockAdapter.test.ts` is the existing focused repository contract test. Repository behavior changes must extend it for conflict, recurrence, cancellation, or ownership behavior.
