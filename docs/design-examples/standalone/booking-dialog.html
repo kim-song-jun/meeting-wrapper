@@ -37,10 +37,18 @@
   --grid-slot-fine: 24px;
   --grid-slot-touch: 44px;
   --grid-slot: var(--grid-slot-touch);
-  --event-font-size: 14px;
-  --event-line-height: 20px;
-  --axis-font-size: 13px;
-  --axis-line-height: 18px;
+  --event-font-size-fine: 12px;
+  --event-font-size-touch: 14px;
+  --event-line-height-fine: 14px;
+  --event-line-height-touch: 20px;
+  --axis-font-size-fine: 11px;
+  --axis-font-size-touch: 13px;
+  --axis-line-height-fine: 14px;
+  --axis-line-height-touch: 18px;
+  --event-font-size: var(--event-font-size-touch);
+  --event-line-height: var(--event-line-height-touch);
+  --axis-font-size: var(--axis-font-size-touch);
+  --axis-line-height: var(--axis-line-height-touch);
   --radius-event: var(--radius-event-touch);
   --sidebar: 240px;
   --font: "Pretendard Variable", Pretendard, -apple-system, BlinkMacSystemFont, "Noto Sans KR", "Apple SD Gothic Neo", system-ui, sans-serif;
@@ -319,7 +327,6 @@ svg {
 .button.compact {
   min-height: 36px;
   padding: 0 14px;
-  border-radius: var(--radius-action);
   font-size: 14px;
 }
 
@@ -605,7 +612,6 @@ svg {
   width: 100%;
   min-height: 56px;
   margin-top: 34px;
-  border-radius: 16px;
 }
 
 .auth-domain {
@@ -719,7 +725,6 @@ svg {
 .quick-book .button {
   width: 100%;
   min-height: 56px;
-  border-radius: 16px;
 }
 
 .section-label {
@@ -900,7 +905,6 @@ svg {
 .booking-actions .button {
   min-height: 42px;
   padding: 0 15px;
-  border-radius: 12px;
   font-size: 14px;
 }
 
@@ -927,7 +931,7 @@ svg {
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: 14px;
+  border-radius: var(--radius-nav-item);
   color: var(--body);
   text-decoration: none;
   font-size: 14px;
@@ -1027,7 +1031,7 @@ svg {
 
 .dialog-alert {
   padding: 12px 14px;
-  border-radius: var(--radius-input);
+  border-radius: var(--radius-card);
   background: var(--blue-weak);
   color: var(--blue-weak-fg);
   font-size: 13px;
@@ -1130,10 +1134,10 @@ svg {
 @media (min-width: 768px) and (hover: hover) and (pointer: fine) {
   :root {
     --grid-slot: var(--grid-slot-fine);
-    --event-font-size: 12px;
-    --event-line-height: 14px;
-    --axis-font-size: 11px;
-    --axis-line-height: 14px;
+    --event-font-size: var(--event-font-size-fine);
+    --event-line-height: var(--event-line-height-fine);
+    --axis-font-size: var(--axis-font-size-fine);
+    --axis-line-height: var(--axis-line-height-fine);
     --radius-event: var(--radius-event-fine);
   }
 }
@@ -1197,7 +1201,7 @@ svg {
     display: flex;
     align-items: center;
     justify-content: center;
-    border-radius: 14px;
+    border-radius: var(--radius-nav-item);
     color: var(--body);
     text-decoration: none;
     font-size: 14px;

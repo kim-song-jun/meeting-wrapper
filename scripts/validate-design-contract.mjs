@@ -183,6 +183,8 @@ function extractFunctionBody(source, name) {
   return extractBalancedBlock(source.slice(signature.start + signature.text.length), "");
 }
 
+const finePointerQuery = "@media (min-width: 768px) and (hover: hover) and (pointer: fine)";
+
 const activeMappings = [
   ["--grid-slot-block-size", "--grid-slot-fine", "--grid-slot-touch"],
   ["--grid-week-single-column-min", "--grid-week-single-fine-min", "--grid-week-single-touch-min"],
@@ -193,22 +195,118 @@ const activeMappings = [
   ["--r-grid-event", "--r-event-fine", "--r-event-touch"],
 ];
 
-function gridRuntimeContractFailures(tokens, screen) {
+function exactScopedRoot(tokens, contexts) {
+  return extractCssRules(tokens).filter((rule) =>
+    rule.selectors.length === 1 && rule.selectors[0] === ":root" &&
+    rule.contexts.length === contexts.length && rule.contexts.every((context, index) => context === contexts[index]),
+  );
+}
+
+function uniqueScopedDeclarationFailure(source, relativePath, property, expectedValue, contexts) {
+  const rules = extractCssRules(source);
+  const allDeclarations = rules.flatMap((rule) => declarations(rule)
+    .filter(([candidate]) => candidate === property));
+  const scopedRoots = exactScopedRoot(source, contexts);
+  const scopedDeclarations = scopedRoots.flatMap((rule) => declarations(rule)
+    .filter(([candidate]) => candidate === property));
+  const scopeLabel = contexts.length === 0 ? "top-level :root" : "exact fine-pointer :root";
+  if (allDeclarations.length !== 1 || scopedRoots.length !== 1 || scopedDeclarations.length !== 1 ||
+    scopedDeclarations[0][1] !== expectedValue) {
+    return `${relativePath}: ${property} must be declared exactly once as ${expectedValue} in ${scopeLabel}`;
+  }
+  return null;
+}
+
+function activeMappingFailures(source, relativePath, active, fine, touch) {
+  const rules = extractCssRules(source);
+  const allDeclarations = rules.flatMap((rule) => declarations(rule)
+    .filter(([candidate]) => candidate === active));
+  const baseRoots = exactScopedRoot(source, []);
+  const fineRoots = exactScopedRoot(source, [finePointerQuery]);
+  const baseDeclarations = baseRoots.flatMap((rule) => declarations(rule)
+    .filter(([candidate]) => candidate === active));
+  const fineDeclarations = fineRoots.flatMap((rule) => declarations(rule)
+    .filter(([candidate]) => candidate === active));
+  const mappingFailures = [];
+  if (baseRoots.length !== 1 || baseDeclarations.length !== 1 || baseDeclarations[0][1] !== `var(${touch})`) {
+    mappingFailures.push(`${relativePath}: ${active} must have exactly one base active mapping as var(${touch})`);
+  }
+  if (fineRoots.length !== 1 || fineDeclarations.length !== 1 || fineDeclarations[0][1] !== `var(${fine})`) {
+    mappingFailures.push(`${relativePath}: ${active} must have exactly one fine active mapping as var(${fine})`);
+  }
+  if (allDeclarations.length !== 2) {
+    mappingFailures.push(`${relativePath}: ${active} must have no active declarations outside the top-level and exact fine-pointer :root`);
+  }
+  return mappingFailures;
+}
+
+const runtimeSourceDeclarations = [
+  ["--grid-slot-fine", "24px"], ["--grid-slot-touch", "44px"],
+  ["--grid-week-single-fine-min", "132px"], ["--grid-week-single-touch-min", "108px"],
+  ["--t-grid-fine-size", "12px"], ["--t-grid-fine-lh", "14px"],
+  ["--t-grid-touch-size", "14px"], ["--t-grid-touch-lh", "20px"],
+  ["--t-axis-fine-size", "11px"], ["--t-axis-fine-lh", "14px"],
+  ["--t-axis-touch-size", "13px"], ["--t-axis-touch-lh", "18px"],
+  ["--r-event-fine", "4px"], ["--r-event-touch", "12px"],
+];
+
+function gridRuntimeContractFailures(tokens, screen, gridCss, componentCss) {
   const contractFailures = [];
-  const fineRoot = extractBalancedBlock(tokens, "@media (min-width: 768px) and (hover: hover) and (pointer: fine)");
-  if (!fineRoot) {
+  const baseRoots = exactScopedRoot(tokens, []);
+  const fineRoots = exactScopedRoot(tokens, [finePointerQuery]);
+  if (fineRoots.length !== 1) {
     contractFailures.push("src/styles/tokens.css: missing exact fine-pointer query");
-  } else {
-    for (const [active, fine] of activeMappings) {
-      if (!new RegExp(`${active}: var\\(${fine}\\);`).test(fineRoot)) {
-        contractFailures.push(`src/styles/tokens.css: missing fine active mapping for ${active}`);
+  }
+  for (const [active, fine, touch] of activeMappings) {
+    contractFailures.push(...activeMappingFailures(tokens, "src/styles/tokens.css", active, fine, touch));
+  }
+  for (const [token, value] of runtimeSourceDeclarations) {
+    const failure = uniqueScopedDeclarationFailure(tokens, "src/styles/tokens.css", token, value, []);
+    if (failure) contractFailures.push(failure);
+  }
+
+  const compactSources = [
+    ["--h-action-compact-fine", "36px", "[local]"],
+    ["--h-action-compact-touch", "44px", "[a11y]"],
+  ];
+  for (const [token, value, evidence] of compactSources) {
+    const declarationsForToken = extractCssRules(tokens).flatMap((rule) => declarations(rule)
+      .filter(([property]) => property === token));
+    const baseDeclaration = baseRoots.length === 1
+      ? declarations(baseRoots[0]).filter(([property, actual]) => property === token && actual === value)
+      : [];
+    if (declarationsForToken.length !== 1 || baseDeclaration.length !== 1 ||
+      !new RegExp(`${token}: ${value};[^\\n]*${evidence.replace(/[\\[\\]]/g, "\\$&")}`).test(tokens)) {
+      contractFailures.push(`src/styles/tokens.css: ${token} must be the unique base ${value} source with ${evidence}`);
+    }
+  }
+  contractFailures.push(...activeMappingFailures(
+    tokens,
+    "src/styles/tokens.css",
+    "--h-action-compact",
+    "--h-action-compact-fine",
+    "--h-action-compact-touch",
+  ));
+  for (const rule of extractCssRules(tokens)) {
+    for (const [property, value] of declarations(rule)) {
+      if (property !== "--h-action-compact") continue;
+      const isBase = rule.contexts.length === 0 && value === "var(--h-action-compact-touch)";
+      const isFine = rule.contexts.length === 1 && rule.contexts[0] === finePointerQuery && value === "var(--h-action-compact-fine)";
+      if (!isBase && !isFine) {
+        contractFailures.push("src/styles/tokens.css: --h-action-compact may only map touch default and exact fine-pointer values");
       }
     }
   }
-  for (const [active, , touch] of activeMappings) {
-    if (!new RegExp(`${active}: var\\(${touch}\\);`).test(tokens)) {
-      contractFailures.push(`src/styles/tokens.css: missing touch-safe active mapping for ${active}`);
-    }
+  const compactConsumers = [
+    ["src/styles/components.css", componentCss],
+    ["src/styles/grid.css", gridCss],
+  ].flatMap(([path, source]) => extractCssRules(source).flatMap((rule) => declarations(rule)
+    .filter(([, value]) => value.includes("var(--h-action-compact)"))
+    .map(([property]) => ({ path, selector: rule.selectors.join(", "), contexts: rule.contexts, property }))));
+  if (compactConsumers.length !== 1 || compactConsumers[0].path !== "src/styles/components.css" ||
+    compactConsumers[0].selector !== ".mr-btn--compact" || compactConsumers[0].property !== "height" ||
+    compactConsumers[0].contexts.length !== 0) {
+    contractFailures.push("Compact consumer isolation: --h-action-compact is limited to base .mr-btn--compact height");
   }
   if (!/minmax\(var\(--grid-day-column-min\), 1fr\)/.test(screen)) {
     contractFailures.push("src/screens/GridScreen.tsx: missing day column token");
@@ -226,9 +324,12 @@ function gridRuntimeContractFailures(tokens, screen) {
   if (eventCalls.length !== 2 || eventCalls.some((call) => !/roomName=\{room\.name\}/.test(call))) {
     contractFailures.push("src/screens/GridScreen.tsx: every GridEventBlock caller must pass roomName");
   }
+  if (eventCalls.filter((call) => /timeLineFitsInline=\{true\}/.test(call)).length !== 1) {
+    contractFailures.push("src/screens/GridScreen.tsx: day GridEventBlock caller must pass width-fit true");
+  }
   const eventBlock = extractFunctionBody(screen, "GridEventBlock");
-  if (!eventBlock?.includes("eventContentMode(placement.height)")) {
-    contractFailures.push("src/screens/GridScreen.tsx: GridEventBlock must invoke eventContentMode(placement.height)");
+  if (!eventBlock?.includes("eventContentMode(placement.height, timeLineFitsInline)")) {
+    contractFailures.push("src/screens/GridScreen.tsx: GridEventBlock must invoke eventContentMode with width-fit input");
   }
   const contentBranches = extractContentModeBranches(eventBlock ?? "");
   if (!contentBranches) {
@@ -247,12 +348,32 @@ function gridRuntimeContractFailures(tokens, screen) {
   if (!/const accessibleLabel = `\$\{booking\.organizerName\}, \$\{roomName\}, \$\{hhmm\(booking\.start\)\}~\$\{hhmm\(booking\.end\)\}\$\{noShow \? ", 미체크인" : ""\}`;/.test(eventBlock ?? "")) {
     contractFailures.push("src/screens/GridScreen.tsx: missing complete grid event accessible label");
   }
+  const weekView = extractFunctionBody(screen, "WeekView");
+  if (!/timeLineFitsInline=\{!split\}/.test(weekView ?? "")) {
+    contractFailures.push("src/screens/GridScreen.tsx: split WeekView must pass width-fit false to GridEventBlock");
+  }
+  const eventDetail = extractFunctionBody(screen, "EventDetail") ?? "";
+  if (eventDetail.includes("useIsNarrow") || eventDetail.includes("extendVariant") ||
+    !/<ButtonWithReason\b[\s\S]*?variant="compact-quiet"[\s\S]*?onClick=\{handleShorten\}/.test(eventDetail) ||
+    !/<ButtonWithReason\b[\s\S]*?variant="compact-quiet"[\s\S]*?onClick=\{handleExtend\}/.test(eventDetail)) {
+    contractFailures.push("src/screens/GridScreen.tsx: EventDetail extend controls must always use compact-quiet");
+  }
+  const splitTimeSuppressions = extractCssRules(gridCss).filter((rule) =>
+    rule.selectors.includes(".grid-week--split .grid-event__time") &&
+    declarations(rule).some(([property, value]) => property === "display" && value === "none"),
+  );
+  if (splitTimeSuppressions.length > 0) {
+    contractFailures.push("src/styles/grid.css: split week must not suppress event time with CSS");
+  }
   return contractFailures;
 }
 
 const gridTokens = read("src/styles/tokens.css");
 const gridScreen = read("src/screens/GridScreen.tsx");
-failures.push(...gridRuntimeContractFailures(gridTokens, gridScreen));
+const gridCss = read("src/styles/grid.css");
+const componentCss = read("src/styles/components.css");
+const gridBaselineFailures = gridRuntimeContractFailures(gridTokens, gridScreen, gridCss, componentCss);
+failures.push(...gridBaselineFailures);
 const actualEventPlacement = extractCalls(gridScreen, "placeInGrid").find((call) =>
   /\bclippedStart\s*,[\s\S]*?\bclippedEnd\s*,/.test(call.text),
 );
@@ -264,15 +385,21 @@ const mutations = [
     actualEventPlacement
       ? gridScreen.replace(actualEventPlacement.text, actualEventPlacement.text.replace("slotPx", "slotPixels"))
       : gridScreen,
+    gridCss,
+    componentCss,
+    "src/screens/GridScreen.tsx: day and week event placeInGrid calls must each use slotPx",
   ],
-  ["event line-height mapping", gridTokens.replace("--t-grid-event-lh: var(--t-grid-touch-lh);", "--t-grid-event-lh: var(--t-grid-touch-line-height);"), gridScreen],
-  ["content-mode helper", gridTokens, gridScreen.replace("eventContentMode(placement.height)", "eventContentMode(placement.slots)")],
+  ["event line-height mapping", gridTokens.replace("--t-grid-event-lh: var(--t-grid-touch-lh);", "--t-grid-event-lh: var(--t-grid-touch-line-height);"), gridScreen, gridCss, componentCss, "src/styles/tokens.css: --t-grid-event-lh must have exactly one base active mapping as var(--t-grid-touch-lh)"],
+  ["content-mode helper", gridTokens, gridScreen.replace("eventContentMode(placement.height, timeLineFitsInline)", "eventContentMode(placement.slots, timeLineFitsInline)"), gridCss, componentCss, "src/screens/GridScreen.tsx: GridEventBlock must invoke eventContentMode with width-fit input"],
   [
     "compact organizer name",
     gridTokens,
     actualContentBranches
       ? gridScreen.replace(actualContentBranches.compact.text, actualContentBranches.compact.text.replace("grid-event__name", "grid-event__organizer"))
       : gridScreen,
+    gridCss,
+    componentCss,
+    "src/screens/GridScreen.tsx: compact event branch must render organizer name",
   ],
   [
     "compact time insertion",
@@ -280,18 +407,66 @@ const mutations = [
     actualContentBranches
       ? gridScreen.replace(actualContentBranches.compact.text, actualContentBranches.compact.text.replace("</div>", '<span className="grid-event__time" /></div>'))
       : gridScreen,
+    gridCss,
+    componentCss,
+    "src/screens/GridScreen.tsx: compact event branch must not render time",
+  ],
+  [
+    "base active mapping duplicate",
+    gridTokens.replace(
+      "--t-grid-event-size: var(--t-grid-touch-size);",
+      "--t-grid-event-size: var(--t-grid-touch-size);\n  --t-grid-event-size: 99px;",
+    ),
+    gridScreen,
+    gridCss,
+    componentCss,
+    "src/styles/tokens.css: --t-grid-event-size must have exactly one base active mapping as var(--t-grid-touch-size)",
+  ],
+  [
+    "fine active mapping duplicate",
+    gridTokens.replace(
+      "--t-grid-event-size: var(--t-grid-fine-size);",
+      "--t-grid-event-size: var(--t-grid-fine-size);\n    --t-grid-event-size: 99px;",
+    ),
+    gridScreen,
+    gridCss,
+    componentCss,
+    "src/styles/tokens.css: --t-grid-event-size must have exactly one fine active mapping as var(--t-grid-fine-size)",
+  ],
+  [
+    "fine source wrong context",
+    `${gridTokens}\n@media (max-width: 767px) { :root { --t-grid-fine-size: 12px; } }\n`,
+    gridScreen,
+    gridCss,
+    componentCss,
+    "src/styles/tokens.css: --t-grid-fine-size must be declared exactly once as 12px in top-level :root",
   ],
 ];
-for (const [label, tokens, screen] of mutations) {
-  if (tokens === gridTokens && screen === gridScreen) {
-    failures.push(`validator negative mutation did not change source: ${label}`);
-    continue;
+if (gridBaselineFailures.length === 0) {
+  for (const [label, tokens, screen, mutatedGridCss, mutatedComponentCss, expectedFailure] of mutations) {
+    if (tokens === gridTokens && screen === gridScreen && mutatedGridCss === gridCss && mutatedComponentCss === componentCss) {
+      failures.push(`validator negative mutation did not change source: ${label}`);
+      continue;
+    }
+    const mutationFailures = gridRuntimeContractFailures(tokens, screen, mutatedGridCss, mutatedComponentCss);
+    if (!mutationFailures.includes(expectedFailure)) {
+      failures.push(`validator negative mutation did not produce its target failure: ${label}`);
+    }
   }
-  if (gridRuntimeContractFailures(tokens, screen).length === 0) {
-    failures.push(`validator negative mutation did not fail: ${label}`);
+  const unrelatedGridFailureTokens = gridTokens.replace(
+    "--grid-slot-block-size: var(--grid-slot-touch);",
+    "--grid-slot-block-size: var(--grid-slot-not-a-token);",
+  );
+  if (unrelatedGridFailureTokens === gridTokens) {
+    failures.push("validator grid cascade sentinel did not change source");
+  } else {
+    const sentinelFailures = gridRuntimeContractFailures(unrelatedGridFailureTokens, gridScreen, gridCss, componentCss);
+    const targetFailure = "src/styles/tokens.css: --t-grid-event-lh must have exactly one base active mapping as var(--t-grid-touch-lh)";
+    if (sentinelFailures.length === 0 || sentinelFailures.includes(targetFailure)) {
+      failures.push("validator grid cascade sentinel let an unrelated baseline failure satisfy the event line-height target");
+    }
   }
 }
-forbidPattern(["src/styles/grid.css"], /\.grid-week--split \.grid-event__time\s*\{\s*display:\s*none;\s*\}/g);
 
 const styleFiles = readdirSync(join(root, "src/styles"), { withFileTypes: true })
   .filter((entry) => entry.isFile() && entry.name.endsWith(".css"))
@@ -730,6 +905,151 @@ requireText("docs/design-examples/examples.css", [
   "--radius-event-touch: 12px;",
   "--color-now: #4E5968;",
 ]);
+
+function canonicalExampleContractFailures(source) {
+  const contractFailures = [];
+  const rules = extractCssRules(source);
+  const mappings = [
+    ["--grid-slot", "--grid-slot-fine", "--grid-slot-touch"],
+    ["--event-font-size", "--event-font-size-fine", "--event-font-size-touch"],
+    ["--event-line-height", "--event-line-height-fine", "--event-line-height-touch"],
+    ["--axis-font-size", "--axis-font-size-fine", "--axis-font-size-touch"],
+    ["--axis-line-height", "--axis-line-height-fine", "--axis-line-height-touch"],
+    ["--radius-event", "--radius-event-fine", "--radius-event-touch"],
+  ];
+  for (const [active, fine, touch] of mappings) {
+    contractFailures.push(...activeMappingFailures(
+      source,
+      "docs/design-examples/examples.css",
+      active,
+      fine,
+      touch,
+    ));
+  }
+  for (const [token, value] of [
+    ["--grid-slot-fine", "24px"], ["--grid-slot-touch", "44px"],
+    ["--radius-event-fine", "4px"], ["--radius-event-touch", "12px"],
+    ["--event-font-size-fine", "12px"], ["--event-font-size-touch", "14px"],
+    ["--event-line-height-fine", "14px"], ["--event-line-height-touch", "20px"],
+    ["--axis-font-size-fine", "11px"], ["--axis-font-size-touch", "13px"],
+    ["--axis-line-height-fine", "14px"], ["--axis-line-height-touch", "18px"],
+  ]) {
+    const failure = uniqueScopedDeclarationFailure(
+      source,
+      "docs/design-examples/examples.css",
+      token,
+      value,
+      [],
+    );
+    if (failure) contractFailures.push(failure);
+  }
+  const exactRadius = (selector, contexts, token) => {
+    const matchingRules = rules.filter((rule) => rule.selectors.includes(selector) &&
+      rule.contexts.length === contexts.length && rule.contexts.every((context, index) => context === contexts[index]));
+    const radiusValues = matchingRules.flatMap((rule) => radiusDeclarations(rule));
+    if (matchingRules.length !== 1 || radiusValues.length !== 1 || radiusValues[0] !== `var(${token})`) {
+      contractFailures.push(`docs/design-examples/examples.css: ${selector} must use exactly ${token} in ${contexts.join(" > ") || "base"}`);
+    }
+  };
+  exactRadius(".button", [], "--radius-action");
+  exactRadius(".button", ["@media (max-width: 767px)"], "--radius-action-mobile");
+  exactRadius(".bottom-nav a", [], "--radius-nav-item");
+  exactRadius(".mobile-bottom-nav a", ["@media (max-width: 767px)"], "--radius-nav-item");
+  exactRadius(".dialog-alert", [], "--radius-card");
+  for (const selector of [".auth-panel .button", ".quick-book .button", ".booking-actions .button", ".button.compact"]) {
+    const overrides = rules.filter((rule) => rule.selectors.includes(selector))
+      .flatMap((rule) => radiusDeclarations(rule));
+    if (overrides.length > 0) {
+      contractFailures.push(`docs/design-examples/examples.css: ${selector} must inherit the shared action role instead of overriding radius`);
+    }
+  }
+  const exactProperty = (selector, property, value) => {
+    const matchingRules = rules.filter((rule) => rule.selectors.includes(selector) && rule.contexts.length === 0);
+    const values = matchingRules.flatMap((rule) => declarations(rule)
+      .filter(([actualProperty]) => actualProperty === property)
+      .map(([, actualValue]) => actualValue));
+    if (matchingRules.length !== 1 || values.length !== 1 || values[0] !== value) {
+      contractFailures.push(`docs/design-examples/examples.css: ${selector} must consume ${value} for ${property}`);
+    }
+  };
+  exactProperty(".event", "border-radius", "var(--radius-event)");
+  exactProperty(".event", "font-size", "var(--event-font-size)");
+  exactProperty(".event", "line-height", "var(--event-line-height)");
+  exactProperty(".time-label", "font-size", "var(--axis-font-size)");
+  exactProperty(".time-label", "line-height", "var(--axis-line-height)");
+  return contractFailures;
+}
+
+const canonicalExampleSource = read("docs/design-examples/examples.css");
+const canonicalBaselineFailures = canonicalExampleContractFailures(canonicalExampleSource);
+failures.push(...canonicalBaselineFailures);
+const canonicalNegativeMutations = [
+  [
+    "canonical event fine source duplicate",
+    canonicalExampleSource.replace(
+      "--event-font-size-fine: 12px;",
+      "--event-font-size-fine: 12px;\n  --event-font-size-fine: 99px;",
+    ),
+    "docs/design-examples/examples.css: --event-font-size-fine must be declared exactly once as 12px in top-level :root",
+  ],
+  [
+    "canonical base active mapping duplicate",
+    canonicalExampleSource.replace(
+      "--event-font-size: var(--event-font-size-touch);",
+      "--event-font-size: var(--event-font-size-touch);\n  --event-font-size: 99px;",
+    ),
+    "docs/design-examples/examples.css: --event-font-size must have exactly one base active mapping as var(--event-font-size-touch)",
+  ],
+  [
+    "canonical source wrong context",
+    `${canonicalExampleSource}\n@media (max-width: 767px) { :root { --event-font-size-fine: 12px; } }\n`,
+    "docs/design-examples/examples.css: --event-font-size-fine must be declared exactly once as 12px in top-level :root",
+  ],
+  [
+    "compact action radius bypass",
+    `${canonicalExampleSource}\n.button.compact { border-radius: var(--radius-action); }\n`,
+    "docs/design-examples/examples.css: .button.compact must inherit the shared action role instead of overriding radius",
+  ],
+  ...[
+    ["--grid-slot-fine", "24px"], ["--grid-slot-touch", "44px"],
+    ["--radius-event-fine", "4px"], ["--radius-event-touch", "12px"],
+  ].flatMap(([token, value]) => [
+    [
+      `canonical ${token} source duplicate`,
+      canonicalExampleSource.replace(`${token}: ${value};`, `${token}: ${value};\n  ${token}: 99px;`),
+      `docs/design-examples/examples.css: ${token} must be declared exactly once as ${value} in top-level :root`,
+    ],
+    [
+      `canonical ${token} source wrong context`,
+      `${canonicalExampleSource}\n@media (max-width: 767px) { :root { ${token}: ${value}; } }\n`,
+      `docs/design-examples/examples.css: ${token} must be declared exactly once as ${value} in top-level :root`,
+    ],
+  ]),
+];
+if (canonicalBaselineFailures.length === 0) {
+  for (const [label, mutatedSource, expectedFailure] of canonicalNegativeMutations) {
+    if (mutatedSource === canonicalExampleSource) {
+      failures.push(`validator canonical negative mutation did not change source: ${label}`);
+      continue;
+    }
+    if (!canonicalExampleContractFailures(mutatedSource).includes(expectedFailure)) {
+      failures.push(`validator canonical negative mutation did not produce its target failure: ${label}`);
+    }
+  }
+  const unrelatedCanonicalFailureSource = canonicalExampleSource.replace(
+    "--grid-slot: var(--grid-slot-touch);",
+    "--grid-slot: var(--grid-slot-not-a-token);",
+  );
+  const targetFailure = "docs/design-examples/examples.css: --event-font-size-fine must be declared exactly once as 12px in top-level :root";
+  if (unrelatedCanonicalFailureSource === canonicalExampleSource) {
+    failures.push("validator canonical cascade sentinel did not change source");
+  } else {
+    const sentinelFailures = canonicalExampleContractFailures(unrelatedCanonicalFailureSource);
+    if (sentinelFailures.length === 0 || sentinelFailures.includes(targetFailure)) {
+      failures.push("validator canonical cascade sentinel let an unrelated baseline failure satisfy the event font source target");
+    }
+  }
+}
 
 if (failures.length > 0) {
   console.error(failures.join("\n"));
