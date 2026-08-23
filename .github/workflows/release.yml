@@ -1,0 +1,945 @@
+name: Plan or execute production release
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: Release the current main SHA or roll back to an existing annotated release tag
+        required: true
+        type: choice
+        options:
+          - release
+          - rollback
+      version:
+        description: Semantic version without the v prefix
+        required: true
+        type: string
+      target_sha:
+        description: Exact 40-character commit SHA to promote or restore
+        required: true
+        type: string
+      security_gate_run_id:
+        description: Successful security-gate workflow run ID (required for release mode)
+        required: false
+        type: string
+      execute_cutover:
+        description: Keep false for the credential-free Wave 3 plan; true enables the protected Wave 4 mutation path
+        required: true
+        default: false
+        type: boolean
+      confirmation:
+        description: PLAN, PROMOTE <target_sha>, or ROLLBACK <target_sha>
+        required: true
+        type: string
+
+permissions:
+  actions: read
+  contents: write
+  id-token: write
+
+concurrency:
+  group: molroom-production-cutover
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: ${{ inputs.execute_cutover && 'Execute' || 'Plan' }} ${{ inputs.mode }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    environment: production
+    env:
+      AWS_REGION: us-east-1
+      DOMAIN_NAME: molroom.molcube.com
+      STACK_NAME: molroom-production
+      TARGET_SHA: ${{ inputs.target_sha }}
+      VERSION: ${{ inputs.version }}
+
+    steps:
+      - name: Checkout exact target without persisted credentials
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+          persist-credentials: false
+          ref: ${{ inputs.mode == 'release' && inputs.target_sha || 'main' }}
+
+      - name: Set up pinned Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version-file: .node-version
+          cache: npm
+
+      - name: Validate dispatch identity and explicit confirmation
+        id: dispatch
+        env:
+          CONFIRMATION: ${{ inputs.confirmation }}
+          EXECUTE_CUTOVER: ${{ inputs.execute_cutover }}
+          GH_TOKEN: ${{ github.token }}
+          MODE: ${{ inputs.mode }}
+          SECURITY_GATE_RUN_ID: ${{ inputs.security_gate_run_id }}
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REPOSITORY" = "kim-song-jun/meeting-wrapper"
+          test "${#TARGET_SHA}" -eq 40
+          case "$TARGET_SHA" in *[!0-9a-f]*) exit 1;; esac
+          node --input-type=module -e '
+            const value = process.env.VERSION;
+            if (!/^(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)(?:-(?:(?:0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*)(?:\.(?:0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*))*))?(?:\+(?:[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?$/.test(value)) process.exit(1);
+          '
+          if [ "$EXECUTE_CUTOVER" = "true" ]; then
+            expected="$(printf '%s %s' "$( [ "$MODE" = release ] && printf PROMOTE || printf ROLLBACK )" "$TARGET_SHA")"
+          else
+            expected=PLAN
+          fi
+          test "$CONFIRMATION" = "$expected"
+
+          if [ "$MODE" = release ]; then
+            git fetch origin main --quiet
+            test "$(git rev-parse origin/main)" = "$TARGET_SHA"
+            case "$SECURITY_GATE_RUN_ID" in ''|*[!0-9]*) exit 1;; esac
+            test "$SECURITY_GATE_RUN_ID" -gt 0
+            test "$(node -p 'require("./package.json").version')" = "$VERSION"
+            git fetch --force --tags origin
+            if git show-ref --verify --quiet "refs/tags/v$VERSION"; then
+              test "$(git cat-file -t "refs/tags/v$VERSION")" = tag
+              test "$(git rev-parse "refs/tags/v$VERSION^{}")" = "$TARGET_SHA"
+              echo "repair_only=true" >> "$GITHUB_OUTPUT"
+            else
+              if gh release view "v$VERSION" >/dev/null 2>&1; then
+                echo "a GitHub Release exists without the required local annotated tag" >&2
+                exit 1
+              fi
+              echo "repair_only=false" >> "$GITHUB_OUTPUT"
+            fi
+          else
+            git fetch --force --tags origin
+            test "$(git cat-file -t "refs/tags/v$VERSION")" = tag
+            test "$(git rev-parse "refs/tags/v$VERSION^{}")" = "$TARGET_SHA"
+            echo "repair_only=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Pin npm
+        if: inputs.mode == 'release' && steps.dispatch.outputs.repair_only != 'true'
+        run: npm install --global npm@11.17.0
+
+      - name: Verify toolchain
+        if: inputs.mode == 'release' && steps.dispatch.outputs.repair_only != 'true'
+        run: npm run verify:toolchain
+
+      - name: Install exact dependencies
+        if: inputs.mode == 'release' && steps.dispatch.outputs.repair_only != 'true'
+        run: npm ci
+
+      - name: Verify security gate evidence
+        if: inputs.mode == 'release' && !inputs.execute_cutover && steps.dispatch.outputs.repair_only != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SECURITY_GATE_RUN_ID: ${{ inputs.security_gate_run_id }}
+        run: |
+          set -euo pipefail
+          run_json="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$SECURITY_GATE_RUN_ID")"
+          RUN_JSON="$run_json" node --input-type=module <<'NODE'
+          const run = JSON.parse(process.env.RUN_JSON);
+          if (
+            run.repository?.full_name !== process.env.GITHUB_REPOSITORY ||
+            run.path !== ".github/workflows/security-gate.yml" ||
+            run.event !== "workflow_dispatch" ||
+            run.status !== "completed" ||
+            run.conclusion !== "success" ||
+            run.head_sha !== process.env.TARGET_SHA
+          ) {
+            throw new Error("security gate run is not a successful exact-SHA run in this repository");
+          }
+          NODE
+          mkdir -p .security-gate
+          gh run download "$SECURITY_GATE_RUN_ID" \
+            --name "security-gate-$TARGET_SHA" \
+            --dir .security-gate
+          test -f .security-gate/_security-gate.json
+          node --input-type=module <<'NODE'
+          import { readFile } from "node:fs/promises";
+          import { validateSecurityGateEvidence } from "./scripts/lib/release-manifest.mjs";
+          const evidence = JSON.parse(await readFile(".security-gate/_security-gate.json", "utf8"));
+          validateSecurityGateEvidence(evidence, process.env.TARGET_SHA);
+          NODE
+
+      - name: Rebuild and verify production candidate
+        if: inputs.mode == 'release' && steps.dispatch.outputs.repair_only != 'true'
+        env:
+          VITE_DEPLOYMENT: ${{ vars.VITE_DEPLOYMENT }}
+          VITE_ADAPTER: ${{ vars.VITE_ADAPTER }}
+          VITE_GOOGLE_CLIENT_ID: ${{ vars.VITE_GOOGLE_CLIENT_ID }}
+          VITE_ALLOWED_HD: ${{ vars.VITE_ALLOWED_HD }}
+        run: |
+          set -euo pipefail
+          test "$VITE_DEPLOYMENT" = production
+          test "$VITE_ADAPTER" = google
+          test "$VITE_ALLOWED_HD" = molcube.com
+          case "$VITE_GOOGLE_CLIENT_ID" in
+            *.apps.googleusercontent.com) ;;
+            *) exit 1 ;;
+          esac
+          node scripts/build-design-standalone.mjs
+          git diff --exit-code -- docs/design-examples/standalone
+          test -z "$(git ls-files --others --exclude-standard -- docs/design-examples/standalone)"
+          node scripts/validate-design-examples.mjs
+          npm run typecheck
+          npm test
+          npm run build
+          npm run scan:production-bundle
+
+      - name: Verify production runtime gates
+        env:
+          EXECUTE_CUTOVER: ${{ inputs.execute_cutover }}
+          MODE: ${{ inputs.mode }}
+          PRODUCTION_RELEASES_ENABLED: ${{ vars.PRODUCTION_RELEASES_ENABLED }}
+          PRODUCTION_RUNTIME_GATE_SHA: ${{ vars.PRODUCTION_RUNTIME_GATE_SHA }}
+        run: |
+          set -euo pipefail
+          if [ "$EXECUTE_CUTOVER" = "true" ] && [ "$MODE" = release ]; then
+            test "$PRODUCTION_RELEASES_ENABLED" = true
+            test "$PRODUCTION_RUNTIME_GATE_SHA" = "$TARGET_SHA"
+          fi
+
+      - name: Configure short-lived AWS credentials through GitHub OIDC
+        if: inputs.execute_cutover
+        uses: aws-actions/configure-aws-credentials@e6de054238d6b7531b4efff3b6587d9aade6a06c # v6.2.3
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          role-session-name: molroom-${{ github.run_id }}-${{ github.run_attempt }}
+          aws-region: us-east-1
+          allowed-account-ids: ${{ vars.AWS_ACCOUNT_ID }}
+          mask-aws-account-id: true
+
+      - name: Verify AWS identity and deployment prerequisites
+        if: inputs.execute_cutover
+        env:
+          AWS_ACCOUNT_ID: ${{ vars.AWS_ACCOUNT_ID }}
+          AWS_DEPLOY_ROLE_ARN: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          CLOUDFORMATION_ROLE_ARN: ${{ vars.AWS_CLOUDFORMATION_ROLE_ARN }}
+          HOSTED_ZONE_ID: ${{ vars.HOSTED_ZONE_ID }}
+        run: |
+          set -euo pipefail
+          test "$AWS_DEPLOY_ROLE_ARN" = "arn:aws:iam::$AWS_ACCOUNT_ID:role/molroom-github-deploy"
+          test "$CLOUDFORMATION_ROLE_ARN" = "arn:aws:iam::$AWS_ACCOUNT_ID:role/molroom-cloudformation-execution"
+          case "$HOSTED_ZONE_ID" in Z[0-9A-Z]*) ;; *) exit 1;; esac
+          caller_arn="$(aws sts get-caller-identity --query Arn --output text)"
+          test "$(aws sts get-caller-identity --query Account --output text)" = "$AWS_ACCOUNT_ID"
+          case "$caller_arn" in
+            "arn:aws:sts::$AWS_ACCOUNT_ID:assumed-role/molroom-github-deploy/"*) ;;
+            *) echo "unexpected AWS caller role" >&2; exit 1;;
+          esac
+          aws route53 get-hosted-zone --id "$HOSTED_ZONE_ID" >/dev/null
+          aws cloudformation validate-template \
+            --template-body file://infra/aws/molroom-production.yml >/dev/null
+
+      - name: Resolve authoritative security gate evidence
+        if: inputs.execute_cutover && inputs.mode == 'release'
+        env:
+          AWS_ACCOUNT_ID: ${{ vars.AWS_ACCOUNT_ID }}
+          GH_TOKEN: ${{ github.token }}
+          SECURITY_GATE_RUN_ID: ${{ inputs.security_gate_run_id }}
+        run: |
+          set -euo pipefail
+          bucket="molroom-${AWS_ACCOUNT_ID}-us-east-1-origin"
+          key="releases/$TARGET_SHA/_security-gate.json"
+          mkdir -p .security-gate
+          if aws s3api head-object --bucket "$bucket" --key "$key" >/dev/null 2> .security-gate/head-error; then
+            aws s3api get-object --bucket "$bucket" --key "$key" .security-gate/_security-gate.json >/dev/null
+          else
+            if ! grep -Eq '(404|Not Found|NoSuchBucket|NoSuchKey)' .security-gate/head-error; then
+              sed -E 's/[0-9]{12}/[account-redacted]/g' .security-gate/head-error >&2
+              exit 1
+            fi
+            run_json="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$SECURITY_GATE_RUN_ID")"
+            RUN_JSON="$run_json" node --input-type=module <<'NODE'
+          const run = JSON.parse(process.env.RUN_JSON);
+          if (
+            run.repository?.full_name !== process.env.GITHUB_REPOSITORY ||
+            run.path !== ".github/workflows/security-gate.yml" ||
+            run.event !== "workflow_dispatch" ||
+            run.status !== "completed" ||
+            run.conclusion !== "success" ||
+            run.head_sha !== process.env.TARGET_SHA
+          ) {
+            throw new Error("security gate run is not a successful exact-SHA run in this repository");
+          }
+          NODE
+            gh run download "$SECURITY_GATE_RUN_ID" \
+              --name "security-gate-$TARGET_SHA" \
+              --dir .security-gate
+          fi
+          test -f .security-gate/_security-gate.json
+          node --input-type=module <<'NODE'
+          import { readFile } from "node:fs/promises";
+          import { validateSecurityGateEvidence } from "./scripts/lib/release-manifest.mjs";
+          const evidence = JSON.parse(await readFile(".security-gate/_security-gate.json", "utf8"));
+          validateSecurityGateEvidence(evidence, process.env.TARGET_SHA);
+          if (evidence.security_gate_run_id !== Number(process.env.SECURITY_GATE_RUN_ID)) {
+            throw new Error("the authoritative S3 gate does not match security_gate_run_id");
+          }
+          NODE
+
+      - name: Build deterministic release metadata and upload plan
+        if: inputs.mode == 'release' && steps.dispatch.outputs.repair_only != 'true'
+        run: |
+          set -euo pipefail
+          source_date_epoch="$(git show -s --format=%ct "$TARGET_SHA")"
+          install -m 0600 .security-gate/_security-gate.json dist/_security-gate.json
+          node scripts/build-release-manifest.mjs \
+            --artifact-root dist \
+            --commit-sha "$TARGET_SHA" \
+            --package-version "$VERSION" \
+            --source-date-epoch "$source_date_epoch"
+          node scripts/upload-release-prefix.mjs \
+            --artifact-root dist \
+            --bucket "molroom-${{ vars.AWS_ACCOUNT_ID }}-us-east-1-origin" \
+            --commit-sha "$TARGET_SHA" \
+            --dry-run > release-upload-plan.json
+
+      - name: Preserve deterministic release candidate
+        if: inputs.mode == 'release' && steps.dispatch.outputs.repair_only != 'true'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: release-candidate-${{ inputs.target_sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            dist/
+            release-upload-plan.json
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 90
+          overwrite: false
+
+      - name: Verify existing active release before metadata repair
+        if: inputs.execute_cutover && inputs.mode == 'release' && steps.dispatch.outputs.repair_only == 'true'
+        env:
+          AWS_ACCOUNT_ID: ${{ vars.AWS_ACCOUNT_ID }}
+          SECURITY_GATE_RUN_ID: ${{ inputs.security_gate_run_id }}
+        run: |
+          set -euo pipefail
+          bucket="molroom-${AWS_ACCOUNT_ID}-us-east-1-origin"
+          mkdir -p dist
+          for name in _manifest.sha256 _release.json _security-gate.json; do
+            aws s3api get-object \
+              --bucket "$bucket" \
+              --key "releases/$TARGET_SHA/$name" \
+              --checksum-mode ENABLED \
+              "dist/$name" >/dev/null
+          done
+          RELEASE_BUCKET="$bucket" node --input-type=module <<'NODE'
+          import { createHash } from "node:crypto";
+          import { readFile } from "node:fs/promises";
+          import { execFileSync } from "node:child_process";
+          import { validateSecurityGateEvidence } from "./scripts/lib/release-manifest.mjs";
+
+          const digest = (bytes, encoding = "hex") => createHash("sha256").update(bytes).digest(encoding);
+          const head = (path) => JSON.parse(execFileSync("aws", [
+            "s3api", "head-object", "--bucket", process.env.RELEASE_BUCKET,
+            "--key", `releases/${process.env.TARGET_SHA}/${path}`,
+            "--checksum-mode", "ENABLED", "--output", "json",
+          ], { encoding: "utf8" }));
+          const verifyObject = (path, expectedSha, manifestSha) => {
+            const stored = head(path);
+            if (
+              stored.ChecksumSHA256 !== Buffer.from(expectedSha, "hex").toString("base64") ||
+              stored.Metadata?.sha256 !== expectedSha ||
+              stored.Metadata?.["manifest-sha256"] !== manifestSha
+            ) {
+              throw new Error(`stored release object integrity mismatch: ${path}`);
+            }
+          };
+
+          const releaseBytes = await readFile("dist/_release.json");
+          const manifestBytes = await readFile("dist/_manifest.sha256");
+          const gateBytes = await readFile("dist/_security-gate.json");
+          const release = JSON.parse(releaseBytes);
+          const keys = ["schema_version", "package_version", "commit_sha", "commit_timestamp", "manifest_sha256"];
+          if (
+            release === null || typeof release !== "object" || Array.isArray(release) ||
+            Object.keys(release).sort().join("\n") !== [...keys].sort().join("\n") ||
+            release.schema_version !== 1 || release.package_version !== process.env.VERSION ||
+            release.commit_sha !== process.env.TARGET_SHA ||
+            !Number.isSafeInteger(release.commit_timestamp) || release.commit_timestamp < 0 ||
+            release.manifest_sha256 !== digest(manifestBytes)
+          ) {
+            throw new Error("stored release metadata does not match the requested repair");
+          }
+          const canonicalRelease = `${JSON.stringify({
+            schema_version: 1,
+            package_version: release.package_version,
+            commit_sha: release.commit_sha,
+            commit_timestamp: release.commit_timestamp,
+            manifest_sha256: release.manifest_sha256,
+          }, null, 2)}\n`;
+          if (!releaseBytes.equals(Buffer.from(canonicalRelease))) {
+            throw new Error("stored release metadata is not canonical");
+          }
+          const gate = JSON.parse(gateBytes);
+          validateSecurityGateEvidence(gate, process.env.TARGET_SHA);
+          if (gate.security_gate_run_id !== Number(process.env.SECURITY_GATE_RUN_ID)) {
+            throw new Error("stored release security evidence does not match security_gate_run_id");
+          }
+          verifyObject("_manifest.sha256", digest(manifestBytes), release.manifest_sha256);
+          verifyObject("_release.json", digest(releaseBytes), release.manifest_sha256);
+          verifyObject("_security-gate.json", digest(gateBytes), release.manifest_sha256);
+
+          const lines = manifestBytes.toString("utf8").split("\n");
+          if (lines.at(-1) !== "") throw new Error("stored manifest must end with a newline");
+          lines.pop();
+          if (lines.length === 0) throw new Error("stored manifest contains no runtime objects");
+          let previous = "";
+          for (const line of lines) {
+            const match = /^([0-9a-f]{64})  ([^\\\r\n]+)$/.exec(line);
+            const path = match?.[2];
+            if (
+              !match || path.startsWith("/") || path.includes("\\") ||
+              path.split("/").some((part) => part === "" || part === "." || part === "..") ||
+              ["_manifest.sha256", "_release.json", "_security-gate.json"].includes(path) ||
+              path <= previous
+            ) {
+              throw new Error("stored manifest contains an unsafe, reserved, or unsorted path");
+            }
+            previous = path;
+            verifyObject(path, match[1], release.manifest_sha256);
+          }
+          NODE
+          active="$(aws cloudformation describe-stacks --stack-name "$STACK_NAME" --query "Stacks[0].Parameters[?ParameterKey=='ActiveReleaseSha'].ParameterValue" --output text)"
+          enabled="$(aws cloudformation describe-stacks --stack-name "$STACK_NAME" --query "Stacks[0].Parameters[?ParameterKey=='DistributionEnabled'].ParameterValue" --output text)"
+          test "$active" = "$TARGET_SHA"
+          test "$enabled" = true
+
+      - name: Ensure disabled production infrastructure exists
+        if: inputs.execute_cutover && inputs.mode == 'release' && steps.dispatch.outputs.repair_only != 'true'
+        env:
+          CLOUDFORMATION_ROLE_ARN: ${{ vars.AWS_CLOUDFORMATION_ROLE_ARN }}
+          HOSTED_ZONE_ID: ${{ vars.HOSTED_ZONE_ID }}
+        run: |
+          set -euo pipefail
+          change_set="infrastructure-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          if aws cloudformation describe-stacks --stack-name "$STACK_NAME" >/dev/null 2>&1; then
+            change_type=UPDATE
+            parameters=(
+              "ParameterKey=DomainName,ParameterValue=$DOMAIN_NAME"
+              "ParameterKey=HostedZoneId,ParameterValue=$HOSTED_ZONE_ID"
+              "ParameterKey=ActiveReleaseSha,UsePreviousValue=true"
+              "ParameterKey=DistributionEnabled,UsePreviousValue=true"
+            )
+          else
+            change_type=CREATE
+            parameters=(
+              "ParameterKey=DomainName,ParameterValue=$DOMAIN_NAME"
+              "ParameterKey=HostedZoneId,ParameterValue=$HOSTED_ZONE_ID"
+              "ParameterKey=ActiveReleaseSha,ParameterValue=UNRELEASED"
+              "ParameterKey=DistributionEnabled,ParameterValue=false"
+            )
+          fi
+          aws cloudformation create-change-set \
+            --stack-name "$STACK_NAME" \
+            --change-set-name "$change_set" \
+            --change-set-type "$change_type" \
+            --template-body file://infra/aws/molroom-production.yml \
+            --role-arn "$CLOUDFORMATION_ROLE_ARN" \
+            --parameters "${parameters[@]}" >/dev/null
+          if ! aws cloudformation wait change-set-create-complete \
+            --stack-name "$STACK_NAME" --change-set-name "$change_set"; then
+            reason="$(aws cloudformation describe-change-set --stack-name "$STACK_NAME" --change-set-name "$change_set" --query StatusReason --output text)"
+            case "$reason" in
+              *"didn't contain changes"*)
+                aws cloudformation delete-change-set --stack-name "$STACK_NAME" --change-set-name "$change_set"
+                exit 0
+                ;;
+              *) printf '%s\n' "$reason" >&2; exit 1;;
+            esac
+          fi
+          aws cloudformation execute-change-set --stack-name "$STACK_NAME" --change-set-name "$change_set"
+          if [ "$change_type" = CREATE ]; then
+            aws cloudformation wait stack-create-complete --stack-name "$STACK_NAME"
+          else
+            aws cloudformation wait stack-update-complete --stack-name "$STACK_NAME"
+          fi
+
+      - name: Upload immutable release prefix
+        if: inputs.execute_cutover && inputs.mode == 'release' && steps.dispatch.outputs.repair_only != 'true'
+        env:
+          AWS_ACCOUNT_ID: ${{ vars.AWS_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          bucket="molroom-${AWS_ACCOUNT_ID}-us-east-1-origin"
+          node scripts/upload-release-prefix.mjs \
+            --artifact-root dist --bucket "$bucket" --commit-sha "$TARGET_SHA" --execute
+          node scripts/upload-release-prefix.mjs \
+            --artifact-root dist --bucket "$bucket" --commit-sha "$TARGET_SHA" --execute \
+            > release-prefix-reuse-verification.json
+
+      - name: Verify rollback prefix artifact integrity
+        if: inputs.execute_cutover && inputs.mode == 'rollback'
+        env:
+          AWS_ACCOUNT_ID: ${{ vars.AWS_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          bucket="molroom-${AWS_ACCOUNT_ID}-us-east-1-origin"
+          mkdir -p rollback-evidence
+          for name in _manifest.sha256 _release.json _security-gate.json; do
+            aws s3api get-object \
+              --bucket "$bucket" \
+              --key "releases/$TARGET_SHA/$name" \
+              "rollback-evidence/$name" >/dev/null
+          done
+          RELEASE_BUCKET="$bucket" node --input-type=module <<'NODE'
+          import { createHash } from "node:crypto";
+          import { readFile } from "node:fs/promises";
+          import { execFileSync } from "node:child_process";
+          import { validateSecurityGateEvidence } from "./scripts/lib/release-manifest.mjs";
+
+          const sha256 = (bytes) => createHash("sha256").update(bytes).digest("hex");
+          const releaseBytes = await readFile("rollback-evidence/_release.json");
+          const manifestBytes = await readFile("rollback-evidence/_manifest.sha256");
+          const gateBytes = await readFile("rollback-evidence/_security-gate.json");
+          const release = JSON.parse(releaseBytes);
+          if (release.commit_sha !== process.env.TARGET_SHA || release.manifest_sha256 !== sha256(manifestBytes)) {
+            throw new Error("rollback release metadata does not match the selected SHA and manifest");
+          }
+          validateSecurityGateEvidence(JSON.parse(gateBytes), process.env.TARGET_SHA);
+          const lines = manifestBytes.toString("utf8").split("\n").filter(Boolean);
+          let previous = "";
+          for (const line of lines) {
+            const match = /^([0-9a-f]{64})  ([^\\\r\n]+)$/.exec(line);
+            if (!match || match[2].startsWith("/") || match[2].split("/").some((part) => part === "" || part === "." || part === "..") || match[2] <= previous) {
+              throw new Error("rollback manifest contains an unsafe or unsorted path");
+            }
+            previous = match[2];
+            const head = JSON.parse(execFileSync("aws", [
+              "s3api", "head-object", "--bucket", process.env.RELEASE_BUCKET,
+              "--key", `releases/${process.env.TARGET_SHA}/${match[2]}`,
+              "--checksum-mode", "ENABLED", "--output", "json",
+            ], { encoding: "utf8" }));
+            const checksum = Buffer.from(match[1], "hex").toString("base64");
+            if (head.ChecksumSHA256 !== checksum || head.Metadata?.sha256 !== match[1] || head.Metadata?.["manifest-sha256"] !== release.manifest_sha256) {
+              throw new Error(`rollback object integrity mismatch: ${match[2]}`);
+            }
+          }
+          NODE
+
+      - name: Record current production parameter pair
+        if: inputs.execute_cutover && steps.dispatch.outputs.repair_only != 'true'
+        id: current
+        run: |
+          set -euo pipefail
+          active="$(aws cloudformation describe-stacks --stack-name "$STACK_NAME" --query "Stacks[0].Parameters[?ParameterKey=='ActiveReleaseSha'].ParameterValue" --output text)"
+          enabled="$(aws cloudformation describe-stacks --stack-name "$STACK_NAME" --query "Stacks[0].Parameters[?ParameterKey=='DistributionEnabled'].ParameterValue" --output text)"
+          test -n "$active"
+          case "$enabled" in true|false) ;; *) exit 1;; esac
+          echo "active=$active" >> "$GITHUB_OUTPUT"
+          echo "enabled=$enabled" >> "$GITHUB_OUTPUT"
+
+      - name: Create promote change set
+        if: inputs.execute_cutover && inputs.mode == 'release' && steps.dispatch.outputs.repair_only != 'true'
+        id: promote
+        continue-on-error: true
+        env:
+          CLOUDFORMATION_ROLE_ARN: ${{ vars.AWS_CLOUDFORMATION_ROLE_ARN }}
+        run: |
+          set -euo pipefail
+          if [ "${{ steps.current.outputs.active }}" = "$TARGET_SHA" ] && [ "${{ steps.current.outputs.enabled }}" = true ]; then
+            exit 0
+          fi
+          change_set="promote-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          aws cloudformation create-change-set \
+            --stack-name "$STACK_NAME" --change-set-name "$change_set" --change-set-type UPDATE \
+            --template-body file://infra/aws/molroom-production.yml \
+            --role-arn "$CLOUDFORMATION_ROLE_ARN" \
+            --parameters \
+              "ParameterKey=DomainName,UsePreviousValue=true" \
+              "ParameterKey=HostedZoneId,UsePreviousValue=true" \
+              "ParameterKey=ActiveReleaseSha,ParameterValue=$TARGET_SHA" \
+              "ParameterKey=DistributionEnabled,ParameterValue=true" >/dev/null
+          aws cloudformation wait change-set-create-complete --stack-name "$STACK_NAME" --change-set-name "$change_set"
+          aws cloudformation execute-change-set --stack-name "$STACK_NAME" --change-set-name "$change_set"
+          aws cloudformation wait stack-update-complete --stack-name "$STACK_NAME"
+
+      - name: Create rollback change set
+        if: inputs.execute_cutover && inputs.mode == 'rollback'
+        id: rollback
+        continue-on-error: true
+        env:
+          CLOUDFORMATION_ROLE_ARN: ${{ vars.AWS_CLOUDFORMATION_ROLE_ARN }}
+        run: |
+          set -euo pipefail
+          if [ "${{ steps.current.outputs.active }}" = "$TARGET_SHA" ] && [ "${{ steps.current.outputs.enabled }}" = true ]; then
+            exit 0
+          fi
+          change_set="rollback-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          aws cloudformation create-change-set \
+            --stack-name "$STACK_NAME" --change-set-name "$change_set" --change-set-type UPDATE \
+            --template-body file://infra/aws/molroom-production.yml \
+            --role-arn "$CLOUDFORMATION_ROLE_ARN" \
+            --parameters \
+              "ParameterKey=DomainName,UsePreviousValue=true" \
+              "ParameterKey=HostedZoneId,UsePreviousValue=true" \
+              "ParameterKey=ActiveReleaseSha,ParameterValue=$TARGET_SHA" \
+              "ParameterKey=DistributionEnabled,ParameterValue=true" >/dev/null
+          aws cloudformation wait change-set-create-complete --stack-name "$STACK_NAME" --change-set-name "$change_set"
+          aws cloudformation execute-change-set --stack-name "$STACK_NAME" --change-set-name "$change_set"
+          aws cloudformation wait stack-update-complete --stack-name "$STACK_NAME"
+
+      - name: Wait for edge propagation, invalidate routes, and smoke
+        if: inputs.execute_cutover && ((inputs.mode == 'release' && steps.promote.outcome == 'success') || (inputs.mode == 'rollback' && steps.rollback.outcome == 'success'))
+        id: smoke
+        continue-on-error: true
+        env:
+          MANIFEST_PATH: ${{ inputs.mode == 'release' && 'dist/_manifest.sha256' || 'rollback-evidence/_manifest.sha256' }}
+          SMOKE_MODE: ${{ inputs.mode }}
+        run: |
+          set -euo pipefail
+          smoke_workspace="$(mktemp -d)"
+          known_asset_path=""
+          known_asset_status="not-run"
+          known_asset_content_type="not-run"
+          known_asset_expected_sha256=""
+          known_asset_sha256=""
+          missing_asset_status="not-run"
+          missing_asset_content_type="not-run"
+          missing_asset_is_spa=true
+          gis_script_status="not-run"
+          gis_script_content_type="not-run"
+          route_statuses=""
+          hsts_verified=false
+          content_type_options_verified=false
+          opener_policy_verified=false
+          csp_gis_verified=false
+
+          record_smoke_evidence() {
+            SMOKE_OUTCOME="$1" \
+            KNOWN_ASSET_PATH="$known_asset_path" \
+            KNOWN_ASSET_STATUS="$known_asset_status" \
+            KNOWN_ASSET_CONTENT_TYPE="$known_asset_content_type" \
+            KNOWN_ASSET_EXPECTED_SHA256="$known_asset_expected_sha256" \
+            KNOWN_ASSET_SHA256="$known_asset_sha256" \
+            MISSING_ASSET_STATUS="$missing_asset_status" \
+            MISSING_ASSET_CONTENT_TYPE="$missing_asset_content_type" \
+            MISSING_ASSET_IS_SPA="$missing_asset_is_spa" \
+            GIS_SCRIPT_STATUS="$gis_script_status" \
+            GIS_SCRIPT_CONTENT_TYPE="$gis_script_content_type" \
+            ROUTE_STATUSES="$route_statuses" \
+            HSTS_VERIFIED="$hsts_verified" \
+            CONTENT_TYPE_OPTIONS_VERIFIED="$content_type_options_verified" \
+            OPENER_POLICY_VERIFIED="$opener_policy_verified" \
+            CSP_GIS_VERIFIED="$csp_gis_verified" \
+            node --input-type=module <<'NODE'
+          import { writeFile } from "node:fs/promises";
+
+          const evidence = {
+            schema_version: 1,
+            mode: process.env.SMOKE_MODE,
+            target_sha: process.env.TARGET_SHA,
+            workflow_run_id: Number(process.env.GITHUB_RUN_ID),
+            workflow_run_attempt: Number(process.env.GITHUB_RUN_ATTEMPT),
+            outcome: process.env.SMOKE_OUTCOME,
+            known_asset: {
+              path: process.env.KNOWN_ASSET_PATH,
+              status: process.env.KNOWN_ASSET_STATUS,
+              content_type: process.env.KNOWN_ASSET_CONTENT_TYPE,
+              expected_sha256: process.env.KNOWN_ASSET_EXPECTED_SHA256,
+              observed_sha256: process.env.KNOWN_ASSET_SHA256,
+            },
+            missing_asset: {
+              status: process.env.MISSING_ASSET_STATUS,
+              content_type: process.env.MISSING_ASSET_CONTENT_TYPE,
+              is_spa: process.env.MISSING_ASSET_IS_SPA === "true",
+            },
+            google_identity_services: {
+              script_status: process.env.GIS_SCRIPT_STATUS,
+              script_content_type: process.env.GIS_SCRIPT_CONTENT_TYPE,
+            },
+            route_statuses: process.env.ROUTE_STATUSES.split(",").filter(Boolean),
+            headers: {
+              hsts: process.env.HSTS_VERIFIED === "true",
+              content_type_options: process.env.CONTENT_TYPE_OPTIONS_VERIFIED === "true",
+              opener_policy: process.env.OPENER_POLICY_VERIFIED === "true",
+              csp_allows_gis: process.env.CSP_GIS_VERIFIED === "true",
+            },
+            checked_at: new Date().toISOString(),
+          };
+          await writeFile("production-smoke-evidence.json", `${JSON.stringify(evidence, null, 2)}\n`, {
+            flag: "w",
+            mode: 0o600,
+          });
+          NODE
+          }
+
+          finish_smoke() {
+            exit_code="$?"
+            trap - EXIT
+            outcome=failure
+            if [ "$exit_code" -eq 0 ]; then
+              outcome=success
+            fi
+            if ! record_smoke_evidence "$outcome"; then
+              exit_code=1
+            fi
+            rm -rf "$smoke_workspace"
+            exit "$exit_code"
+          }
+          trap finish_smoke EXIT
+
+          header_value() {
+            HEADER_FILE="$1" HEADER_NAME="$2" node --input-type=module <<'NODE'
+          import { readFileSync } from "node:fs";
+          const lines = readFileSync(process.env.HEADER_FILE, "utf8").split(/\r?\n/);
+          const prefix = `${process.env.HEADER_NAME.toLowerCase()}:`;
+          const values = lines
+            .filter((line) => line.toLowerCase().startsWith(prefix))
+            .map((line) => line.slice(line.indexOf(":") + 1).trim());
+          if (values.length === 0) process.exit(1);
+          process.stdout.write(values.at(-1));
+          NODE
+          }
+
+          distribution_id="$(aws cloudformation describe-stacks --stack-name "$STACK_NAME" --query "Stacks[0].Outputs[?OutputKey=='DistributionId'].OutputValue" --output text)"
+          aws cloudfront wait distribution-deployed --id "$distribution_id"
+          invalidation_id="$(aws cloudfront create-invalidation --distribution-id "$distribution_id" --paths / /index.html /login /rooms /me '/r/*' --query Invalidation.Id --output text)"
+          aws cloudfront wait invalidation-completed --distribution-id "$distribution_id" --id "$invalidation_id"
+
+          root_status="$(curl --silent --show-error --proto '=https' --connect-timeout 5 --max-time 20 --max-filesize 1048576 \
+            --dump-header "$smoke_workspace/root.headers" --output "$smoke_workspace/index.html" --write-out '%{http_code}' \
+            "https://$DOMAIN_NAME/")"
+          test "$root_status" = 200
+          known_asset_path="$(INDEX_PATH="$smoke_workspace/index.html" node --input-type=module <<'NODE'
+          import { readFileSync } from "node:fs";
+          const html = readFileSync(process.env.INDEX_PATH, "utf8");
+          const scriptTags = html.match(/<script\b[^>]*>/gi) ?? [];
+          const sources = scriptTags.flatMap((tag) => {
+            if (!/\btype=["']module["']/i.test(tag)) return [];
+            const match = /\bsrc=["']([^"']+)["']/i.exec(tag);
+            return match ? [match[1]] : [];
+          });
+          if (sources.length !== 1 || !/^\/assets\/[0-9A-Za-z._-]+\.js$/.test(sources[0])) {
+            throw new Error("production index must load exactly one safe module asset");
+          }
+          process.stdout.write(sources[0].slice(1));
+          NODE
+          )"
+          known_asset_expected_sha256="$(KNOWN_ASSET_PATH="$known_asset_path" node --input-type=module <<'NODE'
+          import { readFileSync } from "node:fs";
+          const lines = readFileSync(process.env.MANIFEST_PATH, "utf8").split("\n");
+          if (lines.at(-1) !== "") throw new Error("release manifest must end with a newline");
+          lines.pop();
+          const entries = lines.map((line) => {
+            const match = /^([0-9a-f]{64})  ([^\\\r\n]+)$/.exec(line);
+            if (!match) throw new Error("release manifest is malformed");
+            return { sha256: match[1], path: match[2] };
+          });
+          const match = entries.filter((entry) => entry.path === process.env.KNOWN_ASSET_PATH);
+          if (match.length !== 1) throw new Error("production module asset is absent from the manifest");
+          process.stdout.write(match[0].sha256);
+          NODE
+          )"
+          known_asset_status="$(curl --silent --show-error --proto '=https' --connect-timeout 5 --max-time 20 --max-filesize 16777216 \
+            --dump-header "$smoke_workspace/known-asset.headers" --output "$smoke_workspace/known-asset.js" --write-out '%{http_code}' \
+            "https://$DOMAIN_NAME/$known_asset_path")"
+          test "$known_asset_status" = 200
+          known_asset_content_type="$(header_value "$smoke_workspace/known-asset.headers" content-type)"
+          case "$known_asset_content_type" in
+            application/javascript*|text/javascript*) ;;
+            *) exit 1;;
+          esac
+          known_asset_sha256="$(sha256sum "$smoke_workspace/known-asset.js" | cut -d' ' -f1)"
+          test "$known_asset_sha256" = "$known_asset_expected_sha256"
+          grep -Fq 'https://accounts.google.com/gsi/client' "$smoke_workspace/known-asset.js"
+          grep -Fq 'initTokenClient' "$smoke_workspace/known-asset.js"
+
+          gis_script_status="$(curl --silent --show-error --proto '=https' --connect-timeout 5 --max-time 20 --max-filesize 2097152 \
+            --dump-header "$smoke_workspace/gis.headers" --output "$smoke_workspace/gis.js" --write-out '%{http_code}' \
+            'https://accounts.google.com/gsi/client')"
+          test "$gis_script_status" = 200
+          gis_script_content_type="$(header_value "$smoke_workspace/gis.headers" content-type)"
+          case "$gis_script_content_type" in
+            application/javascript*|text/javascript*) ;;
+            *) exit 1;;
+          esac
+          test -s "$smoke_workspace/gis.js"
+
+          missing_path="/assets/__molroom_missing_${GITHUB_RUN_ID}_${GITHUB_RUN_ATTEMPT}.js"
+          missing_asset_status="$(curl --silent --show-error --proto '=https' --connect-timeout 5 --max-time 20 --max-filesize 1048576 \
+            --dump-header "$smoke_workspace/missing.headers" --output "$smoke_workspace/missing.body" --write-out '%{http_code}' \
+            "https://$DOMAIN_NAME$missing_path")"
+          test "$missing_asset_status" = 404
+          missing_asset_content_type="$(header_value "$smoke_workspace/missing.headers" content-type)"
+          case "$missing_asset_content_type" in
+            text/html*) exit 1;;
+          esac
+          missing_asset_is_spa=false
+          if grep -Eqi "<!doctype html|id=[\"']root[\"']" "$smoke_workspace/missing.body"; then
+            missing_asset_is_spa=true
+          fi
+          test "$missing_asset_is_spa" = false
+
+          for route in / /login /rooms /me; do
+            route_status="$(curl --silent --show-error --proto '=https' --connect-timeout 5 --max-time 20 --max-filesize 1048576 \
+              --output /dev/null --write-out '%{http_code}' "https://$DOMAIN_NAME$route")"
+            test "$route_status" = 200
+            route_statuses="${route_statuses}${route}:${route_status},"
+          done
+          headers="$(tr -d '\r' < "$smoke_workspace/root.headers")"
+          printf '%s\n' "$headers" | grep -Fqi 'strict-transport-security: max-age=63072000; includeSubDomains; preload'
+          hsts_verified=true
+          printf '%s\n' "$headers" | grep -Fqi 'x-content-type-options: nosniff'
+          content_type_options_verified=true
+          printf '%s\n' "$headers" | grep -Fqi 'cross-origin-opener-policy: same-origin-allow-popups'
+          opener_policy_verified=true
+          printf '%s\n' "$headers" | grep -Eqi "content-security-policy:.*script-src 'self' https://accounts.google.com"
+          csp_gis_verified=true
+
+      - name: Upload production smoke evidence
+        if: always() && inputs.execute_cutover && steps.smoke.outcome != 'skipped'
+        id: smoke_evidence
+        continue-on-error: true
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: production-smoke-${{ inputs.mode }}-${{ inputs.target_sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: production-smoke-evidence.json
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 90
+          overwrite: false
+
+      - name: Restore previous production parameter pair after failure
+        if: always() && inputs.execute_cutover && (steps.promote.outcome == 'failure' || steps.rollback.outcome == 'failure' || steps.smoke.outcome == 'failure' || steps.smoke_evidence.outcome == 'failure')
+        id: restore
+        continue-on-error: true
+        env:
+          CLOUDFORMATION_ROLE_ARN: ${{ vars.AWS_CLOUDFORMATION_ROLE_ARN }}
+          PREVIOUS_ACTIVE: ${{ steps.current.outputs.active }}
+          PREVIOUS_ENABLED: ${{ steps.current.outputs.enabled }}
+        run: |
+          set -euo pipefail
+          current_active="$(aws cloudformation describe-stacks --stack-name "$STACK_NAME" --query "Stacks[0].Parameters[?ParameterKey=='ActiveReleaseSha'].ParameterValue" --output text)"
+          current_enabled="$(aws cloudformation describe-stacks --stack-name "$STACK_NAME" --query "Stacks[0].Parameters[?ParameterKey=='DistributionEnabled'].ParameterValue" --output text)"
+          if [ "$current_active" = "$PREVIOUS_ACTIVE" ] && [ "$current_enabled" = "$PREVIOUS_ENABLED" ]; then
+            printf '%s\n' "parameter pair already restored"
+          else
+            change_set="restore-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+            aws cloudformation create-change-set \
+              --stack-name "$STACK_NAME" --change-set-name "$change_set" --change-set-type UPDATE \
+              --template-body file://infra/aws/molroom-production.yml \
+              --role-arn "$CLOUDFORMATION_ROLE_ARN" \
+              --parameters \
+                "ParameterKey=DomainName,UsePreviousValue=true" \
+                "ParameterKey=HostedZoneId,UsePreviousValue=true" \
+                "ParameterKey=ActiveReleaseSha,ParameterValue=$PREVIOUS_ACTIVE" \
+                "ParameterKey=DistributionEnabled,ParameterValue=$PREVIOUS_ENABLED" >/dev/null
+            aws cloudformation wait change-set-create-complete --stack-name "$STACK_NAME" --change-set-name "$change_set"
+            aws cloudformation execute-change-set --stack-name "$STACK_NAME" --change-set-name "$change_set"
+            aws cloudformation wait stack-update-complete --stack-name "$STACK_NAME"
+          fi
+          restored_active="$(aws cloudformation describe-stacks --stack-name "$STACK_NAME" --query "Stacks[0].Parameters[?ParameterKey=='ActiveReleaseSha'].ParameterValue" --output text)"
+          restored_enabled="$(aws cloudformation describe-stacks --stack-name "$STACK_NAME" --query "Stacks[0].Parameters[?ParameterKey=='DistributionEnabled'].ParameterValue" --output text)"
+          test "$restored_active" = "$PREVIOUS_ACTIVE"
+          test "$restored_enabled" = "$PREVIOUS_ENABLED"
+          distribution_id="$(aws cloudformation describe-stacks --stack-name "$STACK_NAME" --query "Stacks[0].Outputs[?OutputKey=='DistributionId'].OutputValue" --output text)"
+          aws cloudfront wait distribution-deployed --id "$distribution_id"
+          if [ "$PREVIOUS_ENABLED" = true ]; then
+            invalidation_id="$(aws cloudfront create-invalidation --distribution-id "$distribution_id" --paths / /index.html /login /rooms /me '/r/*' --query Invalidation.Id --output text)"
+            aws cloudfront wait invalidation-completed --distribution-id "$distribution_id" --id "$invalidation_id"
+            for route in / /login /rooms /me; do
+              curl --fail --silent --show-error --location --proto '=https' --max-time 20 "https://$DOMAIN_NAME$route" >/dev/null
+            done
+            headers="$(curl --fail --silent --show-error --head --proto '=https' --max-time 20 "https://$DOMAIN_NAME/")"
+            printf '%s\n' "$headers" | grep -Fqi 'strict-transport-security: max-age=63072000; includeSubDomains; preload'
+            printf '%s\n' "$headers" | grep -Fqi 'x-content-type-options: nosniff'
+            printf '%s\n' "$headers" | grep -Fqi 'cross-origin-opener-policy: same-origin-allow-popups'
+          else
+            test "$(aws cloudfront get-distribution --id "$distribution_id" --query Distribution.DistributionConfig.Enabled --output text)" = False
+          fi
+
+      - name: Fail closed after cutover or smoke failure
+        if: always() && inputs.execute_cutover && (steps.promote.outcome == 'failure' || steps.rollback.outcome == 'failure' || steps.smoke.outcome == 'failure' || steps.smoke_evidence.outcome == 'failure')
+        run: |
+          if [ "${{ steps.restore.outcome }}" = success ]; then
+            echo "Cutover failed; the previous CloudFormation parameter pair and rollback state were verified." >&2
+          else
+            echo "CRITICAL: cutover failed and rollback verification also failed." >&2
+          fi
+          exit 1
+
+      - name: Create immutable annotated tag and GitHub Release
+        if: inputs.execute_cutover && inputs.mode == 'release' && (steps.dispatch.outputs.repair_only == 'true' || (steps.promote.outcome == 'success' && steps.smoke.outcome == 'success' && steps.smoke_evidence.outcome == 'success'))
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          git fetch origin main --quiet
+          test "$(git rev-parse origin/main)" = "$TARGET_SHA"
+          if git show-ref --verify --quiet "refs/tags/v$VERSION"; then
+            test "$(git rev-parse "refs/tags/v$VERSION^{}")" = "$TARGET_SHA"
+          else
+            tag_object="$(gh api --method POST "repos/$GITHUB_REPOSITORY/git/tags" \
+              -f "tag=v$VERSION" \
+              -f "message=MolRoom v$VERSION" \
+              -f "object=$TARGET_SHA" \
+              -f type=commit --jq .sha)"
+            gh api --method POST "repos/$GITHUB_REPOSITORY/git/refs" \
+              -f "ref=refs/tags/v$VERSION" -f "sha=$tag_object" >/dev/null
+          fi
+          manifest_sha="$(sha256sum dist/_manifest.sha256 | cut -d' ' -f1)"
+          gate_sha="$(sha256sum dist/_security-gate.json | cut -d' ' -f1)"
+          manual_review_sha="$(node -p 'JSON.parse(require("fs").readFileSync("dist/_security-gate.json", "utf8")).manual_review_sha256')"
+          deep_scan_sha="$(node -p 'JSON.parse(require("fs").readFileSync("dist/_security-gate.json", "utf8")).deep_security_scan_sha256')"
+          if gh release view "v$VERSION" >/dev/null 2>&1; then
+            release_json="$(gh release view "v$VERSION" --json tagName,body)"
+            RELEASE_JSON="$release_json" MANIFEST_SHA="$manifest_sha" GATE_SHA="$gate_sha" MANUAL_REVIEW_SHA="$manual_review_sha" DEEP_SCAN_SHA="$deep_scan_sha" node --input-type=module <<'NODE'
+          const release = JSON.parse(process.env.RELEASE_JSON);
+          for (const required of [
+            process.env.TARGET_SHA,
+            process.env.MANIFEST_SHA,
+            process.env.GATE_SHA,
+            process.env.MANUAL_REVIEW_SHA,
+            process.env.DEEP_SCAN_SHA,
+          ]) {
+            if (release.tagName !== `v${process.env.VERSION}` || !release.body.includes(required)) {
+              throw new Error("existing GitHub Release metadata differs from the verified release");
+            }
+          }
+          NODE
+          else
+            notes_file="$(mktemp)"
+            trap 'rm -f "$notes_file"' EXIT
+            {
+              echo "Target: $TARGET_SHA"
+              echo "Change: immutable MolRoom static SPA production release"
+              echo "Manifest asset SHA-256: $manifest_sha"
+              echo "Security gate asset SHA-256: $gate_sha"
+              echo "Manual review source SHA-256: $manual_review_sha"
+              echo "Deep security scan source SHA-256: $deep_scan_sha"
+              echo "Security gate run: https://github.com/$GITHUB_REPOSITORY/actions/runs/${{ inputs.security_gate_run_id }}"
+              echo "Release workflow run: https://github.com/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+              echo "Rollback: dispatch this workflow with mode=rollback, version=$VERSION, target_sha=$TARGET_SHA."
+            } > "$notes_file"
+            gh release create "v$VERSION" \
+              --verify-tag \
+              --title "MolRoom v$VERSION" \
+              --notes-file "$notes_file" \
+              dist/_manifest.sha256 dist/_release.json dist/_security-gate.json
+            rm -f "$notes_file"
+            trap - EXIT
+          fi
+          asset_dir="$(mktemp -d)"
+          trap 'rm -rf "$asset_dir"' EXIT
+          for name in _manifest.sha256 _release.json _security-gate.json; do
+            if ! gh release view "v$VERSION" --json assets --jq '.assets[].name' | grep -Fxq "$name"; then
+              gh release upload "v$VERSION" "dist/$name"
+            fi
+            gh release download "v$VERSION" --pattern "$name" --dir "$asset_dir"
+            cmp --silent "dist/$name" "$asset_dir/$name"
+          done
+
+      - name: Summarize non-mutating plan
+        if: inputs.execute_cutover == false
+        run: |
+          {
+            echo "### MolRoom production ${{ inputs.mode }} plan"
+            echo "- Target: \`$TARGET_SHA\`"
+            echo "- Version: \`v$VERSION\`"
+            echo "- AWS mutation: none"
+            echo "- ActiveReleaseSha transition: not executed"
+          } >> "$GITHUB_STEP_SUMMARY"

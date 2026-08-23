@@ -1,0 +1,311 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: MolRoom GitHub OIDC trust and least-privilege deployment roles
+
+Parameters:
+  ExistingGitHubOidcProviderArn:
+    Type: String
+    Default: ""
+    AllowedPattern: '^$|^arn:aws:iam::[0-9]{12}:oidc-provider/token\.actions\.githubusercontent\.com$'
+    Description: Existing account-wide GitHub Actions OIDC provider ARN, or empty to create one.
+  GitHubOidcSubject:
+    Type: String
+    Default: repo:kim-song-jun/meeting-wrapper:environment:production
+    AllowedPattern: '^repo:kim-song-jun(@[0-9]+)?/meeting-wrapper(@[0-9]+)?:environment:production$'
+    Description: Exact GitHub OIDC subject, optionally including GitHub immutable owner/repository IDs.
+  HostedZoneId:
+    Type: String
+    AllowedPattern: '^Z[A-Z0-9]+$'
+    Description: Public Route 53 hosted zone that owns molcube.com.
+  ProductionStackName:
+    Type: String
+    Default: molroom-production
+    AllowedPattern: '^molroom-production$'
+
+Conditions:
+  CreateGitHubOidcProvider: !Equals [!Ref ExistingGitHubOidcProviderArn, ""]
+
+Resources:
+  GitHubOidcProvider:
+    Type: AWS::IAM::OIDCProvider
+    Condition: CreateGitHubOidcProvider
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      Url: https://token.actions.githubusercontent.com
+      ClientIdList:
+        - sts.amazonaws.com
+      Tags:
+        - Key: Project
+          Value: MolRoom
+        - Key: ManagedBy
+          Value: CloudFormation
+
+  CloudFormationExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: molroom-cloudformation-execution
+      Description: Creates only the resources declared by the MolRoom production stack.
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: cloudformation.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: molroom-production-resources
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Sid: ManageOriginAndLogBuckets
+                Effect: Allow
+                Action:
+                  - s3:CreateBucket
+                  - s3:DeleteBucket
+                  - s3:DeleteBucketPolicy
+                  - s3:GetBucketAcl
+                  - s3:GetBucketLocation
+                  - s3:GetBucketOwnershipControls
+                  - s3:GetBucketPolicy
+                  - s3:GetBucketPublicAccessBlock
+                  - s3:GetBucketTagging
+                  - s3:GetBucketVersioning
+                  - s3:GetEncryptionConfiguration
+                  - s3:GetLifecycleConfiguration
+                  - s3:ListBucket
+                  - s3:PutBucketAcl
+                  - s3:PutBucketOwnershipControls
+                  - s3:PutBucketPolicy
+                  - s3:PutBucketPublicAccessBlock
+                  - s3:PutBucketTagging
+                  - s3:PutBucketVersioning
+                  - s3:PutEncryptionConfiguration
+                Resource:
+                  - !Sub arn:${AWS::Partition}:s3:::molroom-${AWS::AccountId}-${AWS::Region}-origin
+                  - !Sub arn:${AWS::Partition}:s3:::molroom-${AWS::AccountId}-${AWS::Region}-cloudfront-logs
+              - Sid: ManageLogRetentionOnly
+                Effect: Allow
+                Action:
+                  - s3:PutLifecycleConfiguration
+                Resource: !Sub arn:${AWS::Partition}:s3:::molroom-${AWS::AccountId}-${AWS::Region}-cloudfront-logs
+              - Sid: CreateTaggedCloudFrontResources
+                Effect: Allow
+                Action:
+                  - cloudfront:CreateDistribution
+                  - cloudfront:CreateFunction
+                Resource: "*"
+                Condition:
+                  StringEquals:
+                    aws:RequestTag/Project: MolRoom
+                    aws:RequestTag/ManagedBy: CloudFormation
+              - Sid: CreateUnscopedCloudFrontPolicies
+                Effect: Allow
+                Action:
+                  - cloudfront:CreateCachePolicy
+                  - cloudfront:CreateOriginAccessControl
+                  - cloudfront:CreateResponseHeadersPolicy
+                Resource: "*"
+              - Sid: ManageTaggedDistribution
+                Effect: Allow
+                Action:
+                  - cloudfront:DeleteDistribution
+                  - cloudfront:GetDistribution
+                  - cloudfront:GetDistributionConfig
+                  - cloudfront:ListTagsForResource
+                  - cloudfront:UpdateDistribution
+                Resource: !Sub arn:${AWS::Partition}:cloudfront::${AWS::AccountId}:distribution/*
+                Condition:
+                  StringEquals:
+                    aws:ResourceTag/Project: MolRoom
+              - Sid: ManageTaggedFunction
+                Effect: Allow
+                Action:
+                  - cloudfront:DeleteFunction
+                  - cloudfront:DescribeFunction
+                  - cloudfront:GetFunction
+                  - cloudfront:ListTagsForResource
+                  - cloudfront:PublishFunction
+                  - cloudfront:UpdateFunction
+                Resource: !Sub arn:${AWS::Partition}:cloudfront::${AWS::AccountId}:function/molroom-release-router
+                Condition:
+                  StringEquals:
+                    aws:ResourceTag/Project: MolRoom
+              - Sid: TagCloudFrontResources
+                Effect: Allow
+                Action: cloudfront:TagResource
+                Resource:
+                  - !Sub arn:${AWS::Partition}:cloudfront::${AWS::AccountId}:distribution/*
+                  - !Sub arn:${AWS::Partition}:cloudfront::${AWS::AccountId}:function/molroom-release-router
+                Condition:
+                  StringEquals:
+                    aws:RequestTag/Project: MolRoom
+                    aws:RequestTag/ManagedBy: CloudFormation
+              - Sid: ManageAccountCloudFrontPolicies
+                Effect: Allow
+                Action:
+                  - cloudfront:DeleteCachePolicy
+                  - cloudfront:DeleteOriginAccessControl
+                  - cloudfront:DeleteResponseHeadersPolicy
+                  - cloudfront:GetCachePolicy
+                  - cloudfront:GetOriginAccessControl
+                  - cloudfront:GetResponseHeadersPolicy
+                  - cloudfront:UpdateCachePolicy
+                  - cloudfront:UpdateOriginAccessControl
+                  - cloudfront:UpdateResponseHeadersPolicy
+                Resource:
+                  - !Sub arn:${AWS::Partition}:cloudfront::${AWS::AccountId}:cache-policy/*
+                  - !Sub arn:${AWS::Partition}:cloudfront::${AWS::AccountId}:origin-access-control/*
+                  - !Sub arn:${AWS::Partition}:cloudfront::${AWS::AccountId}:response-headers-policy/*
+              - Sid: RequestTaggedProductionCertificate
+                Effect: Allow
+                Action: acm:RequestCertificate
+                Resource: "*"
+                Condition:
+                  StringEquals:
+                    aws:RequestTag/Project: MolRoom
+                    aws:RequestTag/ManagedBy: CloudFormation
+                    acm:ValidationMethod: DNS
+                  ForAllValues:StringEquals:
+                    acm:DomainNames:
+                      - molroom.molcube.com
+              - Sid: TagRequestedProductionCertificate
+                Effect: Allow
+                Action: acm:AddTagsToCertificate
+                Resource: !Sub arn:${AWS::Partition}:acm:us-east-1:${AWS::AccountId}:certificate/*
+                Condition:
+                  StringEquals:
+                    aws:RequestTag/Project: MolRoom
+                    aws:RequestTag/ManagedBy: CloudFormation
+              - Sid: ManageTaggedProductionCertificate
+                Effect: Allow
+                Action:
+                  - acm:DeleteCertificate
+                  - acm:DescribeCertificate
+                  - acm:ListTagsForCertificate
+                  - acm:RemoveTagsFromCertificate
+                Resource: !Sub arn:${AWS::Partition}:acm:us-east-1:${AWS::AccountId}:certificate/*
+                Condition:
+                  StringEquals:
+                    aws:ResourceTag/Project: MolRoom
+              - Sid: ManageProductionDnsRecords
+                Effect: Allow
+                Action: route53:ChangeResourceRecordSets
+                Resource: !Sub arn:${AWS::Partition}:route53:::hostedzone/${HostedZoneId}
+                Condition:
+                  ForAllValues:StringLike:
+                    route53:ChangeResourceRecordSetsNormalizedRecordNames:
+                      - molroom.molcube.com
+                      - "*.molroom.molcube.com"
+                  ForAllValues:StringEquals:
+                    route53:ChangeResourceRecordSetsRecordTypes:
+                      - A
+                      - AAAA
+                      - CNAME
+                    route53:ChangeResourceRecordSetsActions:
+                      - CREATE
+                      - UPSERT
+                      - DELETE
+              - Sid: ObserveProductionHostedZone
+                Effect: Allow
+                Action:
+                  - route53:GetHostedZone
+                  - route53:ListTagsForResource
+                Resource: !Sub arn:${AWS::Partition}:route53:::hostedzone/${HostedZoneId}
+              - Sid: ObserveDnsChanges
+                Effect: Allow
+                Action: route53:GetChange
+                Resource: !Sub arn:${AWS::Partition}:route53:::change/*
+
+  GitHubDeployRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: molroom-github-deploy
+      Description: GitHub production-environment role for immutable uploads and CloudFormation change sets.
+      MaxSessionDuration: 3600
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Federated: !If
+                - CreateGitHubOidcProvider
+                - !Ref GitHubOidcProvider
+                - !Ref ExistingGitHubOidcProviderArn
+            Action: sts:AssumeRoleWithWebIdentity
+            Condition:
+              StringEquals:
+                token.actions.githubusercontent.com:aud: sts.amazonaws.com
+                token.actions.githubusercontent.com:sub: !Ref GitHubOidcSubject
+      Policies:
+        - PolicyName: molroom-release-deployment
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Sid: ManageOnlyProductionStackChangeSets
+                Effect: Allow
+                Action:
+                  - cloudformation:CreateChangeSet
+                  - cloudformation:DeleteChangeSet
+                  - cloudformation:DescribeChangeSet
+                  - cloudformation:DescribeStackEvents
+                  - cloudformation:DescribeStackResources
+                  - cloudformation:DescribeStacks
+                  - cloudformation:ExecuteChangeSet
+                  - cloudformation:GetTemplate
+                  - cloudformation:ListStackResources
+                Resource: !Sub arn:${AWS::Partition}:cloudformation:us-east-1:${AWS::AccountId}:stack/${ProductionStackName}/*
+              - Sid: ValidateProductionTemplate
+                Effect: Allow
+                Action: cloudformation:ValidateTemplate
+                Resource: "*"
+              - Sid: PassOnlyMolRoomCloudFormationRole
+                Effect: Allow
+                Action: iam:PassRole
+                Resource: !GetAtt CloudFormationExecutionRole.Arn
+                Condition:
+                  StringEquals:
+                    iam:PassedToService: cloudformation.amazonaws.com
+              - Sid: ListOnlyReleasePrefix
+                Effect: Allow
+                Action: s3:ListBucket
+                Resource: !Sub arn:${AWS::Partition}:s3:::molroom-${AWS::AccountId}-us-east-1-origin
+                Condition:
+                  StringLike:
+                    s3:prefix: releases/*
+              - Sid: ReadAndConditionallyWriteReleaseObjects
+                Effect: Allow
+                Action:
+                  - s3:GetObject
+                  - s3:GetObjectVersion
+                  - s3:PutObject
+                Resource: !Sub arn:${AWS::Partition}:s3:::molroom-${AWS::AccountId}-us-east-1-origin/releases/*
+              - Sid: ObserveProductionHostedZone
+                Effect: Allow
+                Action: route53:GetHostedZone
+                Resource: !Sub arn:${AWS::Partition}:route53:::hostedzone/${HostedZoneId}
+              - Sid: ObserveAndInvalidateProductionDistribution
+                Effect: Allow
+                Action:
+                  - cloudfront:CreateInvalidation
+                  - cloudfront:GetDistribution
+                  - cloudfront:GetInvalidation
+                Resource: !Sub arn:${AWS::Partition}:cloudfront::${AWS::AccountId}:distribution/*
+                Condition:
+                  StringEquals:
+                    aws:ResourceTag/Project: MolRoom
+      Tags:
+        - Key: Project
+          Value: MolRoom
+        - Key: ManagedBy
+          Value: CloudFormation
+
+Outputs:
+  GitHubOidcProviderArn:
+    Value: !If
+      - CreateGitHubOidcProvider
+      - !Ref GitHubOidcProvider
+      - !Ref ExistingGitHubOidcProviderArn
+  GitHubDeployRoleArn:
+    Value: !GetAtt GitHubDeployRole.Arn
+  CloudFormationExecutionRoleArn:
+    Value: !GetAtt CloudFormationExecutionRole.Arn
