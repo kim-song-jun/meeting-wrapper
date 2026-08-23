@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "googleClientId": "replace-with-public-browser-client-id",
+  "accountAliases": [
+    "ordinary",
+    "room-writer-admin"
+  ],
+  "roomCalendars": {
+    "room-a": "replace-with-room-a-calendar-id",
+    "room-b": "replace-with-room-b-calendar-id"
+  }
+}
