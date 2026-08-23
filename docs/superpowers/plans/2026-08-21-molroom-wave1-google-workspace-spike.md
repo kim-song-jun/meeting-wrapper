@@ -437,7 +437,7 @@ Critical path: Task 1 -> Task 2 -> Task 3 -> Task 4 -> Task 5 -> Task 6 -> Task 
   - [ ] Organizer and room-copy readback evidence records shared-series equality, hashed IDs, iCalUID relationship, and recurring-field presence for every occurrence.
   - [ ] Instance deletion leaves the other occurrences observable, and series lookup returns the actual expected count on both relevant calendars.
   - [ ] Ordinary and admin series-cancel probes return per-occurrence results and cleanup verification; any missing/multiple locator is `event-locator-ambiguous`.
-  - [ ] If shared series ID does not read back identically on organizer and room copies, evidence sets `architectureTrigger=shared-series-copy-mismatch` and Task 14 cannot approve admin series cancellation.
+  - [ ] If shared series ID does not read back identically on organizer and room copies, evidence sets `architectureTrigger=SHARED_SERIES_COPY_MISMATCH` and Task 14 cannot approve admin series cancellation.
 
   QA scenarios (MANDATORY - task incomplete without these):
   ```
