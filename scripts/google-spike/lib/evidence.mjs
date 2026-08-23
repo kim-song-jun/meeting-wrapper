@@ -9,6 +9,7 @@ const EVIDENCE_KEYS = new Set([
   "roleAlias",
   "browserAlias",
   "deviceAlias",
+  "aliases",
   "operationId",
   "endpoint",
   "httpStatus",
@@ -31,6 +32,7 @@ const REQUIRED_EVIDENCE_KEYS = [
   "roleAlias",
   "browserAlias",
   "deviceAlias",
+  "aliases",
   "operationId",
   "endpoint",
   "capability",
@@ -39,6 +41,7 @@ const REQUIRED_EVIDENCE_KEYS = [
 ];
 
 const INPUT_KEYS = new Set([...EVIDENCE_KEYS, "locatorInputs"]);
+const ALIAS_KEYS = new Set(["account", "room", "calendar"]);
 const RESPONSE_COUNT_KEYS = new Set([
   "items",
   "matches",
@@ -158,7 +161,22 @@ const ARCHITECTURE_TRIGGERS = new Set([
   "VISIBILITY_FEATURE_REDUCTION",
   "TENANT_POLICY_BLOCKED",
   "UNKNOWN_OUTCOME",
+  "SHARED_SERIES_COPY_MISMATCH",
 ]);
+
+export const GOOGLE_ENDPOINT_TEMPLATES = Object.freeze([
+  "https://www.googleapis.com/calendar/v3/calendars/{calendar}/events",
+  "https://www.googleapis.com/calendar/v3/calendars/{calendar}/events/{event}",
+  "https://www.googleapis.com/calendar/v3/calendars/{calendar}/events/{event}/instances",
+  "https://www.googleapis.com/drive/v3/files",
+  "https://www.googleapis.com/drive/v3/files/{file}",
+  "https://www.googleapis.com/upload/drive/v3/files",
+  "https://www.googleapis.com/upload/drive/v3/files/{file}",
+  "https://people.googleapis.com/v1/people:searchDirectoryPeople",
+  "https://oauth2.googleapis.com/revoke",
+]);
+
+const GOOGLE_ENDPOINT_TEMPLATE_SET = new Set(GOOGLE_ENDPOINT_TEMPLATES);
 
 const ALIAS_PATTERN = /^[a-z][a-z0-9-]{0,63}$/;
 const OPERATION_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;
@@ -177,10 +195,13 @@ const FORBIDDEN_VALUE_PATTERNS = [
 
 export class EvidencePolicyError extends Error {
   constructor(category, pointer) {
-    super(`${category} pointer=${pointer}`);
+    const safePointer = /^\/(?:[A-Za-z0-9_-]+(?:\/[A-Za-z0-9_-]+)*)?$/.test(pointer)
+      ? pointer
+      : "/_invalid";
+    super(`${category} pointer=${safePointer}`);
     this.name = "EvidencePolicyError";
     this.category = category;
-    this.pointer = pointer;
+    this.pointer = safePointer;
   }
 }
 
@@ -217,7 +238,7 @@ function assertRecord(value, pointer) {
 function assertAllowedKeys(value, allowedKeys, pointer) {
   assertRecord(value, pointer);
   for (const key of Object.keys(value)) {
-    if (!allowedKeys.has(key)) failForbidden(childPointer(pointer, key));
+    if (!allowedKeys.has(key)) failForbidden(childPointer(pointer, "_unknown"));
   }
 }
 
@@ -251,21 +272,15 @@ function assertTimestamp(value, pointer) {
 
 function assertEndpoint(value, pointer) {
   assertString(value, pointer, { max: 512 });
-  if (value.includes("?") || value.includes("#") || value.includes("@")) failForbidden(pointer);
+  if (!GOOGLE_ENDPOINT_TEMPLATE_SET.has(value)) failForbidden(pointer);
+}
 
-  let endpoint;
-  try {
-    endpoint = new URL(value);
-  } catch {
-    failShape(pointer);
+function assertAliases(value, pointer) {
+  assertAllowedKeys(value, ALIAS_KEYS, pointer);
+  assertRequiredKeys(value, ["account"], pointer);
+  for (const [key, alias] of Object.entries(value)) {
+    assertString(alias, childPointer(pointer, key), { max: 64, pattern: ALIAS_PATTERN });
   }
-
-  const allowedHosts = new Set([
-    "www.googleapis.com",
-    "people.googleapis.com",
-    "oauth2.googleapis.com",
-  ]);
-  if (endpoint.protocol !== "https:" || !allowedHosts.has(endpoint.hostname)) failShape(pointer);
 }
 
 function assertCountMap(value, pointer) {
@@ -307,7 +322,7 @@ function copyJsonValue(value) {
 }
 
 export function hashLocator(rawLocator) {
-  assertString(rawLocator, "/locator", { max: 2048 });
+  assertRawLocator(rawLocator, "/locator");
   return `sha256:${createHash("sha256").update(rawLocator, "utf8").digest("hex")}`;
 }
 
@@ -335,8 +350,19 @@ export function redactEvidence(draft) {
 }
 
 function hashLocatorAtPointer(rawLocator, pointer) {
-  assertString(rawLocator, pointer, { max: 2048 });
+  assertRawLocator(rawLocator, pointer);
   return `sha256:${createHash("sha256").update(rawLocator, "utf8").digest("hex")}`;
+}
+
+function assertRawLocator(rawLocator, pointer) {
+  if (
+    typeof rawLocator !== "string" ||
+    rawLocator.length === 0 ||
+    rawLocator.length > 2048 ||
+    /[\u0000-\u001f\u007f]/.test(rawLocator)
+  ) {
+    failShape(pointer);
+  }
 }
 
 export function validateEvidence(evidence) {
@@ -351,6 +377,7 @@ export function validateEvidence(evidence) {
   assertString(evidence.roleAlias, "/roleAlias", { max: 64, pattern: ALIAS_PATTERN });
   assertString(evidence.browserAlias, "/browserAlias", { max: 64, pattern: ALIAS_PATTERN });
   assertString(evidence.deviceAlias, "/deviceAlias", { max: 64, pattern: ALIAS_PATTERN });
+  assertAliases(evidence.aliases, "/aliases");
   assertString(evidence.operationId, "/operationId", { max: 128, pattern: OPERATION_PATTERN });
   assertEndpoint(evidence.endpoint, "/endpoint");
 
@@ -439,7 +466,9 @@ function assertEvidenceEntries(value, pointer) {
       max: 256,
       pattern: /^(?:docs|scripts)\/[A-Za-z0-9._/-]+$/,
     });
-    if (entry.path.split("/").includes("..")) failShape(childPointer(itemPointer, "path"));
+    if (entry.path.split("/").some((segment) => segment === "." || segment === "..")) {
+      failShape(childPointer(itemPointer, "path"));
+    }
     assertString(entry.sha256, childPointer(itemPointer, "sha256"), {
       max: 64,
       pattern: SHA256_PATTERN,

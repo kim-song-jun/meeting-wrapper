@@ -13,6 +13,7 @@
     "roleAlias",
     "browserAlias",
     "deviceAlias",
+    "aliases",
     "operationId",
     "endpoint",
     "capability",
@@ -28,10 +29,30 @@
     "roleAlias": { "$ref": "#/$defs/alias" },
     "browserAlias": { "$ref": "#/$defs/alias" },
     "deviceAlias": { "$ref": "#/$defs/alias" },
+    "aliases": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["account"],
+      "properties": {
+        "account": { "$ref": "#/$defs/alias" },
+        "room": { "$ref": "#/$defs/alias" },
+        "calendar": { "$ref": "#/$defs/alias" }
+      }
+    },
     "operationId": { "$ref": "#/$defs/operation" },
     "endpoint": {
       "type": "string",
-      "pattern": "^https://(www|people|oauth2)\\.googleapis\\.com/[^?#@]*$"
+      "enum": [
+        "https://www.googleapis.com/calendar/v3/calendars/{calendar}/events",
+        "https://www.googleapis.com/calendar/v3/calendars/{calendar}/events/{event}",
+        "https://www.googleapis.com/calendar/v3/calendars/{calendar}/events/{event}/instances",
+        "https://www.googleapis.com/drive/v3/files",
+        "https://www.googleapis.com/drive/v3/files/{file}",
+        "https://www.googleapis.com/upload/drive/v3/files",
+        "https://www.googleapis.com/upload/drive/v3/files/{file}",
+        "https://people.googleapis.com/v1/people:searchDirectoryPeople",
+        "https://oauth2.googleapis.com/revoke"
+      ]
     },
     "httpStatus": { "type": "integer", "minimum": 100, "maximum": 599 },
     "googleRequestId": { "$ref": "#/$defs/operation" },

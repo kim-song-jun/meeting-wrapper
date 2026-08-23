@@ -12,6 +12,7 @@ const SENSITIVE_PATTERNS = [
   /\bcookie\b/i,
   /\battendees\b/i,
   /"summary"\s*:/i,
+  /"(?:eventId|fileId|calendarId|roomCalendarId|iCalUID)"\s*:/i,
   /\bya29\.[A-Za-z0-9_-]+/,
   /\bGOCSPX-[A-Za-z0-9_-]+/,
   /\b[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\b/,

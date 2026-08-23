@@ -7,6 +7,9 @@
   "roleAlias": "ordinary",
   "browserAlias": "chrome-desktop",
   "deviceAlias": "desktop",
+  "aliases": {
+    "account": "ordinary"
+  },
   "operationId": "operation-fixture-005",
   "endpoint": "https://www.googleapis.com/calendar/v3/calendars/{calendar}/events",
   "capability": "SUPPORTED",

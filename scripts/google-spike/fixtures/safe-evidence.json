@@ -7,6 +7,11 @@
   "roleAlias": "ordinary",
   "browserAlias": "chrome-desktop",
   "deviceAlias": "desktop",
+  "aliases": {
+    "account": "ordinary",
+    "room": "room-a",
+    "calendar": "room-a-calendar"
+  },
   "operationId": "operation-fixture-001",
   "endpoint": "https://www.googleapis.com/calendar/v3/calendars/{calendar}/events",
   "httpStatus": 200,

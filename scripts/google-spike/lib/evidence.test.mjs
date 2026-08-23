@@ -10,6 +10,7 @@ import {
   redactEvidence,
   validateEvidence,
   validateManifest,
+  GOOGLE_ENDPOINT_TEMPLATES,
 } from "./evidence.mjs";
 
 const testRoot = dirname(fileURLToPath(import.meta.url));
@@ -29,6 +30,11 @@ const safeEvidence = {
   roleAlias: "ordinary",
   browserAlias: "chrome-desktop",
   deviceAlias: "desktop",
+  aliases: {
+    account: "ordinary",
+    room: "room-a",
+    calendar: "room-a-calendar",
+  },
   operationId: "operation-fixture-001",
   endpoint: "https://www.googleapis.com/calendar/v3/calendars/{calendar}/events",
   httpStatus: 200,
@@ -77,7 +83,7 @@ describe("Google spike evidence policy", () => {
     ).toThrowError(
       expect.objectContaining({
         category: "FORBIDDEN_EVIDENCE_FIELD",
-        pointer: "/responseCounts/unexpected",
+        pointer: "/responseCounts/_unknown",
       }),
     );
 
@@ -85,21 +91,34 @@ describe("Google spike evidence policy", () => {
       validateEvidence({ ...safeEvidence, unexpected: forbiddenValue });
     } catch (error) {
       expect(error).toBeInstanceOf(EvidencePolicyError);
+      expect(error.pointer).toBe("/_unknown");
       expect(error.message).not.toContain(forbiddenValue);
     }
   });
 
-  it("hashes raw locators before returning persistable evidence", () => {
+  it("hashes raw event and email-shaped calendar locators before persistence", () => {
     const rawLocator = "fixture-calendar-event-raw-id";
+    const rawCalendar = "room-a@resource.invalid";
+    const rawICalUid = "series-fixture@ical.invalid";
     const { locatorHashes: _ignored, ...withoutHashes } = safeEvidence;
     const redacted = redactEvidence({
       ...withoutHashes,
-      locatorInputs: { event: rawLocator },
+      locatorInputs: {
+        event: rawLocator,
+        roomCalendar: rawCalendar,
+        iCalUid: rawICalUid,
+      },
     });
 
-    expect(redacted.locatorHashes).toEqual({ event: hashLocator(rawLocator) });
+    expect(redacted.locatorHashes).toEqual({
+      event: hashLocator(rawLocator),
+      roomCalendar: hashLocator(rawCalendar),
+      iCalUid: hashLocator(rawICalUid),
+    });
     expect(redacted.locatorHashes.event).toMatch(/^sha256:[a-f0-9]{64}$/);
     expect(JSON.stringify(redacted)).not.toContain(rawLocator);
+    expect(JSON.stringify(redacted)).not.toContain(rawCalendar);
+    expect(JSON.stringify(redacted)).not.toContain(rawICalUid);
     expect(hashLocator(rawLocator)).toBe(hashLocator(rawLocator));
   });
 
@@ -120,14 +139,31 @@ describe("Google spike evidence policy", () => {
     } catch (error) {
       expect(error).toBeInstanceOf(EvidencePolicyError);
       expect(error.category).toBe("FORBIDDEN_EVIDENCE_FIELD");
-      expect(error.pointer).toBe(`/${field}`);
+      expect(error.pointer).toBe("/_unknown");
       expect(error.message).not.toContain(String(forbiddenValue));
+    }
+  });
+
+  it("never echoes a sensitive or control-character unknown key name", () => {
+    const unsafeKey = "fixture.person@example.invalid\ninjected";
+
+    try {
+      validateEvidence({ ...safeEvidence, [unsafeKey]: "fixture-private-material" });
+      throw new Error("expected evidence rejection");
+    } catch (error) {
+      expect(error).toBeInstanceOf(EvidencePolicyError);
+      expect(error.category).toBe("FORBIDDEN_EVIDENCE_FIELD");
+      expect(error.pointer).toBe("/_unknown");
+      expect(error.message).not.toContain("example.invalid");
+      expect(error.message).not.toContain("\n");
     }
   });
 
   it("rejects secret, email, JWT, and query-string values without echoing them", () => {
     const forbiddenValues = [
       "Bearer fixture-secret-material",
+      "ya29.fixtureAccessTokenMaterial",
+      "GOCSPX-fixtureClientSecretMaterial",
       "fixture.person@example.invalid",
       "eyJmaXh0dXJlIjoiYSJ9.eyJmaXh0dXJlIjoiYiJ9.fixtureSignature",
       "https://www.googleapis.com/calendar/v3/events?privateExtendedProperty=fixture",
@@ -143,6 +179,23 @@ describe("Google spike evidence policy", () => {
         expect(error.message).not.toContain(forbiddenValue);
       }
     }
+  });
+
+  it("accepts only fixed endpoint templates and rejects concrete locator paths", () => {
+    expect(GOOGLE_ENDPOINT_TEMPLATES).toContain(safeEvidence.endpoint);
+
+    expect(() =>
+      validateEvidence({
+        ...safeEvidence,
+        endpoint:
+          "https://www.googleapis.com/calendar/v3/calendars/concrete-calendar/events/concrete-event",
+      }),
+    ).toThrowError(
+      expect.objectContaining({
+        category: "FORBIDDEN_EVIDENCE_FIELD",
+        pointer: "/endpoint",
+      }),
+    );
   });
 
   it("validates a strict manifest and rejects nested unknown fields", () => {
@@ -174,6 +227,12 @@ describe("Google spike evidence policy", () => {
     };
 
     expect(validateManifest(manifest)).toEqual(manifest);
+    expect(
+      validateManifest({
+        ...manifest,
+        architectureTriggers: ["SHARED_SERIES_COPY_MISMATCH"],
+      }).architectureTriggers,
+    ).toEqual(["SHARED_SERIES_COPY_MISMATCH"]);
     expect(() =>
       validateManifest({
         ...manifest,
@@ -182,7 +241,18 @@ describe("Google spike evidence policy", () => {
     ).toThrowError(
       expect.objectContaining({
         category: "FORBIDDEN_EVIDENCE_FIELD",
-        pointer: "/coverage/0/accountEmail",
+        pointer: "/coverage/0/_unknown",
+      }),
+    );
+    expect(() =>
+      validateManifest({
+        ...manifest,
+        evidence: [{ ...manifest.evidence[0], path: "docs/../private.json" }],
+      }),
+    ).toThrowError(
+      expect.objectContaining({
+        category: "INVALID_EVIDENCE_SHAPE",
+        pointer: "/evidence/0/path",
       }),
     );
   });
@@ -200,12 +270,22 @@ describe("Google spike evidence policy", () => {
     expect(evidenceSchema.properties.responseCounts.additionalProperties).toBe(false);
     expect(evidenceSchema.properties.fieldPresence.additionalProperties).toBe(false);
     expect(evidenceSchema.properties.locatorHashes.additionalProperties).toBe(false);
+    expect(evidenceSchema.properties.aliases.additionalProperties).toBe(false);
+    expect(evidenceSchema.properties.endpoint.enum).toEqual(GOOGLE_ENDPOINT_TEMPLATES);
 
     expect(manifestSchema.$id.endsWith("manifest-v1.json")).toBe(true);
     expect(manifestSchema.additionalProperties).toBe(false);
     expect(manifestSchema.properties.probeCommitShas.additionalProperties).toBe(false);
     expect(manifestSchema.properties.coverage.items.additionalProperties).toBe(false);
     expect(manifestSchema.properties.evidence.items.additionalProperties).toBe(false);
+    const manifestPathPattern = new RegExp(
+      manifestSchema.properties.evidence.items.properties.path.pattern,
+    );
+    expect(manifestPathPattern.test("docs/spikes/google-workspace/evidence/teardown.json")).toBe(true);
+    expect(manifestPathPattern.test("docs/../private.json")).toBe(false);
+    expect(manifestSchema.properties.architectureTriggers.items.enum).toContain(
+      "SHARED_SERIES_COPY_MISMATCH",
+    );
   });
 
   it("keeps CLI success and failure output stable and redacted", () => {
@@ -234,10 +314,12 @@ describe("Google spike evidence policy", () => {
     temporaryRoots.push(root);
     const safePath = join(root, "safe.json");
     const forbiddenPath = join(root, "forbidden.json");
+    const rawLocatorPath = join(root, "raw-locator.json");
     const directoryPath = join(root, "directory");
     const symlinkPath = join(root, "safe-link.json");
     await writeFile(safePath, JSON.stringify(safeEvidence));
     await writeFile(forbiddenPath, JSON.stringify({ credential: "Bearer fixture-secret-material" }));
+    await writeFile(rawLocatorPath, JSON.stringify({ fileId: "fixture-raw-file-id" }));
     await mkdir(directoryPath);
     await symlink(safePath, symlinkPath);
 
@@ -248,6 +330,21 @@ describe("Google spike evidence policy", () => {
     const forbidden = runNode(scanSensitivePathsCli, ["--redact", forbiddenPath]);
     expectRedactedFailure(forbidden, "FORBIDDEN_PATH_CONTENT", "fixture-secret-material");
     expect(`${forbidden.stdout}${forbidden.stderr}`).toContain(`path=${forbiddenPath}`);
+
+    const rawLocator = runNode(scanSensitivePathsCli, ["--redact", rawLocatorPath]);
+    expectRedactedFailure(rawLocator, "FORBIDDEN_PATH_CONTENT", "fixture-raw-file-id");
+
+    for (const fixture of [
+      "forbidden-token.json",
+      "forbidden-pii.json",
+      "forbidden-locator.json",
+      "forbidden-query.json",
+    ]) {
+      const fixturePath = join(fixturesRoot, fixture);
+      const result = runNode(scanSensitivePathsCli, ["--redact", fixturePath]);
+      expect(result.status).not.toBe(0);
+      expect(`${result.stdout}${result.stderr}`).toContain("FORBIDDEN_PATH_CONTENT");
+    }
 
     const missing = runNode(scanSensitivePathsCli, ["--redact", join(root, "missing.json")]);
     expect(missing.status).not.toBe(0);

@@ -1,3 +1,6 @@
 {
-  "eventId": "fixture-raw-event-id"
+  "eventId": "fixture-raw-event-id",
+  "fileId": "fixture-raw-file-id",
+  "roomCalendarId": "room-a@resource.invalid",
+  "iCalUID": "series-fixture@ical.invalid"
 }

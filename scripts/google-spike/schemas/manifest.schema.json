@@ -72,7 +72,10 @@
         "required": ["probeId", "path", "sha256", "capability"],
         "properties": {
           "probeId": { "$ref": "#/$defs/probeId" },
-          "path": { "type": "string", "pattern": "^(docs|scripts)/[A-Za-z0-9._/-]+$" },
+          "path": {
+            "type": "string",
+            "pattern": "^(docs|scripts)/(?!\\.\\.(?:/|$))(?!.*\\/\\.\\.(?:/|$))[A-Za-z0-9._/-]+$"
+          },
           "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
           "capability": { "$ref": "#/$defs/capability" }
         }
@@ -95,7 +98,8 @@
           "ADMIN_CANCEL_FEATURE_REDUCTION",
           "VISIBILITY_FEATURE_REDUCTION",
           "TENANT_POLICY_BLOCKED",
-          "UNKNOWN_OUTCOME"
+          "UNKNOWN_OUTCOME",
+          "SHARED_SERIES_COPY_MISMATCH"
         ]
       }
     },
