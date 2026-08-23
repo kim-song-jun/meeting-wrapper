@@ -1,0 +1,58 @@
+{
+  "schemaVersion": 1,
+  "kind": "provisioning",
+  "probeId": "provisioning",
+  "status": "INCOMPLETE",
+  "observation": "UNOBSERVED",
+  "appType": "UNOBSERVED",
+  "domain": "MOLCUBE_COM",
+  "clientIdSuffix": "UNOBSERVED",
+  "workspaceEdition": "UNOBSERVED",
+  "enabledApis": {
+    "calendar": false,
+    "drive": false,
+    "people": false
+  },
+  "initialScopes": {
+    "calendarEvents": false,
+    "calendarReadonly": false,
+    "driveAppdata": false
+  },
+  "directoryScopeTiming": "DEFERRED_TO_TASK_11",
+  "origins": {
+    "localhostSpike": false,
+    "production": false
+  },
+  "accounts": {
+    "ordinary": {
+      "alias": "ordinary",
+      "present": false
+    },
+    "roomWriterAdmin": {
+      "alias": "room-writer-admin",
+      "present": false
+    },
+    "distinct": false
+  },
+  "rooms": [
+    {
+      "alias": "room-a",
+      "present": false,
+      "domainReadAcl": false,
+      "ordinaryRoomWriter": false,
+      "adminRoomWriter": false,
+      "autoAccept": "UNOBSERVED"
+    },
+    {
+      "alias": "room-b",
+      "present": false,
+      "domainReadAcl": false,
+      "ordinaryRoomWriter": false,
+      "adminRoomWriter": false,
+      "autoAccept": "UNOBSERVED"
+    }
+  ],
+  "tenantPolicy": "UNOBSERVED",
+  "operatorVerified": false,
+  "capability": "INCONCLUSIVE"
+}
