@@ -2,57 +2,76 @@
 
 import { constants } from "node:fs";
 import { open } from "node:fs/promises";
+import { containsSensitiveMaterial } from "./lib/evidence.mjs";
+
+const MAX_SCAN_BYTES = 1_048_576;
 
 const SENSITIVE_PATTERNS = [
-  /\bBearer\s+\S+/i,
-  /\baccess_token\b/i,
-  /\brefresh_token\b/i,
-  /\bclient_secret\b/i,
-  /\bAuthorization\b/i,
-  /\bcookie\b/i,
   /\battendees\b/i,
   /"summary"\s*:/i,
   /"(?:eventId|fileId|calendarId|roomCalendarId|iCalUID)"\s*:/i,
-  /\bya29\.[A-Za-z0-9_-]+/,
-  /\bGOCSPX-[A-Za-z0-9_-]+/,
-  /\b[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\b/,
-  /\b[^\s@]+@[^\s@]+\.[^\s@]+\b/,
-  /https?:\/\/[^\s?#]+\?[^\s#]+/i,
 ];
 
 class SensitivePathError extends Error {
-  constructor(category, path) {
+  constructor(category) {
     super(category);
     this.category = category;
-    this.path = path;
   }
+}
+
+function sameFileSnapshot(before, after) {
+  return (
+    before.dev === after.dev &&
+    before.ino === after.ino &&
+    before.size === after.size &&
+    before.mtimeNs === after.mtimeNs &&
+    before.ctimeNs === after.ctimeNs
+  );
 }
 
 async function readRegularFile(path) {
   let handle;
   try {
-    handle = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW);
+    handle = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
   } catch {
-    throw new SensitivePathError("PATH_NOT_READABLE", path);
+    throw new SensitivePathError("PATH_NOT_READABLE");
   }
 
   let contents;
   let operationError;
   try {
-    const metadata = await handle.stat();
-    if (!metadata.isFile()) throw new SensitivePathError("PATH_NOT_REGULAR", path);
-    contents = await handle.readFile("utf8");
+    const metadata = await handle.stat({ bigint: true });
+    if (!metadata.isFile()) throw new SensitivePathError("PATH_NOT_REGULAR");
+    if (metadata.size > BigInt(MAX_SCAN_BYTES)) throw new SensitivePathError("PATH_TOO_LARGE");
+    const bytes = Buffer.alloc(Number(metadata.size));
+    let offset = 0;
+    while (offset < bytes.length) {
+      const { bytesRead } = await handle.read(bytes, offset, bytes.length - offset, offset);
+      if (bytesRead === 0) throw new SensitivePathError("PATH_NOT_READABLE");
+      offset += bytesRead;
+    }
+    const finalMetadata = await handle.stat({ bigint: true });
+    if (!sameFileSnapshot(metadata, finalMetadata)) {
+      throw new SensitivePathError(
+        finalMetadata.size > BigInt(MAX_SCAN_BYTES) ? "PATH_TOO_LARGE" : "PATH_NOT_READABLE",
+      );
+    }
+    try {
+      contents = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+    } catch {
+      throw new SensitivePathError("PATH_INVALID_UTF8");
+    }
   } catch (error) {
     operationError =
       error instanceof SensitivePathError
         ? error
-        : new SensitivePathError("PATH_NOT_READABLE", path);
+        : new SensitivePathError("PATH_NOT_READABLE");
   }
 
   try {
     await handle.close();
   } catch {
-    throw new SensitivePathError("PATH_CLOSE_FAILED", path);
+    if (!operationError) operationError = new SensitivePathError("PATH_CLOSE_FAILED");
   }
 
   if (operationError) throw operationError;
@@ -62,17 +81,17 @@ async function readRegularFile(path) {
 async function main() {
   const [mode, ...paths] = process.argv.slice(2);
   if (mode !== "--redact" || paths.length === 0) {
-    throw new SensitivePathError("INVALID_SCAN_ARGUMENTS", "-");
+    throw new SensitivePathError("INVALID_SCAN_ARGUMENTS");
   }
 
   if (new Set(paths).size !== paths.length) {
-    throw new SensitivePathError("DUPLICATE_SCAN_PATH", "-");
+    throw new SensitivePathError("DUPLICATE_SCAN_PATH");
   }
 
   for (const path of paths) {
     const contents = await readRegularFile(path);
-    if (SENSITIVE_PATTERNS.some((pattern) => pattern.test(contents))) {
-      throw new SensitivePathError("FORBIDDEN_PATH_CONTENT", path);
+    if (containsSensitiveMaterial(contents) || SENSITIVE_PATTERNS.some((pattern) => pattern.test(contents))) {
+      throw new SensitivePathError("FORBIDDEN_PATH_CONTENT");
     }
   }
 
@@ -83,7 +102,7 @@ try {
   await main();
 } catch (error) {
   if (error instanceof SensitivePathError) {
-    process.stderr.write(`${error.category} path=${error.path}\n`);
+    process.stderr.write(`${error.category} path=-\n`);
     process.exitCode = 1;
   } else {
     process.stderr.write("SENSITIVE_SCAN_FAILED path=-\n");

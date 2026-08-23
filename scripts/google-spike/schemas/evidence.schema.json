@@ -3,152 +3,611 @@
   "$id": "https://molroom.molcube.com/schemas/google-spike/evidence-v1.json",
   "title": "MolRoom Google spike redacted evidence v1",
   "type": "object",
-  "additionalProperties": false,
-  "required": [
-    "schemaVersion",
-    "probeId",
-    "runId",
-    "candidateSha",
-    "observedAt",
-    "roleAlias",
-    "browserAlias",
-    "deviceAlias",
-    "aliases",
-    "operationId",
-    "endpoint",
-    "capability",
-    "result",
-    "teardownStatus"
+  "oneOf": [
+    { "$ref": "#/$defs/probeEvidence" },
+    { "$ref": "#/$defs/provisioningEvidence" }
   ],
-  "properties": {
-    "schemaVersion": { "const": 1 },
-    "probeId": { "$ref": "#/$defs/alias" },
-    "runId": { "$ref": "#/$defs/operation" },
-    "candidateSha": { "$ref": "#/$defs/commitSha" },
-    "observedAt": { "type": "string", "format": "date-time" },
-    "roleAlias": { "$ref": "#/$defs/alias" },
-    "browserAlias": { "$ref": "#/$defs/alias" },
-    "deviceAlias": { "$ref": "#/$defs/alias" },
-    "aliases": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["account"],
-      "properties": {
-        "account": { "$ref": "#/$defs/alias" },
-        "room": { "$ref": "#/$defs/alias" },
-        "calendar": { "$ref": "#/$defs/alias" }
-      }
-    },
-    "operationId": { "$ref": "#/$defs/operation" },
-    "endpoint": {
-      "type": "string",
-      "enum": [
-        "https://www.googleapis.com/calendar/v3/calendars/{calendar}/events",
-        "https://www.googleapis.com/calendar/v3/calendars/{calendar}/events/{event}",
-        "https://www.googleapis.com/calendar/v3/calendars/{calendar}/events/{event}/instances",
-        "https://www.googleapis.com/drive/v3/files",
-        "https://www.googleapis.com/drive/v3/files/{file}",
-        "https://www.googleapis.com/upload/drive/v3/files",
-        "https://www.googleapis.com/upload/drive/v3/files/{file}",
-        "https://people.googleapis.com/v1/people:searchDirectoryPeople",
-        "https://oauth2.googleapis.com/revoke"
-      ]
-    },
-    "httpStatus": { "type": "integer", "minimum": 100, "maximum": 599 },
-    "googleRequestId": { "$ref": "#/$defs/operation" },
-    "capability": { "$ref": "#/$defs/capability" },
-    "result": {
-      "enum": [
-        "SUCCESS",
-        "DENIED",
-        "DECLINED",
-        "TIMEOUT",
-        "PARTIAL",
-        "UNKNOWN_OUTCOME",
-        "BLOCKED",
-        "ALREADY_ABSENT",
-        "NOT_RUN"
-      ]
-    },
-    "responseCounts": {
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "items": { "$ref": "#/$defs/count" },
-        "matches": { "$ref": "#/$defs/count" },
-        "accepted": { "$ref": "#/$defs/count" },
-        "declined": { "$ref": "#/$defs/count" },
-        "pages": { "$ref": "#/$defs/count" },
-        "attempts": { "$ref": "#/$defs/count" },
-        "created": { "$ref": "#/$defs/count" },
-        "updated": { "$ref": "#/$defs/count" },
-        "deleted": { "$ref": "#/$defs/count" },
-        "unknown": { "$ref": "#/$defs/count" }
-      }
-    },
-    "fieldPresence": {
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "sharedProperty": { "type": "boolean" },
-        "visibility": { "type": "boolean" },
-        "organizer": { "type": "boolean" },
-        "conferenceData": { "type": "boolean" },
-        "iCalUid": { "type": "boolean" },
-        "recurringEventId": { "type": "boolean" },
-        "originalStartTime": { "type": "boolean" },
-        "nextPageToken": { "type": "boolean" },
-        "names": { "type": "boolean" },
-        "emailAddresses": { "type": "boolean" },
-        "organizations": { "type": "boolean" },
-        "department": { "type": "boolean" }
-      }
-    },
-    "locatorHashes": {
-      "type": "object",
-      "minProperties": 1,
-      "additionalProperties": false,
-      "properties": {
-        "event": { "$ref": "#/$defs/locatorHash" },
-        "organizerEvent": { "$ref": "#/$defs/locatorHash" },
-        "roomEvent": { "$ref": "#/$defs/locatorHash" },
-        "file": { "$ref": "#/$defs/locatorHash" },
-        "series": { "$ref": "#/$defs/locatorHash" },
-        "iCalUid": { "$ref": "#/$defs/locatorHash" },
-        "calendar": { "$ref": "#/$defs/locatorHash" },
-        "roomCalendar": { "$ref": "#/$defs/locatorHash" }
-      }
-    },
-    "teardownStatus": { "$ref": "#/$defs/teardownStatus" },
-    "notes": {
-      "type": "array",
-      "maxItems": 16,
-      "items": {
-        "enum": [
-          "FIXTURE",
-          "OPERATOR_VERIFIED",
-          "TENANT_POLICY",
-          "BLOCKED_ENVIRONMENT",
-          "USER_DENIED",
-          "POPUP_BLOCKED",
-          "TOKEN_EXPIRED",
-          "RECONNECT_REQUIRED",
-          "PROPAGATION_TIMEOUT",
-          "AUTO_DECLINED",
-          "UNSUPPORTED",
-          "CLEANUP_ALREADY_ABSENT",
-          "RETRYABLE_RATE_LIMIT",
-          "FEATURE_REDUCED"
-        ]
-      }
-    }
-  },
+  "unevaluatedProperties": false,
   "$defs": {
-    "alias": { "type": "string", "pattern": "^[a-z][a-z0-9-]{0,63}$" },
-    "operation": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$" },
+    "probeEvidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schemaVersion",
+        "probeId",
+        "runId",
+        "candidateSha",
+        "observedAt",
+        "roleAlias",
+        "browserAlias",
+        "deviceAlias",
+        "aliases",
+        "operationId",
+        "endpoint",
+        "capability",
+        "result",
+        "teardownStatus"
+      ],
+      "properties": {
+        "kind": { "const": "probe" },
+        "schemaVersion": { "const": 1 },
+        "probeId": { "enum": ["fixture-safe", "safe-self-test"] },
+        "runId": { "$ref": "#/$defs/operation" },
+        "candidateSha": { "$ref": "#/$defs/commitSha" },
+        "observedAt": { "$ref": "#/$defs/timestamp" },
+        "roleAlias": { "$ref": "#/$defs/probeRole" },
+        "browserAlias": { "$ref": "#/$defs/alias" },
+        "deviceAlias": { "$ref": "#/$defs/alias" },
+        "aliases": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["account"],
+          "properties": {
+            "account": { "$ref": "#/$defs/probeRole" },
+            "room": { "$ref": "#/$defs/alias" },
+            "calendar": { "$ref": "#/$defs/alias" }
+          }
+        },
+        "operationId": { "$ref": "#/$defs/operation" },
+        "endpoint": {
+          "type": "string",
+          "enum": [
+            "https://www.googleapis.com/calendar/v3/calendars/{calendar}/events",
+            "https://www.googleapis.com/calendar/v3/calendars/{calendar}/events/{event}",
+            "https://www.googleapis.com/calendar/v3/calendars/{calendar}/events/{event}/instances",
+            "https://www.googleapis.com/drive/v3/files",
+            "https://www.googleapis.com/drive/v3/files/{file}",
+            "https://www.googleapis.com/upload/drive/v3/files",
+            "https://www.googleapis.com/upload/drive/v3/files/{file}",
+            "https://people.googleapis.com/v1/people:searchDirectoryPeople",
+            "https://oauth2.googleapis.com/revoke"
+          ]
+        },
+        "httpStatus": { "type": "integer", "minimum": 100, "maximum": 599 },
+        "googleRequestId": { "$ref": "#/$defs/operation" },
+        "capability": { "$ref": "#/$defs/capability" },
+        "result": {
+          "enum": [
+            "SUCCESS",
+            "DENIED",
+            "DECLINED",
+            "TIMEOUT",
+            "PARTIAL",
+            "UNKNOWN_OUTCOME",
+            "BLOCKED",
+            "ALREADY_ABSENT",
+            "NOT_RUN"
+          ]
+        },
+        "responseCounts": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "items": { "$ref": "#/$defs/count" },
+            "matches": { "$ref": "#/$defs/count" },
+            "accepted": { "$ref": "#/$defs/count" },
+            "declined": { "$ref": "#/$defs/count" },
+            "pages": { "$ref": "#/$defs/count" },
+            "attempts": { "$ref": "#/$defs/count" },
+            "created": { "$ref": "#/$defs/count" },
+            "updated": { "$ref": "#/$defs/count" },
+            "deleted": { "$ref": "#/$defs/count" },
+            "unknown": { "$ref": "#/$defs/count" }
+          }
+        },
+        "fieldPresence": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "sharedProperty": { "type": "boolean" },
+            "visibility": { "type": "boolean" },
+            "organizer": { "type": "boolean" },
+            "conferenceData": { "type": "boolean" },
+            "iCalUid": { "type": "boolean" },
+            "recurringEventId": { "type": "boolean" },
+            "originalStartTime": { "type": "boolean" },
+            "nextPageToken": { "type": "boolean" },
+            "names": { "type": "boolean" },
+            "emailAddresses": { "type": "boolean" },
+            "organizations": { "type": "boolean" },
+            "department": { "type": "boolean" }
+          }
+        },
+        "locatorHashes": {
+          "type": "object",
+          "minProperties": 1,
+          "additionalProperties": false,
+          "properties": {
+            "event": { "$ref": "#/$defs/locatorHash" },
+            "organizerEvent": { "$ref": "#/$defs/locatorHash" },
+            "roomEvent": { "$ref": "#/$defs/locatorHash" },
+            "file": { "$ref": "#/$defs/locatorHash" },
+            "series": { "$ref": "#/$defs/locatorHash" },
+            "iCalUid": { "$ref": "#/$defs/locatorHash" },
+            "calendar": { "$ref": "#/$defs/locatorHash" },
+            "roomCalendar": { "$ref": "#/$defs/locatorHash" }
+          }
+        },
+        "teardownStatus": { "$ref": "#/$defs/teardownStatus" },
+        "notes": {
+          "type": "array",
+          "maxItems": 16,
+          "items": {
+            "enum": [
+              "FIXTURE",
+              "OPERATOR_VERIFIED",
+              "TENANT_POLICY",
+              "BLOCKED_ENVIRONMENT",
+              "USER_DENIED",
+              "POPUP_BLOCKED",
+              "TOKEN_EXPIRED",
+              "RECONNECT_REQUIRED",
+              "PROPAGATION_TIMEOUT",
+              "AUTO_DECLINED",
+              "UNSUPPORTED",
+              "CLEANUP_ALREADY_ABSENT",
+              "RETRYABLE_RATE_LIMIT",
+              "FEATURE_REDUCED"
+            ]
+          }
+        }
+      },
+      "oneOf": [
+        {
+          "properties": {
+            "probeId": { "const": "fixture-safe" },
+            "runId": {
+              "type": "string",
+              "maxLength": 128,
+              "pattern": "^run-[A-Za-z0-9][A-Za-z0-9._:-]{0,123}$"
+            },
+            "roleAlias": { "const": "ordinary" },
+            "aliases": { "properties": { "account": { "const": "ordinary" } } },
+            "operationId": {
+              "type": "string",
+              "maxLength": 128,
+              "pattern": "^operation-[A-Za-z0-9][A-Za-z0-9._:-]{0,117}$"
+            },
+            "googleRequestId": {
+              "type": "string",
+              "maxLength": 128,
+              "pattern": "^request-[A-Za-z0-9][A-Za-z0-9._:-]{0,119}$"
+            },
+            "endpoint": {
+              "const": "https://www.googleapis.com/calendar/v3/calendars/{calendar}/events"
+            },
+            "capability": { "const": "SUPPORTED" },
+            "result": { "const": "SUCCESS" },
+            "teardownStatus": { "const": "NOT_REQUIRED" },
+            "notes": {
+              "type": "array",
+              "prefixItems": [{ "const": "FIXTURE" }],
+              "minItems": 1,
+              "maxItems": 1
+            }
+          },
+          "required": ["notes"]
+        },
+        {
+          "properties": {
+            "probeId": { "const": "safe-self-test" },
+            "runId": {
+              "type": "string",
+              "maxLength": 128,
+              "pattern": "^safe-self-test-[1-9]\\d*$"
+            },
+            "roleAlias": { "const": "ordinary" },
+            "aliases": { "properties": { "account": { "const": "ordinary" } } },
+            "operationId": {
+              "type": "string",
+              "maxLength": 128,
+              "pattern": "^safe-self-test-[1-9]\\d*$"
+            },
+            "endpoint": {
+              "const": "https://www.googleapis.com/calendar/v3/calendars/{calendar}/events"
+            },
+            "capability": { "const": "NOT_APPLICABLE" },
+            "result": { "const": "SUCCESS" },
+            "teardownStatus": { "const": "NOT_REQUIRED" },
+            "notes": {
+              "type": "array",
+              "prefixItems": [{ "const": "FIXTURE" }],
+              "minItems": 1,
+              "maxItems": 1
+            }
+          },
+          "required": ["notes"],
+          "not": { "required": ["googleRequestId"] }
+        }
+      ]
+    },
+    "provisioningEvidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schemaVersion",
+        "kind",
+        "probeId",
+        "status",
+        "observation",
+        "appType",
+        "domain",
+        "clientIdSuffix",
+        "workspaceEdition",
+        "enabledApis",
+        "initialScopes",
+        "directoryScopeTiming",
+        "origins",
+        "accounts",
+        "rooms",
+        "tenantPolicy",
+        "operatorVerified",
+        "capability"
+      ],
+      "properties": {
+        "schemaVersion": { "const": 1 },
+        "kind": { "const": "provisioning" },
+        "probeId": { "const": "provisioning" },
+        "status": {
+          "enum": ["INCOMPLETE", "COMPLETE", "TENANT_POLICY_BLOCKED"]
+        },
+        "observation": { "enum": ["UNOBSERVED", "OPERATOR_OBSERVED"] },
+        "observedAt": { "$ref": "#/$defs/timestamp" },
+        "appType": { "enum": ["UNOBSERVED", "INTERNAL", "EXTERNAL"] },
+        "domain": { "const": "MOLCUBE_COM" },
+        "clientIdSuffix": {
+          "oneOf": [
+            { "const": "UNOBSERVED" },
+            { "type": "string", "pattern": "^[a-z0-9]{8}$" }
+          ]
+        },
+        "workspaceEdition": {
+          "enum": [
+            "UNOBSERVED",
+            "BUSINESS",
+            "ENTERPRISE",
+            "EDUCATION",
+            "FRONTLINE",
+            "NONPROFIT",
+            "ESSENTIALS",
+            "OTHER_WORKSPACE"
+          ]
+        },
+        "enabledApis": { "$ref": "#/$defs/provisioningApiMap" },
+        "initialScopes": { "$ref": "#/$defs/provisioningScopeMap" },
+        "directoryScopeTiming": { "const": "DEFERRED_TO_TASK_11" },
+        "origins": { "$ref": "#/$defs/provisioningOriginMap" },
+        "accounts": { "$ref": "#/$defs/provisioningAccounts" },
+        "rooms": { "$ref": "#/$defs/provisioningRooms" },
+        "tenantPolicy": { "enum": ["UNOBSERVED", "ALLOWED", "BLOCKED"] },
+        "operatorVerified": { "type": "boolean" },
+        "capability": { "$ref": "#/$defs/capability" }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": { "status": { "const": "INCOMPLETE" } },
+            "required": ["status"]
+          },
+          "then": {
+            "properties": {
+              "tenantPolicy": { "not": { "const": "BLOCKED" } },
+              "capability": { "const": "INCONCLUSIVE" }
+            },
+            "not": { "$ref": "#/$defs/provisioningReady" },
+            "oneOf": [
+              { "$ref": "#/$defs/provisioningUnobserved" },
+              { "$ref": "#/$defs/provisioningObserved" }
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": { "status": { "const": "COMPLETE" } },
+            "required": ["status"]
+          },
+          "then": {
+            "allOf": [
+              { "$ref": "#/$defs/provisioningReady" },
+              { "$ref": "#/$defs/provisioningObserved" }
+            ],
+            "properties": { "capability": { "const": "SUPPORTED" } }
+          }
+        },
+        {
+          "if": {
+            "properties": { "status": { "const": "TENANT_POLICY_BLOCKED" } },
+            "required": ["status"]
+          },
+          "then": {
+            "allOf": [{ "$ref": "#/$defs/provisioningObserved" }],
+            "properties": {
+              "tenantPolicy": { "const": "BLOCKED" },
+              "capability": { "const": "TENANT_BLOCKED" }
+            }
+          }
+        }
+      ]
+    },
+    "provisioningApiMap": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["calendar", "drive", "people"],
+      "properties": {
+        "calendar": { "type": "boolean" },
+        "drive": { "type": "boolean" },
+        "people": { "type": "boolean" }
+      }
+    },
+    "provisioningScopeMap": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["calendarEvents", "calendarReadonly", "driveAppdata"],
+      "properties": {
+        "calendarEvents": { "type": "boolean" },
+        "calendarReadonly": { "type": "boolean" },
+        "driveAppdata": { "type": "boolean" }
+      }
+    },
+    "provisioningOriginMap": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["localhostSpike", "production"],
+      "properties": {
+        "localhostSpike": { "type": "boolean" },
+        "production": { "type": "boolean" }
+      }
+    },
+    "provisioningAccount": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["alias", "present"],
+      "properties": {
+        "alias": { "$ref": "#/$defs/alias" },
+        "present": { "type": "boolean" }
+      }
+    },
+    "provisioningAccounts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["ordinary", "roomWriterAdmin", "distinct"],
+      "properties": {
+        "ordinary": {
+          "allOf": [
+            { "$ref": "#/$defs/provisioningAccount" },
+            { "properties": { "alias": { "const": "ordinary" } } }
+          ]
+        },
+        "roomWriterAdmin": {
+          "allOf": [
+            { "$ref": "#/$defs/provisioningAccount" },
+            { "properties": { "alias": { "const": "room-writer-admin" } } }
+          ]
+        },
+        "distinct": { "type": "boolean" }
+      }
+    },
+    "provisioningRoom": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "alias",
+        "present",
+        "domainReadAcl",
+        "ordinaryRoomWriter",
+        "adminRoomWriter",
+        "autoAccept"
+      ],
+      "properties": {
+        "alias": { "enum": ["room-a", "room-b"] },
+        "present": { "type": "boolean" },
+        "domainReadAcl": { "type": "boolean" },
+        "ordinaryRoomWriter": { "type": "boolean" },
+        "adminRoomWriter": { "type": "boolean" },
+        "autoAccept": { "enum": ["UNOBSERVED", "ENABLED", "DISABLED"] }
+      }
+    },
+    "provisioningRooms": {
+      "type": "array",
+      "minItems": 2,
+      "maxItems": 2,
+      "items": { "$ref": "#/$defs/provisioningRoom" },
+      "allOf": [
+        {
+          "contains": {
+            "type": "object",
+            "required": ["alias"],
+            "properties": { "alias": { "const": "room-a" } }
+          },
+          "minContains": 1,
+          "maxContains": 1
+        },
+        {
+          "contains": {
+            "type": "object",
+            "required": ["alias"],
+            "properties": { "alias": { "const": "room-b" } }
+          },
+          "minContains": 1,
+          "maxContains": 1
+        }
+      ]
+    },
+    "provisioningObserved": {
+      "required": ["observedAt"],
+      "properties": {
+        "observation": { "const": "OPERATOR_OBSERVED" },
+        "operatorVerified": { "const": true }
+      }
+    },
+    "provisioningUnobserved": {
+      "not": { "required": ["observedAt"] },
+      "properties": {
+        "observation": { "const": "UNOBSERVED" },
+        "appType": { "const": "UNOBSERVED" },
+        "clientIdSuffix": { "const": "UNOBSERVED" },
+        "workspaceEdition": { "const": "UNOBSERVED" },
+        "enabledApis": {
+          "properties": {
+            "calendar": { "const": false },
+            "drive": { "const": false },
+            "people": { "const": false }
+          }
+        },
+        "initialScopes": {
+          "properties": {
+            "calendarEvents": { "const": false },
+            "calendarReadonly": { "const": false },
+            "driveAppdata": { "const": false }
+          }
+        },
+        "origins": {
+          "properties": {
+            "localhostSpike": { "const": false },
+            "production": { "const": false }
+          }
+        },
+        "accounts": {
+          "properties": {
+            "ordinary": { "properties": { "present": { "const": false } } },
+            "roomWriterAdmin": { "properties": { "present": { "const": false } } },
+            "distinct": { "const": false }
+          }
+        },
+        "rooms": {
+          "items": {
+            "properties": {
+              "present": { "const": false },
+              "domainReadAcl": { "const": false },
+              "ordinaryRoomWriter": { "const": false },
+              "adminRoomWriter": { "const": false },
+              "autoAccept": { "const": "UNOBSERVED" }
+            }
+          }
+        },
+        "tenantPolicy": { "const": "UNOBSERVED" },
+        "operatorVerified": { "const": false },
+        "capability": { "const": "INCONCLUSIVE" }
+      }
+    },
+    "provisioningReady": {
+      "properties": {
+        "observation": { "const": "OPERATOR_OBSERVED" },
+        "appType": { "const": "INTERNAL" },
+        "clientIdSuffix": { "type": "string", "pattern": "^[a-z0-9]{8}$" },
+        "workspaceEdition": {
+          "enum": [
+            "BUSINESS",
+            "ENTERPRISE",
+            "EDUCATION",
+            "FRONTLINE",
+            "NONPROFIT",
+            "ESSENTIALS",
+            "OTHER_WORKSPACE"
+          ]
+        },
+        "enabledApis": {
+          "properties": {
+            "calendar": { "const": true },
+            "drive": { "const": true },
+            "people": { "const": true }
+          }
+        },
+        "initialScopes": {
+          "properties": {
+            "calendarEvents": { "const": true },
+            "calendarReadonly": { "const": true },
+            "driveAppdata": { "const": true }
+          }
+        },
+        "origins": {
+          "properties": {
+            "localhostSpike": { "const": true },
+            "production": { "const": true }
+          }
+        },
+        "accounts": {
+          "properties": {
+            "ordinary": { "properties": { "present": { "const": true } } },
+            "roomWriterAdmin": { "properties": { "present": { "const": true } } },
+            "distinct": { "const": true }
+          }
+        },
+        "rooms": {
+          "items": {
+            "properties": {
+              "present": { "const": true },
+              "domainReadAcl": { "const": true },
+              "ordinaryRoomWriter": { "const": false },
+              "adminRoomWriter": { "const": true },
+              "autoAccept": { "enum": ["ENABLED", "DISABLED"] }
+            }
+          }
+        },
+        "tenantPolicy": { "const": "ALLOWED" },
+        "operatorVerified": { "const": true }
+      }
+    },
+    "probeId": {
+      "enum": [
+        "fixture-safe",
+        "safe-self-test",
+        "account-matrix",
+        "gis-lifecycle",
+        "calendar-capabilities",
+        "calendar-crud",
+        "calendar-series",
+        "drive-appdata",
+        "people-directory",
+        "teardown"
+      ]
+    },
+    "probeRole": { "enum": ["ordinary", "room-writer-admin"] },
+    "sensitiveString": {
+      "type": "string",
+      "allOf": [
+        { "not": { "pattern": "(?:^|[\\s{,])[\"']?(?:access_token|refresh_token|client_secret|authorization|cookie|private[_-]?key)[\"']?\\s*[:=]" } },
+        { "not": { "pattern": "\\bBearer\\s+\\S+" } },
+        { "not": { "pattern": "\\bya29\\.[A-Za-z0-9_-]+" } },
+        { "not": { "pattern": "\\bGOCSPX-[A-Za-z0-9_-]+" } },
+        { "not": { "pattern": "\\bAIza[0-9A-Za-z_-]{35}\\b" } },
+        { "not": { "pattern": "\\b\\d{6,}-[A-Za-z0-9_-]+\\.apps\\.googleusercontent\\.com\\b" } },
+        { "not": { "pattern": "\\b(?:AKIA|ASIA)[0-9A-Z]{16}\\b" } },
+        {
+          "not": {
+            "pattern": "\\b(?:AWS[_-]?(?:ACCESS[_-]?KEY[_-]?ID|SECRET[_-]?ACCESS[_-]?KEY|SESSION[_-]?TOKEN)|SECRET[_-]?ACCESS[_-]?KEY|SESSION[_-]?TOKEN)[\"']?\\s*[:=]\\s*[\"']?[A-Za-z0-9/+=_-]{16,}"
+          }
+        },
+        { "not": { "pattern": "-----BEGIN(?: [A-Z0-9]+)* PRIVATE KEY-----" } },
+        { "not": { "pattern": "\\b[A-Za-z0-9_-]{10,}\\.[A-Za-z0-9_-]{10,}\\.[A-Za-z0-9_-]{10,}\\b" } },
+        { "not": { "pattern": "\\b[^\\s@]+@[^\\s@]+\\.[^\\s@]+\\b" } },
+        { "not": { "pattern": "https?:\\/\\/[^\\s?#]+\\?[^\\s#]+" } }
+      ]
+    },
+    "alias": {
+      "allOf": [
+        { "type": "string", "pattern": "^[a-z][a-z0-9-]{0,63}$" },
+        { "$ref": "#/$defs/sensitiveString" }
+      ]
+    },
+    "operation": {
+      "allOf": [
+        {
+          "type": "string",
+          "maxLength": 128,
+          "pattern": "^(?:op|req|run|operation|request|safe-self-test)-[A-Za-z0-9][A-Za-z0-9._:-]{0,124}$"
+        },
+        { "$ref": "#/$defs/sensitiveString" }
+      ]
+    },
     "commitSha": { "type": "string", "pattern": "^[a-f0-9]{40}$" },
     "locatorHash": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" },
-    "count": { "type": "integer", "minimum": 0 },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:[0-5]\\d(?:\\.\\d{3})?Z$"
+    },
+    "count": { "type": "integer", "minimum": 0, "maximum": 9007199254740991 },
     "capability": {
       "enum": [
         "SUPPORTED",
