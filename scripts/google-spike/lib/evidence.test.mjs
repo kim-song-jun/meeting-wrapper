@@ -50,6 +50,33 @@ const safeEvidence = {
   notes: ["FIXTURE"],
 };
 
+const safeManifest = {
+  schemaVersion: 1,
+  candidateSha: "0123456789abcdef0123456789abcdef01234567",
+  generatedAt: "2026-08-22T00:00:00.000Z",
+  harnessCommitSha: "89abcdef0123456789abcdef0123456789abcdef",
+  probeCommitShas: { "gis-lifecycle": "fedcba9876543210fedcba9876543210fedcba98" },
+  officialDocs: ["https://developers.google.com/identity/oauth2/web/guides/how-user-authz-works"],
+  coverage: [
+    {
+      roleAlias: "ordinary",
+      browserAlias: "chrome-desktop",
+      deviceAlias: "desktop",
+      status: "COMPLETE",
+    },
+  ],
+  evidence: [
+    {
+      probeId: "gis-lifecycle",
+      path: "docs/spikes/google-workspace/evidence/gis-lifecycle.json",
+      sha256: "fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210",
+      capability: "SUPPORTED",
+    },
+  ],
+  architectureTriggers: [],
+  teardownStatus: "COMPLETE",
+};
+
 function runNode(script, args) {
   return spawnSync(process.execPath, [script, ...args], {
     cwd: join(spikeRoot, "..", ".."),
@@ -199,44 +226,19 @@ describe("Google spike evidence policy", () => {
   });
 
   it("validates a strict manifest and rejects nested unknown fields", () => {
-    const manifest = {
-      schemaVersion: 1,
-      candidateSha: "0123456789abcdef0123456789abcdef01234567",
-      generatedAt: "2026-08-22T00:00:00.000Z",
-      harnessCommitSha: "89abcdef0123456789abcdef0123456789abcdef",
-      probeCommitShas: { "gis-lifecycle": "fedcba9876543210fedcba9876543210fedcba98" },
-      officialDocs: ["https://developers.google.com/identity/oauth2/web/guides/how-user-authz-works"],
-      coverage: [
-        {
-          roleAlias: "ordinary",
-          browserAlias: "chrome-desktop",
-          deviceAlias: "desktop",
-          status: "COMPLETE",
-        },
-      ],
-      evidence: [
-        {
-          probeId: "gis-lifecycle",
-          path: "docs/spikes/google-workspace/evidence/gis-lifecycle.json",
-          sha256: "fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210",
-          capability: "SUPPORTED",
-        },
-      ],
-      architectureTriggers: [],
-      teardownStatus: "COMPLETE",
-    };
-
-    expect(validateManifest(manifest)).toEqual(manifest);
+    expect(validateManifest(safeManifest)).toEqual(safeManifest);
     expect(
       validateManifest({
-        ...manifest,
+        ...safeManifest,
         architectureTriggers: ["SHARED_SERIES_COPY_MISMATCH"],
       }).architectureTriggers,
     ).toEqual(["SHARED_SERIES_COPY_MISMATCH"]);
     expect(() =>
       validateManifest({
-        ...manifest,
-        coverage: [{ ...manifest.coverage[0], accountEmail: "fixture.person@example.invalid" }],
+        ...safeManifest,
+        coverage: [
+          { ...safeManifest.coverage[0], accountEmail: "fixture.person@example.invalid" },
+        ],
       }),
     ).toThrowError(
       expect.objectContaining({
@@ -246,8 +248,26 @@ describe("Google spike evidence policy", () => {
     );
     expect(() =>
       validateManifest({
-        ...manifest,
-        evidence: [{ ...manifest.evidence[0], path: "docs/../private.json" }],
+        ...safeManifest,
+        evidence: [{ ...safeManifest.evidence[0], path: "docs/../private.json" }],
+      }),
+    ).toThrowError(
+      expect.objectContaining({
+        category: "INVALID_EVIDENCE_SHAPE",
+        pointer: "/evidence/0/path",
+      }),
+    );
+  });
+
+  it.each([
+    ["single-dot", "docs/./private.json"],
+    ["double-dot", "docs/../private.json"],
+    ["over-256-character", `docs/${"a".repeat(252)}`],
+  ])("rejects %s manifest evidence path at runtime", (_case, path) => {
+    expect(() =>
+      validateManifest({
+        ...safeManifest,
+        evidence: [{ ...safeManifest.evidence[0], path }],
       }),
     ).toThrowError(
       expect.objectContaining({
@@ -278,11 +298,13 @@ describe("Google spike evidence policy", () => {
     expect(manifestSchema.properties.probeCommitShas.additionalProperties).toBe(false);
     expect(manifestSchema.properties.coverage.items.additionalProperties).toBe(false);
     expect(manifestSchema.properties.evidence.items.additionalProperties).toBe(false);
-    const manifestPathPattern = new RegExp(
-      manifestSchema.properties.evidence.items.properties.path.pattern,
-    );
+    const manifestPathContract = manifestSchema.properties.evidence.items.properties.path;
+    const manifestPathPattern = new RegExp(manifestPathContract.pattern);
     expect(manifestPathPattern.test("docs/spikes/google-workspace/evidence/teardown.json")).toBe(true);
+    expect(manifestPathPattern.test("docs/./private.json")).toBe(false);
     expect(manifestPathPattern.test("docs/../private.json")).toBe(false);
+    expect(manifestPathContract.maxLength).toBe(256);
+    expect(`docs/${"a".repeat(252)}`).toHaveLength(257);
     expect(manifestSchema.properties.architectureTriggers.items.enum).toContain(
       "SHARED_SERIES_COPY_MISMATCH",
     );
@@ -314,12 +336,10 @@ describe("Google spike evidence policy", () => {
     temporaryRoots.push(root);
     const safePath = join(root, "safe.json");
     const forbiddenPath = join(root, "forbidden.json");
-    const rawLocatorPath = join(root, "raw-locator.json");
     const directoryPath = join(root, "directory");
     const symlinkPath = join(root, "safe-link.json");
     await writeFile(safePath, JSON.stringify(safeEvidence));
     await writeFile(forbiddenPath, JSON.stringify({ credential: "Bearer fixture-secret-material" }));
-    await writeFile(rawLocatorPath, JSON.stringify({ fileId: "fixture-raw-file-id" }));
     await mkdir(directoryPath);
     await symlink(safePath, symlinkPath);
 
@@ -330,9 +350,6 @@ describe("Google spike evidence policy", () => {
     const forbidden = runNode(scanSensitivePathsCli, ["--redact", forbiddenPath]);
     expectRedactedFailure(forbidden, "FORBIDDEN_PATH_CONTENT", "fixture-secret-material");
     expect(`${forbidden.stdout}${forbidden.stderr}`).toContain(`path=${forbiddenPath}`);
-
-    const rawLocator = runNode(scanSensitivePathsCli, ["--redact", rawLocatorPath]);
-    expectRedactedFailure(rawLocator, "FORBIDDEN_PATH_CONTENT", "fixture-raw-file-id");
 
     for (const fixture of [
       "forbidden-token.json",
@@ -357,5 +374,21 @@ describe("Google spike evidence policy", () => {
     const symlinked = runNode(scanSensitivePathsCli, ["--redact", symlinkPath]);
     expect(symlinked.status).not.toBe(0);
     expect(`${symlinked.stdout}${symlinked.stderr}`).toContain("PATH_NOT_READABLE");
+  });
+
+  it.each([
+    ["eventId", "fixture-raw-event-id"],
+    ["fileId", "fixture-raw-file-id"],
+    ["calendarId", "fixture-raw-calendar-id"],
+    ["roomCalendarId", "fixture-raw-room-calendar-id"],
+    ["iCalUID", "fixture-raw-ical-uid"],
+  ])("rejects serialized raw locator key %s without printing its value", async (key, value) => {
+    const root = await mkdtemp(join(tmpdir(), "molroom-google-spike-locator-scan-"));
+    temporaryRoots.push(root);
+    const locatorPath = join(root, `${key}.json`);
+    await writeFile(locatorPath, JSON.stringify({ [key]: value }));
+
+    const result = runNode(scanSensitivePathsCli, ["--redact", locatorPath]);
+    expectRedactedFailure(result, "FORBIDDEN_PATH_CONTENT", value);
   });
 });
