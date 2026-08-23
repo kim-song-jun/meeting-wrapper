@@ -16,6 +16,7 @@ export interface RecurrenceResultProps {
   totalRequested: number;
   booked: Booking[];
   rejected: Array<{ start: Date; end: Date; reason: string }>;
+  warning?: string | null;
   onConfirm: () => void;
 }
 
@@ -30,7 +31,7 @@ export interface RecurrenceResultProps {
  * rejected 가 비어 있으면 이 화면을 띄우지 않는다 (BookingDialog 가 판단한다).
  * 성공은 축하할 일이 아니라 완료된 일이다.
  */
-export function RecurrenceResult({ totalRequested, booked, rejected, onConfirm }: RecurrenceResultProps) {
+export function RecurrenceResult({ totalRequested, booked, rejected, warning, onConfirm }: RecurrenceResultProps) {
   const summary =
     booked.length === 0
       ? String(totalRequested) + "회 모두 예약하지 못했어요. 이미 사용 중입니다."
@@ -45,6 +46,7 @@ export function RecurrenceResult({ totalRequested, booked, rejected, onConfirm }
     <Dialog title="반복 예약 결과" onClose={onConfirm} actions={<Button onClick={onConfirm}>닫기</Button>}>
       <div className="mr-form">
         <Alert>{summary}</Alert>
+        {warning ? <Alert>{warning}</Alert> : null}
 
         {rejected.length > 0 ? (
           <div>

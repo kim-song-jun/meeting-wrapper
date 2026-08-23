@@ -36,23 +36,30 @@ interface Preset {
   end: Date;
 }
 
-/** FREE 상태의 예약 프리셋. 다음 예약과 겹치거나 정책 최대 시간을 넘는 항목은 뺀다. */
+/** FREE 상태의 예약 프리셋. 정책 최소·최대 시간과 다음 예약 경계를 모두 지킨다. */
 function buildFreePresets(now: Date, boundEnd: Date | null): Preset[] {
   const presets: Preset[] = [];
+  const seenEnds = new Set<number>();
 
   const tryAdd = (minutes: number, label: string) => {
-    if (minutes > POLICY.maxDurationMinutes) return;
+    if (minutes < POLICY.slotMinutes || minutes > POLICY.maxDurationMinutes) return;
     const end = new Date(now.getTime() + minutes * MINUTE);
     if (boundEnd && end.getTime() > boundEnd.getTime()) return;
+    if (seenEnds.has(end.getTime())) return;
+    seenEnds.add(end.getTime());
     presets.push({ label, start: now, end });
   };
 
-  tryAdd(30, "30분 예약하기");
+  tryAdd(POLICY.slotMinutes, humanDuration(POLICY.slotMinutes) + " 예약하기");
   tryAdd(60, "1시간 예약하기");
 
   if (boundEnd) {
-    const minutes = Math.round((boundEnd.getTime() - now.getTime()) / MINUTE);
-    if (minutes > 0 && minutes <= POLICY.maxDurationMinutes) {
+    const minutes = (boundEnd.getTime() - now.getTime()) / MINUTE;
+    if (
+      minutes >= POLICY.slotMinutes &&
+      minutes <= POLICY.maxDurationMinutes &&
+      !seenEnds.has(boundEnd.getTime())
+    ) {
       presets.push({ label: hhmm(boundEnd) + "까지 예약하기", start: now, end: boundEnd });
     }
   }
@@ -62,9 +69,14 @@ function buildFreePresets(now: Date, boundEnd: Date | null): Preset[] {
 
 /** BUSY 상태에서 "다음 빈 시간에 예약" 보조 액션이 잡을 기본 구간 */
 function suggestedSlot(gap: Gap): { start: Date; end: Date } {
-  const availableMinutes = (gap.end.getTime() - gap.start.getTime()) / MINUTE;
-  const minutes = Math.min(30, availableMinutes, POLICY.maxDurationMinutes);
-  return { start: gap.start, end: new Date(gap.start.getTime() + minutes * MINUTE) };
+  return {
+    start: gap.start,
+    end: new Date(gap.start.getTime() + POLICY.slotMinutes * MINUTE),
+  };
+}
+
+function gapFitsMinimum(gap: Gap): boolean {
+  return gap.end.getTime() - gap.start.getTime() >= POLICY.slotMinutes * MINUTE;
 }
 
 function extendReasonText(result: ExtendResult): string {
@@ -85,6 +97,9 @@ function LandingHeader() {
        */}
       <BrandMark size={18} className="mr-landing__mark" />
       <span className="mr-landing__brand">MolRoom</span>
+      <Link to="/" className="mr-landing__gridlink">
+        전체 예약 현황
+      </Link>
     </header>
   );
 }
@@ -318,16 +333,23 @@ export function RoomLandingScreen() {
                   <div className="mr-landing__presets">
                     {/* 채움 버튼은 하나만(§12-3). 나머지 프리셋은 **Weak 채움**이다 —
                         Toss 의 두 번째 액션은 아웃라인이 아니다(§4). 높이는 전부 동일. */}
-                    {freePresets.map((p, i) => (
-                      <Button
-                        key={p.label}
-                        block
-                        variant={i === 0 ? "primary" : "secondary"}
-                        onClick={() => setDraft({ start: p.start, end: p.end })}
-                      >
-                        {p.label}
-                      </Button>
-                    ))}
+                    {freePresets.length > 0 ? (
+                      freePresets.map((p, i) => (
+                        <Button
+                          key={p.label}
+                          block
+                          variant={i === 0 ? "primary" : "secondary"}
+                          onClick={() => setDraft({ start: p.start, end: p.end })}
+                        >
+                          {p.label}
+                        </Button>
+                      ))
+                    ) : (
+                      <p className="t-small mr-landing__empty">
+                        다음 예약까지 {humanDuration(POLICY.slotMinutes)}보다 짧게 남아 새 예약을 만들 수
+                        없어요.
+                      </p>
+                    )}
                   </div>
                 </>
               ) : state.kind === "busy" ? (
@@ -357,9 +379,15 @@ export function RoomLandingScreen() {
                            * 화면당 채움 하나(§12-3)는 "채움을 아껴라" 는 뜻이고,
                            * 유일한 액션을 흐리게 두라는 뜻이 아니다.
                            */}
-                          <Button block onClick={() => setDraft(suggestedSlot(gap))}>
-                            {hhmm(gap.start)}부터 예약하기
-                          </Button>
+                          {gapFitsMinimum(gap) ? (
+                            <Button block onClick={() => setDraft(suggestedSlot(gap))}>
+                              {hhmm(gap.start)}부터 예약하기
+                            </Button>
+                          ) : (
+                            <p className="t-small mr-landing__empty">
+                              빈 시간이 {humanDuration(POLICY.slotMinutes)}보다 짧아 새 예약을 만들 수 없어요.
+                            </p>
+                          )}
                         </div>
                       </>
                     ) : (
@@ -437,11 +465,6 @@ export function RoomLandingScreen() {
           </>
         )}
 
-        <div className="mr-landing__footer">
-          <Link to="/" className="t-small mr-landing__gridlink">
-            전체 예약 현황 보기
-          </Link>
-        </div>
       </main>
 
       {draft ? (
@@ -451,8 +474,9 @@ export function RoomLandingScreen() {
           end={draft.end}
           prefs={prefs}
           onClose={() => setDraft(null)}
-          onCreated={() => {
+          onCreated={(_booking, notice) => {
             setDraft(null);
+            setActionStatus(notice ?? "예약을 만들었어요.");
             bookingsState.reload();
           }}
         />

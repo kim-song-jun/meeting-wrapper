@@ -256,9 +256,9 @@ function BookingItem({
   return (
     <div className="mine-item">
       <div className="mine-item__main">
-        <span className="mine-item__room">{room?.name ?? booking.roomId}</span>
+        <span className="mine-item__room">{booking.title}</span>
         <span className="mine-item__meta t-num">
-          {hhmm(booking.start)}–{hhmm(booking.end)} ({humanDuration(durationMin)}) · 인원{" "}
+          {room?.name ?? booking.roomId} · {hhmm(booking.start)}–{hhmm(booking.end)} ({humanDuration(durationMin)}) · 인원{" "}
           {booking.headcount}명
           {booking.attendeeCount > 0 ? " · 초대 " + String(booking.attendeeCount) + "명" : null}
         </span>
@@ -350,6 +350,7 @@ function PastBookingItem({ booking }: { booking: Booking }) {
   const [copyState, setCopyState] = useState<{ ok: boolean; text: string } | null>(null);
 
   const dirty = draft.trim() !== (summary ?? "");
+  const willDelete = summary !== null && draft.trim().length === 0;
 
   async function copyMarkdown() {
     const md = summaryToMarkdown({ ...booking, summary }, room?.name ?? booking.roomId);
@@ -388,9 +389,9 @@ function PastBookingItem({ booking }: { booking: Booking }) {
   return (
     <div className="mine-item mine-item--past">
       <div className="mine-item__main">
-        <span className="mine-item__room">{room?.name ?? booking.roomId}</span>
+        <span className="mine-item__room">{booking.title}</span>
         <span className="mine-item__meta t-num">
-          {dateLabel} {hhmm(booking.start)}–{hhmm(booking.end)} ({humanDuration(durationMin)})
+          {room?.name ?? booking.roomId} · {dateLabel} {hhmm(booking.start)}–{hhmm(booking.end)} ({humanDuration(durationMin)})
           {booking.attendeeCount > 0 ? " · 초대 " + String(booking.attendeeCount) + "명" : null}
         </span>
         {booking.checkedInAt === null ? (
@@ -406,7 +407,12 @@ function PastBookingItem({ booking }: { booking: Booking }) {
               rows={3}
               maxLength={500}
               onChange={(e) => setDraft(e.target.value)}
-              hint={"초대받은 " + String(booking.attendeeCount) + "명의 캘린더에도 함께 보여요"}
+              hint={
+                willDelete
+                  ? "빈 내용으로 저장하면 기존 요약이 삭제돼요"
+                  : "초대받은 " + String(booking.attendeeCount) + "명의 캘린더에도 함께 보여요"
+              }
+              hintTone={willDelete ? "warn" : "muted"}
             />
             {failure ? (
               <div style={{ marginTop: 12 }}>
@@ -414,8 +420,8 @@ function PastBookingItem({ booking }: { booking: Booking }) {
               </div>
             ) : null}
             <div className="mine-summary-actions">
-              <Button onClick={save} disabled={saving || !dirty}>
-                {saving ? "저장하는 중…" : "요약 저장하기"}
+              <Button variant={willDelete ? "danger" : "primary"} onClick={save} disabled={saving || !dirty}>
+                {saving ? "저장하는 중…" : willDelete ? "요약 삭제하기" : "요약 저장하기"}
               </Button>
               <Button
                 variant="secondary"
@@ -487,6 +493,8 @@ function CancelDialog({
   const now = appNow();
   const [busy, setBusy] = useState(false);
   const [failure, setFailure] = useState<string | null>(null);
+  const seriesId = booking.recurringEventId;
+  const isSeries = seriesId !== null;
 
   // 참석자가 없으면 알림 문구를 붙이지 않는다.
   // 무조건 붙이면 "참석자 0명에게 취소 알림이 갑니다" 라는 말이 안 되는 문장이 나온다.
@@ -503,11 +511,11 @@ function CancelDialog({
       ? " 참석자 " + String(booking.attendeeCount) + "명에게 취소 알림이 갑니다."
       : "");
 
-  async function confirmCancel() {
+  async function run(operation: () => Promise<void>) {
     setBusy(true);
     setFailure(null);
     try {
-      await repo.cancel(booking.id);
+      await operation();
       onCancelled();
     } catch (e: unknown) {
       setFailure(e instanceof Error ? e.message : "취소 중 문제가 생겼어요. 잠시 후 다시 시도해 주세요.");
@@ -520,17 +528,18 @@ function CancelDialog({
     <Dialog
       title="예약 취소"
       onClose={onClose}
+      dismissible={false}
       /* 파괴적 확정 버튼을 안전한 기본 동작에서 떨어뜨린다 (DESIGN.md §4) */
       actionsLayout="split"
       actions={
         <>
           {/* "닫기" 가 아니라 "유지" — 무엇이 남는지를 말한다. GridScreen 과 같은 라벨 */}
           {/* 안전한 쪽(유지)이 주 액션이다. 파괴적인 쪽은 빨간 글자로만 둔다. */}
-          <Button onClick={onClose} disabled={busy}>
+          <Button data-dialog-initial-focus onClick={onClose} disabled={busy}>
             유지
           </Button>
-          <Button variant="danger" onClick={confirmCancel} disabled={busy}>
-            {busy ? "취소하는 중…" : "예약 취소하기"}
+          <Button variant="danger" onClick={() => void run(() => repo.cancel(booking.id))} disabled={busy}>
+            {busy ? "취소하는 중…" : isSeries ? "이 회차만 취소하기" : "예약 취소하기"}
           </Button>
         </>
       }
@@ -540,6 +549,20 @@ function CancelDialog({
         <p className="mine-admin-note" style={{ marginTop: 12 }}>
           주최자 {booking.organizerName}님에게 관리자 취소 알림이 갑니다.
         </p>
+      ) : null}
+      {isSeries && seriesId !== null ? (
+        <div className="mr-stack" style={{ marginTop: 16 }}>
+          <Alert tone="info">
+            “이 회차만 취소하기”는 선택한 회차만 지우고 나머지 반복 일정은 그대로 둡니다.
+          </Alert>
+          <Button
+            variant="secondary"
+            onClick={() => void run(() => repo.cancelSeries(seriesId))}
+            disabled={busy}
+          >
+            반복 일정 전체 취소
+          </Button>
+        </div>
       ) : null}
       {failure ? (
         <div style={{ marginTop: 16 }}>
@@ -616,9 +639,10 @@ function AdminBookingItem({ booking, onCancel }: { booking: Booking; onCancel: (
   return (
     <div className="mine-item">
       <div className="mine-item__main">
-        <span className="mine-item__room">{booking.organizerName}</span>
+        <span className="mine-item__room">{booking.isMine ? booking.title : booking.organizerName}</span>
         <span className="mine-item__meta t-num">
           {hhmm(booking.start)}–{hhmm(booking.end)} ({humanDuration(durationMin)})
+          {booking.isMine ? " · " + booking.organizerName : ""}
         </span>
         {booking.isMine ? <Badge tone="mine">내 예약</Badge> : null}
       </div>

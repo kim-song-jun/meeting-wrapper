@@ -61,15 +61,29 @@ interface FieldProps extends InputHTMLAttributes<HTMLInputElement> {
   hintTone?: "muted" | "warn";
 }
 
-export function Field({ label, hint, hintTone = "muted", id, ...rest }: FieldProps) {
+export function Field({
+  label,
+  hint,
+  hintTone = "muted",
+  id,
+  "aria-describedby": describedBy,
+  ...rest
+}: FieldProps) {
   const auto = useRef("mr-f-" + Math.random().toString(36).slice(2, 8));
   const fieldId = id ?? auto.current;
+  const hintId = hint ? fieldId + "-hint" : null;
+  const descriptionIds = [describedBy, hintId].filter((value): value is string => Boolean(value)).join(" ");
   return (
     <label className="mr-field" htmlFor={fieldId}>
       <span className="mr-field__label">{label}</span>
-      <input id={fieldId} className="mr-input" {...rest} />
+      <input
+        id={fieldId}
+        className="mr-input"
+        aria-describedby={descriptionIds.length > 0 ? descriptionIds : undefined}
+        {...rest}
+      />
       {hint ? (
-        <span className={cx("mr-field__hint", hintTone === "warn" && "mr-field__hint--warn")}>
+        <span id={hintId ?? undefined} className={cx("mr-field__hint", hintTone === "warn" && "mr-field__hint--warn")}>
           {hint}
         </span>
       ) : null}
@@ -90,15 +104,29 @@ interface TextAreaFieldProps extends TextareaHTMLAttributes<HTMLTextAreaElement>
  * 높이만 다르다: 한 줄 입력의 48px 고정 높이 대신 최소 높이를 주고 세로로만 늘린다
  * (가로로 늘어나면 읽기 폭 720px 제한이 깨진다).
  */
-export function TextAreaField({ label, hint, hintTone = "muted", id, ...rest }: TextAreaFieldProps) {
+export function TextAreaField({
+  label,
+  hint,
+  hintTone = "muted",
+  id,
+  "aria-describedby": describedBy,
+  ...rest
+}: TextAreaFieldProps) {
   const auto = useRef("mr-t-" + Math.random().toString(36).slice(2, 8));
   const fieldId = id ?? auto.current;
+  const hintId = hint ? fieldId + "-hint" : null;
+  const descriptionIds = [describedBy, hintId].filter((value): value is string => Boolean(value)).join(" ");
   return (
     <label className="mr-field" htmlFor={fieldId}>
       <span className="mr-field__label">{label}</span>
-      <textarea id={fieldId} className="mr-input mr-textarea" {...rest} />
+      <textarea
+        id={fieldId}
+        className="mr-input mr-textarea"
+        aria-describedby={descriptionIds.length > 0 ? descriptionIds : undefined}
+        {...rest}
+      />
       {hint ? (
-        <span className={cx("mr-field__hint", hintTone === "warn" && "mr-field__hint--warn")}>
+        <span id={hintId ?? undefined} className={cx("mr-field__hint", hintTone === "warn" && "mr-field__hint--warn")}>
           {hint}
         </span>
       ) : null}
@@ -262,7 +290,7 @@ export function Tabs({
 
 /* ---------------- Dialog ---------------- */
 
-// omd:feel MODAL 🟢 — Tab 트랩 대상 요소. 표시되지 않거나(offsetParent null)
+// Dialog focus rule — Tab 트랩 대상 요소. 표시되지 않거나(offsetParent null)
 // 비활성인 요소는 순환에서 제외한다.
 const FOCUSABLE_SELECTOR =
   'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])';
@@ -274,7 +302,7 @@ function getFocusable(container: HTMLElement): HTMLElement[] {
 }
 
 /**
- * omd:feel MODAL 🟢 — 배경 inert.
+ * Dialog isolation rule — 배경 inert.
  * 이 앱은 Dialog 를 portal 없이 트리 안에 그대로 렌더한다. 그래서 "형제만 inert" 가
  * 아니라 backdrop 노드부터 document.body 까지 올라가며 각 층의 형제 요소를 전부
  * inert 처리한다 — 어느 화면에서 열리든 다이얼로그 자신의 조상 경로만 남고 나머지는
@@ -320,7 +348,7 @@ function useBackgroundInert(backdropEl: HTMLElement | null) {
 }
 
 /**
- * omd:feel SCROLL/LAYOUT STABILITY 🟢 — 배경 스크롤 잠금.
+ * Scroll/layout stability rule — 배경 스크롤 잠금.
  * overflow:hidden 만 걸면 스크롤바가 사라지며 본문 폭이 넓어져 레이아웃이 튄다.
  * 사라진 스크롤바 폭만큼 paddingRight 로 보정한다.
  */
@@ -360,7 +388,7 @@ export function Dialog({
   /** "split" 은 파괴적 동작을 안전한 기본 동작에서 떨어뜨린다 */
   actionsLayout?: "end" | "split";
   /**
-   * omd:feel MODAL 🟢 — backdrop 클릭으로 닫히는지.
+   * Dialog dismissal rule — backdrop 클릭으로 닫히는지.
    * 정보성 다이얼로그는 true(기본값), 데이터 입력·파괴적 확인은 호출부에서 false 로.
    * (호출부 전환은 이 컴포넌트 담당 범위 밖 — concerns 참조)
    */
@@ -413,7 +441,11 @@ export function Dialog({
   // 인라인 함수를 넘길 때 매 렌더 재실행돼) 사용자가 다이얼로그 안에서 입력 중에도
   // 포커스가 패널로 다시 튕겨 나가는 버그가 생긴다.
   useEffect(() => {
-    panelRef.current?.focus();
+    const panel = panelRef.current;
+    if (!panel) return;
+    const firstControl =
+      panel.querySelector<HTMLElement>("[data-dialog-initial-focus]") ?? getFocusable(panel)[0];
+    (firstControl ?? panel).focus();
   }, []);
 
   useBackgroundInert(backdropEl);

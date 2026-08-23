@@ -335,9 +335,10 @@ export function RoomsScreen() {
           end={dialogSlot.option.end}
           prefs={dialogPrefs}
           onClose={closeDialog}
-          onCreated={(booking) => {
+          onCreated={(booking, notice) => {
             closeDialogWithFocus(null);
-            setAnnouncement(`${roomById(booking.roomId)?.name ?? "회의실"} ${hhmm(booking.start)}–${hhmm(booking.end)} 예약을 만들었어요.`);
+            const success = `${roomById(booking.roomId)?.name ?? "회의실"} ${hhmm(booking.start)}–${hhmm(booking.end)} 예약을 만들었어요.`;
+            setAnnouncement(notice ? `${success} ${notice}` : success);
             dayState.reload();
             prefsState.reload();
           }}
