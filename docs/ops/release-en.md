@@ -2,8 +2,8 @@
 
 This is the execution checklist for [README.en.md](../../README.en.md). Google
 provisioning is currently `INCOMPLETE / UNOBSERVED`, and AWS/GitHub OIDC deploy
-automation is not implemented; this runbook describes prerequisites, not passed
-gates.
+automation is defined but live success is not verified; this runbook describes
+prerequisites, not passed gates.
 
 ## Prerequisites
 
@@ -22,19 +22,35 @@ gates.
 3. Run `npm run typecheck`, `npm test`, `npm run build`,
    `npm run scan:production-bundle`, and `npm run validate:readmes`
    serially.
-4. Once implemented, deploy CloudFormation/S3/CloudFront only through the
-   approved GitHub `production` Environment and OIDC role. The workflow does
-   not exist yet.
-5. Verify the same-SHA artifact checksum, Google evidence, and smoke result;
+4. Use required reviewer approval on the GitHub `production` Environment and
+   OIDC role to run `.github/workflows/release.yml`. The security gate is
+   `.github/workflows/security-gate.yml`; provision
+   `infra/aws/molroom-bootstrap.yml` before `infra/aws/molroom-production.yml`.
+   Current GitHub environments=0, AWS session expired, and
+   `molroom.molcube.com` is unresolved.
+5. Run the following clean-room PLAN commands; verify the same-SHA artifact checksum,
+   immutable `releases/${release_sha}/` prefix, CloudFront invalidation, Google
+   evidence, and production smoke result; local tag/push is prohibited and the
+   protected production workflow alone creates the tag and GitHub Release;
+   local plans use `--dry-run` only;
    then use the guarded clean-tree SHA sequence to create the `v0.1.0` release.
 6. Smoke `https://molroom.molcube.com` for TLS, deep links, login/logout,
    room read, create/edit/cancel, and secret exposure.
 
+```bash
+release_sha="$(git rev-parse HEAD)"
+node scripts/build-release-manifest.mjs --artifact-root dist --commit-sha "$release_sha" --package-version "$(node -p 'require(\"./package.json\").version')" --source-date-epoch "$(git show -s --format=%ct "$release_sha")"
+node scripts/upload-release-prefix.mjs --artifact-root dist --bucket "molroom-<account>-us-east-1-origin" --commit-sha "$release_sha" --dry-run
+npm run verify:release-contract
+```
+
 ## Rollback
 
-Do not move tags or force-push. Verify the approved **previous artifact**
-checksum, deploy it as a new private S3 artifact, invalidate CloudFront, run
-smoke, and record the incident. Follow [SECURITY.md](../../SECURITY.md) for
+Do not move tags or force-push. Verify and reuse the approved **previous artifact**
+already present at immutable `releases/${release_sha}/`; do not re-upload or copy it.
+Change only `ActiveReleaseSha`, invalidate CloudFront, run smoke, and record the
+incident. The protected workflow verifies and reuses the remote immutable prefix;
+it does not build, upload, or copy a local artifact. Follow [SECURITY.md](../../SECURITY.md) for
 secret rotation.
 
 ## Operator input contract
@@ -74,7 +90,7 @@ node scripts/google-spike/scan-sensitive-paths.mjs
 
 `COMPLETE` is derived only after every live fact is observed and the three
 commands succeed in that order.
-The tag prerequisite is `origin/main == release_sha`.
+The tag prerequisite is `test "$(git rev-parse origin/main)" = "$release_sha"`.
 
 ```bash
 git fetch origin main --quiet

@@ -4,7 +4,8 @@ This guide covers the reproducible path from Google Cloud setup to AWS
 CloudFront deployment and rollback. The repository is **not production-ready**:
 the browser runtime still uses mock auth/booking adapters, Google provisioning
 is `INCOMPLETE / UNOBSERVED`, and AWS CloudFormation, CloudFront, and GitHub OIDC
-deployment are not implemented.
+deployment paths are committed/defined but are not yet configured, deployed, or
+verified live.
 
 ## [release.toolchain] 1. Pinned tools and safe start
 
@@ -108,11 +109,18 @@ node scripts/validate-design-examples.mjs
 
 The production bundle must not contain mock identity, QA backdoors, title
 sentinels, OAuth secrets, or AWS keys. UI changes also require real screenshots.
+Run `npm run build:release-manifest`, `npm run upload:release-prefix`, and
+`npm run verify:release-contract` for the release contract.
 
 ## [release.aws-oidc] 5. GitHub Environment and OIDC
 
-There is currently no GitHub Environment, OIDC role, or AWS workflow. When
-implemented, protect a `production` Environment with required reviewers and
+The GitHub Environment, OIDC role, and AWS workflow are committed/defined but
+not configured or deployed/live. Protect a `production` Environment with
+required reviewers and
+the canonical `infra/aws/molroom-bootstrap.yml` and `infra/aws/molroom-production.yml`
+templates.
+The release workflow is `.github/workflows/release.yml`; its security gate is
+`.github/workflows/security-gate.yml`.
 tags, use an AWS OIDC role restricted to this repository/Environment, and never
 create long-lived AWS access keys. CloudFormation must reproduce private S3,
 CloudFront Origin Access Control, ACM (`us-east-1`), Route 53 alias
@@ -131,9 +139,10 @@ release_sha="$(git rev-parse HEAD)"
 test -z "$(git status --porcelain)"
 git diff --quiet "${release_sha}^" "${release_sha}"
 test "$(git rev-parse origin/main)" = "${release_sha}"
-git tag --list v0.1.0 | grep -q '^v0.1.0$' && { echo 'tag exists; abort'; exit 1; } || true
-git tag -a v0.1.0 "${release_sha}" -m "MolRoom v0.1.0"
-git push --atomic origin "v0.1.0"
+test "$(git rev-parse origin/main)" = "$release_sha"
+node scripts/build-release-manifest.mjs --artifact-root dist --commit-sha "${release_sha}" --package-version "$(node -p 'require(\"./package.json\").version')" --source-date-epoch "$(git show -s --format=%ct "${release_sha}")"
+node scripts/upload-release-prefix.mjs --artifact-root dist --bucket "molroom-<account>-us-east-1-origin" --commit-sha "${release_sha}" --dry-run
+# Actual tag/Release creation and cutover occur only in the protected production workflow.
 ```
 
 The GitHub Release records SHA, artifact checksum, evidence reference, and smoke
@@ -142,10 +151,11 @@ room read, create/edit/cancel, and secret exposure. This has not run yet.
 
 ## [release.rollback] 7. Rollback and incident response
 
-Do not move tags or force-push. Deploy an approved **previous artifact** as a new
-deployment: record current SHA, CloudFront distribution ID, and checksum; upload
-the verified artifact to S3; invalidate CloudFront; run production smoke; then
-fix the cause in a new commit/tag. Follow [SECURITY.md](SECURITY.md) for the
+Do not move tags or force-push. Verify and reuse the approved **previous artifact**
+already present at immutable `releases/${release_sha}/`; do not re-upload or copy it.
+Record current SHA, CloudFront distribution ID, and checksum; change only
+`ActiveReleaseSha`; invalidate CloudFront; run production smoke; then
+fix the cause in a new commit/tag. CloudFront invalidation is required. Follow [SECURITY.md](SECURITY.md) for the
 secret rotation and incident response procedure.
 
 ## [release.security] 8. Security and incident response

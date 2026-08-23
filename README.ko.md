@@ -3,7 +3,8 @@
 이 문서는 Google Cloud 설정부터 AWS CloudFront 배포·롤백까지의 재현 절차입니다.
 현재 상태는 **출시 전**입니다. 브라우저 runtime은 mock auth/booking adapter를
 사용하고, Google provisioning evidence는 `INCOMPLETE / UNOBSERVED`이며,
-AWS CloudFormation·CloudFront·GitHub OIDC 배포는 아직 구현되지 않았습니다.
+AWS CloudFormation·CloudFront·GitHub OIDC 배포 경로는 committed/defined 되어
+있지만 아직 configured/deployed/live 상태가 아닙니다.
 
 ## [release.toolchain] 1. 고정 도구와 안전한 시작
 
@@ -107,10 +108,16 @@ node scripts/validate-design-examples.mjs
 
 Production bundle에 mock identity, QA backdoor, title sentinel, OAuth secret,
 AWS key가 없어야 합니다. UI 변경은 실제 화면 screenshot도 확인합니다.
+`npm run build:release-manifest`, `npm run upload:release-prefix`,
+`npm run verify:release-contract`로 release contract를 확인합니다.
 
 ## [release.aws-oidc] 5. GitHub Environment와 OIDC
 
-현재 GitHub Environment, OIDC role, AWS workflow는 없습니다. 구현 시
+GitHub Environment, OIDC role, AWS workflow는 다음 canonical 경로를 사용합니다:
+`.github/workflows/release.yml`, `.github/workflows/security-gate.yml`,
+`infra/aws/molroom-bootstrap.yml`, `infra/aws/molroom-production.yml`.
+현재 GitHub environments=0, AWS session expired, `molroom.molcube.com` unresolved입니다.
+구성 시
 `production` Environment required reviewer와 tag 보호를 설정하고, repository와
 Environment에 제한된 AWS OIDC role만 사용합니다. 장기 AWS access key는 만들지
 않습니다. CloudFormation은 private S3, CloudFront Origin Access Control, ACM
@@ -129,20 +136,24 @@ release_sha="$(git rev-parse HEAD)"
 test -z "$(git status --porcelain)"
 git diff --quiet "${release_sha}^" "${release_sha}"
 test "$(git rev-parse origin/main)" = "${release_sha}"
-git tag --list v0.1.0 | grep -q '^v0.1.0$' && { echo 'tag exists; abort'; exit 1; } || true
-git tag -a v0.1.0 "${release_sha}" -m "MolRoom v0.1.0"
-git push --atomic origin "v0.1.0"
+test "$(git rev-parse origin/main)" = "$release_sha"
+node scripts/build-release-manifest.mjs --artifact-root dist --commit-sha "${release_sha}" --package-version "$(node -p 'require(\"./package.json\").version')" --source-date-epoch "$(git show -s --format=%ct "${release_sha}")"
+node scripts/upload-release-prefix.mjs --artifact-root dist --bucket "molroom-<account>-us-east-1-origin" --commit-sha "${release_sha}" --dry-run
+# 실제 tag/Release 생성과 cutover는 protected production workflow에서만 수행합니다.
 ```
 
 Release에는 SHA, artifact checksum, evidence reference, smoke 결과를 남깁니다.
+immutable object prefix는 `releases/${release_sha}/`이며, production smoke와
+CloudFront invalidation을 통과해야 합니다.
 `https://molroom.molcube.com`에서 TLS, deep link, login/logout, room read,
 create/edit/cancel과 secret 노출을 확인합니다. 현재 실행되지 않았습니다.
 
 ## [release.rollback] 7. 롤백과 사고 대응
 
-tag 이동·force push 대신 승인된 **previous artifact**를 새 배포로 올립니다.
-현재 SHA·CloudFront distribution ID·artifact checksum을 기록하고, 검증된
-이전 artifact를 S3에 올린 뒤 CloudFront invalidation과 production smoke를
+tag 이동·force push 대신 승인된 **previous artifact**의 기존 immutable
+`releases/${release_sha}/` prefix를 checksum으로 확인하고 재사용합니다.
+재업로드나 복사는 하지 않습니다(not re-upload/copy). 현재 SHA·CloudFront distribution ID·artifact checksum을 기록하고,
+ActiveReleaseSha만 이전 SHA로 바꾼 뒤 CloudFront invalidation과 production smoke를
 수행합니다. 원인 수정 후 새 commit/tag를 배포합니다. 자세한 secret rotation과
 incident response는 [SECURITY.md](SECURITY.md)를 따릅니다.
 
