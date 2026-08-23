@@ -1,0 +1,132 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://molroom.molcube.com/schemas/google-spike/manifest-v1.json",
+  "title": "MolRoom Google spike evidence manifest v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "candidateSha",
+    "generatedAt",
+    "harnessCommitSha",
+    "probeCommitShas",
+    "officialDocs",
+    "coverage",
+    "evidence",
+    "architectureTriggers",
+    "teardownStatus"
+  ],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "candidateSha": { "$ref": "#/$defs/commitSha" },
+    "generatedAt": { "type": "string", "format": "date-time" },
+    "harnessCommitSha": { "$ref": "#/$defs/commitSha" },
+    "probeCommitShas": {
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": false,
+      "properties": {
+        "provisioning": { "$ref": "#/$defs/commitSha" },
+        "account-matrix": { "$ref": "#/$defs/commitSha" },
+        "gis-lifecycle": { "$ref": "#/$defs/commitSha" },
+        "calendar-capabilities": { "$ref": "#/$defs/commitSha" },
+        "calendar-crud": { "$ref": "#/$defs/commitSha" },
+        "calendar-series": { "$ref": "#/$defs/commitSha" },
+        "drive-appdata": { "$ref": "#/$defs/commitSha" },
+        "people-directory": { "$ref": "#/$defs/commitSha" },
+        "teardown": { "$ref": "#/$defs/commitSha" }
+      }
+    },
+    "officialDocs": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 64,
+      "items": {
+        "type": "string",
+        "pattern": "^https://developers\\.google\\.com/[^?#]+$"
+      }
+    },
+    "coverage": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 64,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["roleAlias", "browserAlias", "deviceAlias", "status"],
+        "properties": {
+          "roleAlias": { "$ref": "#/$defs/alias" },
+          "browserAlias": { "$ref": "#/$defs/alias" },
+          "deviceAlias": { "$ref": "#/$defs/alias" },
+          "status": { "enum": ["COMPLETE", "BLOCKED_ENVIRONMENT", "NOT_APPLICABLE"] }
+        }
+      }
+    },
+    "evidence": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 32,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["probeId", "path", "sha256", "capability"],
+        "properties": {
+          "probeId": { "$ref": "#/$defs/probeId" },
+          "path": { "type": "string", "pattern": "^(docs|scripts)/[A-Za-z0-9._/-]+$" },
+          "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+          "capability": { "$ref": "#/$defs/capability" }
+        }
+      }
+    },
+    "architectureTriggers": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "enum": [
+          "TOKEN_RECONNECT_UNACCEPTABLE",
+          "REAL_MOBILE_EVIDENCE_MISSING",
+          "ROOM_SHARED_PROPERTY_UNSUPPORTED",
+          "ROOM_CONFLICT_UNSAFE",
+          "OWN_MUTATION_UNSUPPORTED",
+          "DRIVE_APPDATA_UNSUPPORTED",
+          "TEARDOWN_INCOMPLETE",
+          "MEET_FEATURE_REDUCTION",
+          "PEOPLE_FEATURE_REDUCTION",
+          "ADMIN_CANCEL_FEATURE_REDUCTION",
+          "VISIBILITY_FEATURE_REDUCTION",
+          "TENANT_POLICY_BLOCKED",
+          "UNKNOWN_OUTCOME"
+        ]
+      }
+    },
+    "teardownStatus": { "$ref": "#/$defs/teardownStatus" }
+  },
+  "$defs": {
+    "alias": { "type": "string", "pattern": "^[a-z][a-z0-9-]{0,63}$" },
+    "commitSha": { "type": "string", "pattern": "^[a-f0-9]{40}$" },
+    "probeId": {
+      "enum": [
+        "provisioning",
+        "account-matrix",
+        "gis-lifecycle",
+        "calendar-capabilities",
+        "calendar-crud",
+        "calendar-series",
+        "drive-appdata",
+        "people-directory",
+        "teardown"
+      ]
+    },
+    "capability": {
+      "enum": [
+        "SUPPORTED",
+        "UNSUPPORTED",
+        "TENANT_BLOCKED",
+        "ENVIRONMENT_BLOCKED",
+        "INCONCLUSIVE",
+        "NOT_APPLICABLE"
+      ]
+    },
+    "teardownStatus": { "enum": ["NOT_REQUIRED", "PENDING", "COMPLETE", "UNKNOWN"] }
+  }
+}

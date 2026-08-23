@@ -1,0 +1,29 @@
+{
+  "schemaVersion": 1,
+  "probeId": "fixture-safe",
+  "runId": "run-fixture-001",
+  "candidateSha": "0123456789abcdef0123456789abcdef01234567",
+  "observedAt": "2026-08-22T00:00:00.000Z",
+  "roleAlias": "ordinary",
+  "browserAlias": "chrome-desktop",
+  "deviceAlias": "desktop",
+  "operationId": "operation-fixture-001",
+  "endpoint": "https://www.googleapis.com/calendar/v3/calendars/{calendar}/events",
+  "httpStatus": 200,
+  "googleRequestId": "request-fixture-001",
+  "capability": "SUPPORTED",
+  "result": "SUCCESS",
+  "responseCounts": {
+    "items": 1
+  },
+  "fieldPresence": {
+    "sharedProperty": true
+  },
+  "locatorHashes": {
+    "event": "sha256:4e738ca5563c06cfd0018299933d58db1dd8bf97f6973dc99bf6cdc64b5550bd"
+  },
+  "teardownStatus": "NOT_REQUIRED",
+  "notes": [
+    "FIXTURE"
+  ]
+}

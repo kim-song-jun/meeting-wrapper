@@ -1,0 +1,143 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://molroom.molcube.com/schemas/google-spike/evidence-v1.json",
+  "title": "MolRoom Google spike redacted evidence v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "probeId",
+    "runId",
+    "candidateSha",
+    "observedAt",
+    "roleAlias",
+    "browserAlias",
+    "deviceAlias",
+    "operationId",
+    "endpoint",
+    "capability",
+    "result",
+    "teardownStatus"
+  ],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "probeId": { "$ref": "#/$defs/alias" },
+    "runId": { "$ref": "#/$defs/operation" },
+    "candidateSha": { "$ref": "#/$defs/commitSha" },
+    "observedAt": { "type": "string", "format": "date-time" },
+    "roleAlias": { "$ref": "#/$defs/alias" },
+    "browserAlias": { "$ref": "#/$defs/alias" },
+    "deviceAlias": { "$ref": "#/$defs/alias" },
+    "operationId": { "$ref": "#/$defs/operation" },
+    "endpoint": {
+      "type": "string",
+      "pattern": "^https://(www|people|oauth2)\\.googleapis\\.com/[^?#@]*$"
+    },
+    "httpStatus": { "type": "integer", "minimum": 100, "maximum": 599 },
+    "googleRequestId": { "$ref": "#/$defs/operation" },
+    "capability": { "$ref": "#/$defs/capability" },
+    "result": {
+      "enum": [
+        "SUCCESS",
+        "DENIED",
+        "DECLINED",
+        "TIMEOUT",
+        "PARTIAL",
+        "UNKNOWN_OUTCOME",
+        "BLOCKED",
+        "ALREADY_ABSENT",
+        "NOT_RUN"
+      ]
+    },
+    "responseCounts": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "items": { "$ref": "#/$defs/count" },
+        "matches": { "$ref": "#/$defs/count" },
+        "accepted": { "$ref": "#/$defs/count" },
+        "declined": { "$ref": "#/$defs/count" },
+        "pages": { "$ref": "#/$defs/count" },
+        "attempts": { "$ref": "#/$defs/count" },
+        "created": { "$ref": "#/$defs/count" },
+        "updated": { "$ref": "#/$defs/count" },
+        "deleted": { "$ref": "#/$defs/count" },
+        "unknown": { "$ref": "#/$defs/count" }
+      }
+    },
+    "fieldPresence": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "sharedProperty": { "type": "boolean" },
+        "visibility": { "type": "boolean" },
+        "organizer": { "type": "boolean" },
+        "conferenceData": { "type": "boolean" },
+        "iCalUid": { "type": "boolean" },
+        "recurringEventId": { "type": "boolean" },
+        "originalStartTime": { "type": "boolean" },
+        "nextPageToken": { "type": "boolean" },
+        "names": { "type": "boolean" },
+        "emailAddresses": { "type": "boolean" },
+        "organizations": { "type": "boolean" },
+        "department": { "type": "boolean" }
+      }
+    },
+    "locatorHashes": {
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": false,
+      "properties": {
+        "event": { "$ref": "#/$defs/locatorHash" },
+        "organizerEvent": { "$ref": "#/$defs/locatorHash" },
+        "roomEvent": { "$ref": "#/$defs/locatorHash" },
+        "file": { "$ref": "#/$defs/locatorHash" },
+        "series": { "$ref": "#/$defs/locatorHash" },
+        "iCalUid": { "$ref": "#/$defs/locatorHash" },
+        "calendar": { "$ref": "#/$defs/locatorHash" },
+        "roomCalendar": { "$ref": "#/$defs/locatorHash" }
+      }
+    },
+    "teardownStatus": { "$ref": "#/$defs/teardownStatus" },
+    "notes": {
+      "type": "array",
+      "maxItems": 16,
+      "items": {
+        "enum": [
+          "FIXTURE",
+          "OPERATOR_VERIFIED",
+          "TENANT_POLICY",
+          "BLOCKED_ENVIRONMENT",
+          "USER_DENIED",
+          "POPUP_BLOCKED",
+          "TOKEN_EXPIRED",
+          "RECONNECT_REQUIRED",
+          "PROPAGATION_TIMEOUT",
+          "AUTO_DECLINED",
+          "UNSUPPORTED",
+          "CLEANUP_ALREADY_ABSENT",
+          "RETRYABLE_RATE_LIMIT",
+          "FEATURE_REDUCED"
+        ]
+      }
+    }
+  },
+  "$defs": {
+    "alias": { "type": "string", "pattern": "^[a-z][a-z0-9-]{0,63}$" },
+    "operation": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$" },
+    "commitSha": { "type": "string", "pattern": "^[a-f0-9]{40}$" },
+    "locatorHash": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" },
+    "count": { "type": "integer", "minimum": 0 },
+    "capability": {
+      "enum": [
+        "SUPPORTED",
+        "UNSUPPORTED",
+        "TENANT_BLOCKED",
+        "ENVIRONMENT_BLOCKED",
+        "INCONCLUSIVE",
+        "NOT_APPLICABLE"
+      ]
+    },
+    "teardownStatus": { "enum": ["NOT_REQUIRED", "PENDING", "COMPLETE", "UNKNOWN"] }
+  }
+}

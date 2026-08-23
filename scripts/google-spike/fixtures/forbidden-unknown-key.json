@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 1,
+  "probeId": "fixture-unknown",
+  "runId": "run-fixture-005",
+  "candidateSha": "0123456789abcdef0123456789abcdef01234567",
+  "observedAt": "2026-08-22T00:00:00.000Z",
+  "roleAlias": "ordinary",
+  "browserAlias": "chrome-desktop",
+  "deviceAlias": "desktop",
+  "operationId": "operation-fixture-005",
+  "endpoint": "https://www.googleapis.com/calendar/v3/calendars/{calendar}/events",
+  "capability": "SUPPORTED",
+  "result": "SUCCESS",
+  "responseCounts": {
+    "unexpected": "fixture-private-material"
+  },
+  "teardownStatus": "NOT_REQUIRED"
+}

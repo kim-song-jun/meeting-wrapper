@@ -1,0 +1,16 @@
+{
+  "schemaVersion": 1,
+  "probeId": "fixture-pii",
+  "runId": "run-fixture-003",
+  "candidateSha": "0123456789abcdef0123456789abcdef01234567",
+  "observedAt": "2026-08-22T00:00:00.000Z",
+  "roleAlias": "ordinary",
+  "browserAlias": "chrome-desktop",
+  "deviceAlias": "desktop",
+  "operationId": "operation-fixture-003",
+  "endpoint": "https://www.googleapis.com/calendar/v3/calendars/{calendar}/events",
+  "googleRequestId": "fixture.person@example.invalid",
+  "capability": "SUPPORTED",
+  "result": "SUCCESS",
+  "teardownStatus": "NOT_REQUIRED"
+}
