@@ -1725,6 +1725,7 @@
 
 /* 시간축 눈금 — 11px. 24px 슬롯에 13px 라벨은 정시선을 넘는다. */
 .grid-axis__label {
+  font-family: var(--font-mono);
   font-size: var(--t-grid-axis-size);
   line-height: var(--t-grid-axis-lh);
 }

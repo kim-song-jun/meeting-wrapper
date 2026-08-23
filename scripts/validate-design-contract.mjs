@@ -1,5 +1,6 @@
 import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
+import { inspectFontResourcePolicy } from "./lib/font-resource-policy.mjs";
 
 const root = process.cwd();
 const designPath = process.argv[2] ?? "DESIGN.md";
@@ -365,6 +366,19 @@ function gridRuntimeContractFailures(tokens, screen, gridCss, componentCss) {
   if (splitTimeSuppressions.length > 0) {
     contractFailures.push("src/styles/grid.css: split week must not suppress event time with CSS");
   }
+  const axisRules = extractCssRules(gridCss).filter((rule) =>
+    rule.selectors.includes(".grid-axis__label"),
+  );
+  const baseAxisRules = axisRules.filter((rule) => rule.contexts.length === 0);
+  const axisFamilies = axisRules.flatMap((rule) => declarations(rule)
+    .filter(([property]) => property === "font-family")
+    .map(([, value]) => value));
+  const baseAxisFamilies = baseAxisRules.flatMap((rule) => declarations(rule)
+    .filter(([property]) => property === "font-family")
+    .map(([, value]) => value));
+  if (baseAxisFamilies.length !== 1 || axisFamilies.length !== 1 || baseAxisFamilies[0] !== "var(--font-mono)") {
+    contractFailures.push("src/styles/grid.css: .grid-axis__label must consume the mono font role exactly once in base CSS");
+  }
   return contractFailures;
 }
 
@@ -441,6 +455,14 @@ const mutations = [
     componentCss,
     "src/styles/tokens.css: --t-grid-fine-size must be declared exactly once as 12px in top-level :root",
   ],
+  [
+    "axis mono role",
+    gridTokens,
+    gridScreen,
+    gridCss.replace("font-family: var(--font-mono);", "font-family: var(--font-sans);"),
+    componentCss,
+    "src/styles/grid.css: .grid-axis__label must consume the mono font role exactly once in base CSS",
+  ],
 ];
 if (gridBaselineFailures.length === 0) {
   for (const [label, tokens, screen, mutatedGridCss, mutatedComponentCss, expectedFailure] of mutations) {
@@ -465,6 +487,123 @@ if (gridBaselineFailures.length === 0) {
     if (sentinelFailures.length === 0 || sentinelFailures.includes(targetFailure)) {
       failures.push("validator grid cascade sentinel let an unrelated baseline failure satisfy the event line-height target");
     }
+  }
+}
+
+function fontResourceContractFailures(indexSource, fontsSource, entrySource = productionBase) {
+  return inspectFontResourcePolicy({
+    cssSources: [{ path: "src/styles/fonts.css", source: fontsSource }],
+    entryCssSources: [{ path: "src/styles/base.css", source: entrySource }],
+    expectedPretendardSource:
+      "../assets/fonts/PretendardVariable-v1.3.9.woff2",
+    htmlSources: [{ path: "index.html", source: indexSource }],
+  }).map(({ marker, path }) => `${path}: ${marker}`);
+}
+
+const productionIndex = read("index.html");
+const productionFonts = read("src/styles/fonts.css");
+const productionBase = read("src/styles/base.css");
+const fontResourceBaselineFailures = fontResourceContractFailures(
+  productionIndex,
+  productionFonts,
+);
+failures.push(...fontResourceBaselineFailures);
+if (fontResourceBaselineFailures.length === 0) {
+  const mutations = [
+    [
+      "entity-encoded arbitrary stylesheet",
+      `${productionIndex}\n<LiNk HREF="hTtPs&colon;&sol;&sol;Arbitrary.Example/font.css" REL="StyleSheet">\n`,
+      productionFonts,
+      "index.html: font-resource:external",
+    ],
+    [
+      "case-insensitive font preload attributes",
+      `${productionIndex}\n<LINK AS = 'FoNt' HREF = '/font.woff2' REL = 'PreLoad'>\n`,
+      productionFonts,
+      "index.html: font-preload:forbidden",
+    ],
+    [
+      "CSS-escaped external import",
+      productionIndex,
+      `${String.raw`@import url("\68\54\54\70\53\3a\2f\2f arbitrary.example/font.css");`}\n${productionFonts}`,
+      "src/styles/fonts.css: font-resource:external",
+    ],
+    [
+      "commented-out face",
+      productionIndex,
+      `/* ${productionFonts} */`,
+      "src/styles/fonts.css: font-face:missing",
+    ],
+  ];
+  for (const [label, indexSource, fontsSource, expectedFailure] of mutations) {
+    if (indexSource === productionIndex && fontsSource === productionFonts) {
+      failures.push(`validator font-resource negative mutation did not change source: ${label}`);
+      continue;
+    }
+    if (!fontResourceContractFailures(indexSource, fontsSource).includes(expectedFailure)) {
+      failures.push(`validator font-resource negative mutation did not produce its target failure: ${label}`);
+    }
+  }
+
+  const entryMutations = [
+    [
+      "reversed canonical imports",
+      productionBase.replace(
+        '@import "./fonts.css";\n@import "./tokens.css";',
+        '@import "./tokens.css";\n@import "./fonts.css";',
+      ),
+      "src/styles/base.css: font-entry:order",
+    ],
+    [
+      "external import before canonical imports",
+      `@import "https://assets.example/font.css";\n${productionBase}`,
+      "src/styles/base.css: font-resource:external",
+    ],
+    [
+      "canonical imports after a style rule",
+      `body { color: black; }\n${productionBase}`,
+      "src/styles/base.css: font-entry:order",
+    ],
+    [
+      "active extra arbitrary import",
+      productionBase.replace(
+        '@import "./tokens.css";',
+        '@import "./tokens.css";\n@import "https://extra.example/font.css";',
+      ),
+      "src/styles/base.css: font-resource:external",
+    ],
+  ];
+  for (const [label, entrySource, expectedFailure] of entryMutations) {
+    if (entrySource === productionBase) {
+      failures.push(`validator font-entry negative mutation did not change source: ${label}`);
+    } else if (!fontResourceContractFailures(
+      productionIndex,
+      productionFonts,
+      entrySource,
+    ).includes(expectedFailure)) {
+      failures.push(`validator font-entry negative mutation did not produce its target failure: ${label}`);
+    }
+  }
+
+  const positiveIndex = `${productionIndex}
+<!-- <link rel="stylesheet" href="https://comment.example/font.css"> -->
+<script>fetch("https://api.example/data")</script>
+<link rel="stylesheet" href="/assets/local.css">`;
+  const positiveFonts = `@import url("https%3A%2F%2Frelative.example/font.css");
+${productionFonts}
+/* @import url("https://comment.example/font.css"); */`;
+  const positiveEntry = `\uFEFF@charset "UTF-8";
+/* leading contract comment */
+  ${productionBase}`;
+  const positiveFailures = fontResourceContractFailures(
+    positiveIndex,
+    positiveFonts,
+    positiveEntry,
+  );
+  if (positiveFailures.includes("src/styles/fonts.css: font-resource:external")) {
+    failures.push("validator encoded-relative import positive control was treated as external");
+  } else if (positiveFailures.length > 0) {
+    failures.push("validator font-resource positive controls must remain accepted");
   }
 }
 

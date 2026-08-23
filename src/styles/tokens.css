@@ -111,7 +111,7 @@
                -apple-system, BlinkMacSystemFont, system-ui, "Apple SD Gothic Neo", sans-serif;
   /* [local] Toss 레퍼런스에 canonical 모노스페이스가 없다. 시간축은 자릿수가
    * 흔들리면 읽히지 않으므로 시스템 모노를 계속 쓴다. */
-  --font-mono: ui-monospace, SFMono-Regular, "SF Mono", "IBM Plex Mono", Menlo, monospace;
+  --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
 
   /*
    * 타입 스케일 — TDS 문서 계층 실측값.
