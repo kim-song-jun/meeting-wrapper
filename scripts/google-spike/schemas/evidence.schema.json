@@ -5,7 +5,8 @@
   "type": "object",
   "oneOf": [
     { "$ref": "#/$defs/probeEvidence" },
-    { "$ref": "#/$defs/provisioningEvidence" }
+    { "$ref": "#/$defs/provisioningEvidence" },
+    { "$ref": "#/$defs/accountMatrixEvidence" }
   ],
   "unevaluatedProperties": false,
   "$defs": {
@@ -548,6 +549,58 @@
         "operatorVerified": { "const": true }
       }
     },
+    "accountMatrixEvidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schemaVersion", "kind", "probeId", "status", "observation", "domain", "accounts", "rooms", "fixtures", "rows"],
+      "properties": {
+        "schemaVersion": { "const": 1 },
+        "kind": { "const": "account-matrix" },
+        "probeId": { "const": "account-matrix" },
+        "status": { "const": "UNBOUND" },
+        "observation": { "const": "UNOBSERVED" },
+        "domain": { "const": "MOLCUBE_COM" },
+        "accounts": { "type": "array", "oneOf": [{ "prefixItems": [{ "$ref": "#/$defs/accountMatrixOrdinary" }, { "$ref": "#/$defs/accountMatrixAdmin" }], "items": false }, { "prefixItems": [{ "$ref": "#/$defs/accountMatrixAdmin" }, { "$ref": "#/$defs/accountMatrixOrdinary" }], "items": false }], "minItems": 2, "maxItems": 2 },
+        "rooms": { "type": "array", "oneOf": [{ "prefixItems": [{ "$ref": "#/$defs/accountMatrixRoomA" }, { "$ref": "#/$defs/accountMatrixRoomB" }], "items": false }, { "prefixItems": [{ "$ref": "#/$defs/accountMatrixRoomB" }, { "$ref": "#/$defs/accountMatrixRoomA" }], "items": false }], "minItems": 2, "maxItems": 2 },
+        "fixtures": { "type": "array", "items": { "$ref": "#/$defs/accountMatrixFixture" }, "minItems": 6, "maxItems": 6, "uniqueItems": true, "allOf": [{ "contains": { "$ref": "#/$defs/accountMatrixFixtureOrdinaryOwn" } }, { "contains": { "$ref": "#/$defs/accountMatrixFixtureOrdinaryCopy" } }, { "contains": { "$ref": "#/$defs/accountMatrixFixtureAdminCopy" } }, { "contains": { "$ref": "#/$defs/accountMatrixFixtureCrossBrowser" } }, { "contains": { "$ref": "#/$defs/accountMatrixFixtureConflictA" } }, { "contains": { "$ref": "#/$defs/accountMatrixFixtureConflictB" } }] },
+        "rows": { "type": "array", "items": { "$ref": "#/$defs/accountMatrixRow" }, "minItems": 8, "maxItems": 8, "uniqueItems": true, "allOf": [{ "contains": { "$ref": "#/$defs/accountMatrixRowRoomRead" } }, { "contains": { "$ref": "#/$defs/accountMatrixRowOwnMutation" } }, { "contains": { "$ref": "#/$defs/accountMatrixRowOrdinaryCopy" } }, { "contains": { "$ref": "#/$defs/accountMatrixRowAdminCopy" } }, { "contains": { "$ref": "#/$defs/accountMatrixRowDrive" } }, { "contains": { "$ref": "#/$defs/accountMatrixRowPeople" } }, { "contains": { "$ref": "#/$defs/accountMatrixRowConflictA" } }, { "contains": { "$ref": "#/$defs/accountMatrixRowConflictB" } }] }
+      }
+    },
+    "accountMatrixAccount": {
+      "type": "object", "additionalProperties": false,
+      "required": ["alias", "role", "bindingAlias", "roomWriter", "browserProfiles"],
+      "properties": { "alias": { "enum": ["ordinary", "room-writer-admin"] }, "role": { "enum": ["ordinary", "room-writer-admin"] }, "bindingAlias": { "pattern": "^account:(ordinary|room-writer-admin)$" }, "roomWriter": { "type": "boolean" }, "browserProfiles": { "type": "array", "minItems": 2, "items": { "$ref": "#/$defs/alias" } } }
+    },
+    "accountMatrixOrdinary": { "allOf": [{ "$ref": "#/$defs/accountMatrixAccount" }, { "properties": { "alias": { "const": "ordinary" }, "role": { "const": "ordinary" }, "bindingAlias": { "const": "account:ordinary" }, "roomWriter": { "const": false } } }] },
+    "accountMatrixAdmin": { "allOf": [{ "$ref": "#/$defs/accountMatrixAccount" }, { "properties": { "alias": { "const": "room-writer-admin" }, "role": { "const": "room-writer-admin" }, "bindingAlias": { "const": "account:room-writer-admin" }, "roomWriter": { "const": true } } }] },
+    "accountMatrixRoom": {
+      "type": "object", "additionalProperties": false, "required": ["alias", "bindingAlias"],
+      "properties": { "alias": { "enum": ["room-a", "room-b"] }, "bindingAlias": { "pattern": "^room:(room-a|room-b)$" } }
+    },
+    "accountMatrixRoomA": { "allOf": [{ "$ref": "#/$defs/accountMatrixRoom" }, { "properties": { "alias": { "const": "room-a" }, "bindingAlias": { "const": "room:room-a" } } }] },
+    "accountMatrixRoomB": { "allOf": [{ "$ref": "#/$defs/accountMatrixRoom" }, { "properties": { "alias": { "const": "room-b" }, "bindingAlias": { "const": "room:room-b" } } }] },
+    "accountMatrixFixture": {
+      "type": "object", "additionalProperties": false, "required": ["alias", "mutableId", "owner", "room"],
+      "properties": { "alias": { "$ref": "#/$defs/alias" }, "mutableId": { "$ref": "#/$defs/alias" }, "owner": { "enum": ["ordinary", "room-writer-admin"] }, "room": { "enum": ["room-a", "room-b"] } }
+    },
+    "accountMatrixFixtureOrdinaryOwn": { "allOf": [{ "$ref": "#/$defs/accountMatrixFixture" }, { "properties": { "alias": { "const": "ordinary-own-event" }, "mutableId": { "const": "fixture:ordinary-own-event" }, "owner": { "const": "ordinary" }, "room": { "const": "room-a" } } }] },
+    "accountMatrixFixtureOrdinaryCopy": { "allOf": [{ "$ref": "#/$defs/accountMatrixFixture" }, { "properties": { "alias": { "const": "ordinary-room-copy" }, "mutableId": { "const": "fixture:ordinary-room-copy" }, "owner": { "const": "ordinary" }, "room": { "const": "room-b" } } }] },
+    "accountMatrixFixtureAdminCopy": { "allOf": [{ "$ref": "#/$defs/accountMatrixFixture" }, { "properties": { "alias": { "const": "admin-room-copy" }, "mutableId": { "const": "fixture:admin-room-copy" }, "owner": { "const": "room-writer-admin" }, "room": { "const": "room-a" } } }] },
+    "accountMatrixFixtureCrossBrowser": { "allOf": [{ "$ref": "#/$defs/accountMatrixFixture" }, { "properties": { "alias": { "const": "cross-browser-preference" }, "mutableId": { "const": "fixture:cross-browser-preference" }, "owner": { "const": "ordinary" }, "room": { "const": "room-a" } } }] },
+    "accountMatrixFixtureConflictA": { "allOf": [{ "$ref": "#/$defs/accountMatrixFixture" }, { "properties": { "alias": { "const": "conflict-event-a" }, "mutableId": { "const": "fixture:conflict-event-a" }, "owner": { "const": "ordinary" }, "room": { "const": "room-b" } } }] },
+    "accountMatrixFixtureConflictB": { "allOf": [{ "$ref": "#/$defs/accountMatrixFixture" }, { "properties": { "alias": { "const": "conflict-event-b" }, "mutableId": { "const": "fixture:conflict-event-b" }, "owner": { "const": "room-writer-admin" }, "room": { "const": "room-b" } } }] },
+    "accountMatrixRow": {
+      "type": "object", "additionalProperties": false, "required": ["alias", "actor", "resource", "owner", "cleanupOwner", "fixture", "expectedCapability", "concurrencyGroup", "concurrent"],
+      "properties": { "alias": { "$ref": "#/$defs/alias" }, "actor": { "enum": ["ordinary", "room-writer-admin"] }, "resource": { "type": "string" }, "owner": { "enum": ["ordinary", "room-writer-admin"] }, "cleanupOwner": { "enum": ["ordinary", "room-writer-admin"] }, "fixture": { "$ref": "#/$defs/alias" }, "expectedCapability": { "enum": ["SUPPORTED", "DENIED", "INCONCLUSIVE"] }, "concurrencyGroup": { "$ref": "#/$defs/alias" }, "concurrent": { "type": "boolean" } }
+    },
+    "accountMatrixRowRoomRead": { "allOf": [{ "$ref": "#/$defs/accountMatrixRow" }, { "properties": { "alias": { "const": "ordinary-room-read" }, "actor": { "const": "ordinary" }, "owner": { "const": "ordinary" }, "resource": { "const": "room-a" }, "fixture": { "const": "ordinary-own-event" }, "expectedCapability": { "const": "SUPPORTED" }, "cleanupOwner": { "const": "ordinary" }, "concurrencyGroup": { "const": "ordinary-read" }, "concurrent": { "const": false } } }] },
+    "accountMatrixRowOwnMutation": { "allOf": [{ "$ref": "#/$defs/accountMatrixRow" }, { "properties": { "alias": { "const": "ordinary-own-event-mutation" }, "actor": { "const": "ordinary" }, "owner": { "const": "ordinary" }, "resource": { "const": "room-a" }, "fixture": { "const": "ordinary-own-event" }, "expectedCapability": { "const": "SUPPORTED" }, "cleanupOwner": { "const": "ordinary" }, "concurrencyGroup": { "const": "ordinary-mutation" }, "concurrent": { "const": false } } }] },
+    "accountMatrixRowOrdinaryCopy": { "allOf": [{ "$ref": "#/$defs/accountMatrixRow" }, { "properties": { "alias": { "const": "ordinary-room-copy-write" }, "actor": { "const": "ordinary" }, "owner": { "const": "ordinary" }, "resource": { "const": "room-b" }, "fixture": { "const": "ordinary-room-copy" }, "expectedCapability": { "const": "DENIED" }, "cleanupOwner": { "const": "ordinary" }, "concurrencyGroup": { "const": "ordinary-room-copy" }, "concurrent": { "const": false } } }] },
+    "accountMatrixRowAdminCopy": { "allOf": [{ "$ref": "#/$defs/accountMatrixRow" }, { "properties": { "alias": { "const": "admin-room-copy-write" }, "actor": { "const": "room-writer-admin" }, "owner": { "const": "room-writer-admin" }, "resource": { "const": "room-a" }, "fixture": { "const": "admin-room-copy" }, "expectedCapability": { "const": "INCONCLUSIVE" }, "cleanupOwner": { "const": "room-writer-admin" }, "concurrencyGroup": { "const": "admin-room-copy" }, "concurrent": { "const": false } } }] },
+    "accountMatrixRowDrive": { "allOf": [{ "$ref": "#/$defs/accountMatrixRow" }, { "properties": { "alias": { "const": "same-account-cross-browser-drive" }, "actor": { "const": "ordinary" }, "owner": { "const": "ordinary" }, "resource": { "const": "drive-appdata" }, "fixture": { "const": "cross-browser-preference" }, "expectedCapability": { "const": "SUPPORTED" }, "cleanupOwner": { "const": "ordinary" }, "concurrencyGroup": { "const": "drive-read" }, "concurrent": { "const": false } } }] },
+    "accountMatrixRowPeople": { "allOf": [{ "$ref": "#/$defs/accountMatrixRow" }, { "properties": { "alias": { "const": "people-directory-search" }, "actor": { "const": "ordinary" }, "owner": { "const": "ordinary" }, "resource": { "const": "people-directory" }, "fixture": { "const": "cross-browser-preference" }, "expectedCapability": { "const": "INCONCLUSIVE" }, "cleanupOwner": { "const": "ordinary" }, "concurrencyGroup": { "const": "people-search" }, "concurrent": { "const": false } } }] },
+    "accountMatrixRowConflictA": { "allOf": [{ "$ref": "#/$defs/accountMatrixRow" }, { "properties": { "alias": { "const": "two-browser-conflict-a" }, "actor": { "const": "ordinary" }, "owner": { "const": "ordinary" }, "resource": { "const": "room-b" }, "fixture": { "const": "conflict-event-a" }, "expectedCapability": { "const": "INCONCLUSIVE" }, "cleanupOwner": { "const": "ordinary" }, "concurrencyGroup": { "const": "conflict-room-b" }, "concurrent": { "const": true } } }] },
+    "accountMatrixRowConflictB": { "allOf": [{ "$ref": "#/$defs/accountMatrixRow" }, { "properties": { "alias": { "const": "two-browser-conflict-b" }, "actor": { "const": "room-writer-admin" }, "owner": { "const": "room-writer-admin" }, "resource": { "const": "room-b" }, "fixture": { "const": "conflict-event-b" }, "expectedCapability": { "const": "INCONCLUSIVE" }, "cleanupOwner": { "const": "room-writer-admin" }, "concurrencyGroup": { "const": "conflict-room-b" }, "concurrent": { "const": true } } }] },
     "probeId": {
       "enum": [
         "fixture-safe",

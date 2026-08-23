@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { AccountMatrixError, validateAccountMatrix } from "./account-matrix.mjs";
 
 const PROBE_EVIDENCE_KEYS = new Set([
   "kind",
@@ -613,7 +614,7 @@ function evidenceKind(value) {
     }
     return "probe";
   }
-  if (value.kind !== "probe" && value.kind !== "provisioning") failShape("/kind");
+  if (value.kind !== "probe" && value.kind !== "provisioning" && value.kind !== "account-matrix") failShape("/kind");
   return value.kind;
 }
 
@@ -833,6 +834,14 @@ function assertRawLocator(rawLocator, pointer) {
 
 export function validateEvidence(evidence) {
   const kind = evidenceKind(evidence);
+  if (kind === "account-matrix") {
+    try {
+      return validateAccountMatrix(evidence);
+    } catch (error) {
+      if (error instanceof AccountMatrixError) fail(error.category, error.pointer);
+      throw error;
+    }
+  }
   if (kind === "provisioning") return validateProvisioningEvidence(evidence);
 
   assertAllowedKeys(evidence, PROBE_EVIDENCE_KEYS, "/");

@@ -14,6 +14,7 @@ import {
   validateManifest,
   GOOGLE_ENDPOINT_TEMPLATES,
 } from "./evidence.mjs";
+import accountMatrix from "../../../docs/spikes/google-workspace/account-matrix.json" with { type: "json" };
 
 const testRoot = dirname(fileURLToPath(import.meta.url));
 const spikeRoot = join(testRoot, "..");
@@ -677,6 +678,7 @@ describe("Google spike evidence policy", () => {
     expect(evidenceSchema.oneOf).toEqual([
       { $ref: "#/$defs/probeEvidence" },
       { $ref: "#/$defs/provisioningEvidence" },
+      { $ref: "#/$defs/accountMatrixEvidence" },
     ]);
     expect(evidenceSchema.unevaluatedProperties).toBe(false);
     const probeSchema = evidenceSchema.$defs.probeEvidence;
@@ -776,6 +778,50 @@ describe("Google spike evidence policy", () => {
     expect(manifestSchema.properties.architectureTriggers.items.enum).toContain(
       "SHARED_SERIES_COPY_MISMATCH",
     );
+  });
+
+  it("validates the account-matrix union branch and rejects kind mismatches", () => {
+    expect(validateEvidence(accountMatrix)).toEqual(accountMatrix);
+    expect(() => validateEvidence({ ...accountMatrix, kind: "probe" })).toThrowError(
+      expect.objectContaining({ category: "FORBIDDEN_EVIDENCE_FIELD", pointer: "/_unknown" }),
+    );
+  });
+
+  it("keeps account-matrix schema discriminators aligned with the runtime corpus", async () => {
+    const schema = JSON.parse(await readFile(join(schemasRoot, "evidence.schema.json"), "utf8"));
+    expect(schema.$defs.accountMatrixOrdinary.allOf[1].properties.bindingAlias).toEqual({ const: "account:ordinary" });
+    expect(schema.$defs.accountMatrixAdmin.allOf[1].properties.roomWriter).toEqual({ const: true });
+    expect(schema.$defs.accountMatrixRoomA.allOf[1].properties.bindingAlias).toEqual({ const: "room:room-a" });
+    const rowChecks = schema.$defs.accountMatrixEvidence.properties.rows.allOf.map(({ contains }) => contains.$ref);
+    expect(rowChecks).toEqual(expect.arrayContaining(["#/$defs/accountMatrixRowOrdinaryCopy", "#/$defs/accountMatrixRowConflictA", "#/$defs/accountMatrixRowConflictB"]));
+    const fixtureExpectations = {
+      OrdinaryOwn: ["ordinary-own-event", "fixture:ordinary-own-event", "ordinary", "room-a"],
+      OrdinaryCopy: ["ordinary-room-copy", "fixture:ordinary-room-copy", "ordinary", "room-b"],
+      AdminCopy: ["admin-room-copy", "fixture:admin-room-copy", "room-writer-admin", "room-a"],
+      CrossBrowser: ["cross-browser-preference", "fixture:cross-browser-preference", "ordinary", "room-a"],
+      ConflictA: ["conflict-event-a", "fixture:conflict-event-a", "ordinary", "room-b"],
+      ConflictB: ["conflict-event-b", "fixture:conflict-event-b", "room-writer-admin", "room-b"],
+    };
+    for (const [suffix, [alias, mutableId, owner, room]] of Object.entries(fixtureExpectations)) {
+      const properties = schema.$defs[`accountMatrixFixture${suffix}`].allOf[1].properties;
+      expect(properties.alias).toEqual({ const: alias });
+      expect(properties.mutableId).toEqual({ const: mutableId });
+      expect(properties.owner).toEqual({ const: owner });
+      expect(properties.room).toEqual({ const: room });
+    }
+    const rowAliases = ["RoomRead", "OwnMutation", "OrdinaryCopy", "AdminCopy", "Drive", "People", "ConflictA", "ConflictB"];
+    for (const suffix of rowAliases) {
+      const properties = schema.$defs[`accountMatrixRow${suffix}`].allOf[1].properties;
+      expect(properties.alias.const).toBeTruthy();
+      expect(properties.actor.const).toBeTruthy();
+      expect(properties.owner.const).toBeTruthy();
+      expect(properties.resource.const).toBeTruthy();
+      expect(properties.fixture.const).toBeTruthy();
+      expect(properties.expectedCapability.const).toBeTruthy();
+      expect(properties.cleanupOwner.const).toBeTruthy();
+      expect(properties.concurrencyGroup.const).toBeTruthy();
+      expect(typeof properties.concurrent.const).toBe("boolean");
+    }
   });
 
   it("keeps CLI success and failure output stable and redacted", async () => {

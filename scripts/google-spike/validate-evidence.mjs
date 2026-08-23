@@ -68,8 +68,12 @@ async function readBoundedEvidence(path) {
 }
 
 async function main() {
-  const [evidencePath, ...extraArguments] = process.argv.slice(2);
-  if (!evidencePath || extraArguments.length > 0) {
+  const arguments_ = process.argv.slice(2);
+  const evidencePath = arguments_[0];
+  let expectedKind;
+  if (arguments_.length === 3 && arguments_[1] === "--kind") {
+    expectedKind = arguments_[2];
+  } else if (arguments_.length !== 1) {
     throw new EvidencePolicyError("INVALID_EVIDENCE_ARGUMENTS", "/");
   }
 
@@ -90,9 +94,12 @@ async function main() {
   }
 
   validateEvidence(evidence);
-  if (evidence.kind === "provisioning") {
+  if (expectedKind !== undefined && evidence.kind !== expectedKind) {
+    throw new EvidencePolicyError("EVIDENCE_KIND_MISMATCH", "/kind");
+  }
+  if (evidence.kind === "provisioning" || evidence.kind === "account-matrix") {
     process.stdout.write(
-      `evidence-valid schemaVersion=${evidence.schemaVersion} kind=provisioning status=${evidence.status}\n`,
+      `evidence-valid schemaVersion=${evidence.schemaVersion} kind=${evidence.kind} status=${evidence.status}\n`,
     );
   } else {
     process.stdout.write(
