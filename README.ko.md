@@ -134,9 +134,9 @@ Critical 0, CI build/bundle scan, CloudFront deploy가 같은 commit에서 통�
 git fetch origin main --quiet
 release_sha="$(git rev-parse HEAD)"
 test -z "$(git status --porcelain)"
-git diff --quiet "${release_sha}^" "${release_sha}"
+git diff --quiet
+git diff --cached --quiet
 test "$(git rev-parse origin/main)" = "${release_sha}"
-test "$(git rev-parse origin/main)" = "$release_sha"
 node scripts/build-release-manifest.mjs --artifact-root dist --commit-sha "${release_sha}" --package-version "$(node -p 'require(\"./package.json\").version')" --source-date-epoch "$(git show -s --format=%ct "${release_sha}")"
 node scripts/upload-release-prefix.mjs --artifact-root dist --bucket "molroom-<account>-us-east-1-origin" --commit-sha "${release_sha}" --dry-run
 # 실제 tag/Release 생성과 cutover는 protected production workflow에서만 수행합니다.

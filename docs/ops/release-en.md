@@ -83,13 +83,15 @@ trap 'rm -f -- "$spike_tmp_dir"/*; rmdir -- "$spike_tmp_dir"' EXIT
 touch .env.google-spike.local provisioning-receipt.local
 chmod 600 .env.google-spike.local provisioning-receipt.local
 git check-ignore -v .env.google-spike.local provisioning-receipt.local
-node scripts/google-spike/validate-evidence.mjs
-node scripts/google-spike/validate-provisioning.mjs
-node scripts/google-spike/scan-sensitive-paths.mjs
+node scripts/google-spike/validate-evidence.mjs docs/spikes/google-workspace/evidence/provisioning.json
+node scripts/google-spike/validate-provisioning.mjs .env.google-spike.local provisioning-receipt.local
+node scripts/google-spike/scan-sensitive-paths.mjs --redact docs/spikes/google-workspace/provisioning.md docs/spikes/google-workspace/evidence/provisioning.json scripts/google-spike/lib/provisioning.mjs scripts/google-spike/lib/provisioning.test.mjs scripts/google-spike/validate-provisioning.mjs
 ```
 
 `COMPLETE` is derived only after every live fact is observed and the three
 commands succeed in that order.
+Pass only the bounded safe paths enumerated above to the scanner; never print or
+scan the ignored `0600` env/receipt files directly.
 The tag prerequisite is `test "$(git rev-parse origin/main)" = "$release_sha"`.
 
 ```bash

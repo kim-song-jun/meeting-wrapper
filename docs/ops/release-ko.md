@@ -79,12 +79,14 @@ trap 'rm -f -- "$spike_tmp_dir"/*; rmdir -- "$spike_tmp_dir"' EXIT
 touch .env.google-spike.local provisioning-receipt.local
 chmod 600 .env.google-spike.local provisioning-receipt.local
 git check-ignore -v .env.google-spike.local provisioning-receipt.local
-node scripts/google-spike/validate-evidence.mjs
-node scripts/google-spike/validate-provisioning.mjs
-node scripts/google-spike/scan-sensitive-paths.mjs
+node scripts/google-spike/validate-evidence.mjs docs/spikes/google-workspace/evidence/provisioning.json
+node scripts/google-spike/validate-provisioning.mjs .env.google-spike.local provisioning-receipt.local
+node scripts/google-spike/scan-sensitive-paths.mjs --redact docs/spikes/google-workspace/provisioning.md docs/spikes/google-workspace/evidence/provisioning.json scripts/google-spike/lib/provisioning.mjs scripts/google-spike/lib/provisioning.test.mjs scripts/google-spike/validate-provisioning.mjs
 ```
 
 `COMPLETE`는 모든 live fact 관찰과 위 세 명령의 순서 있는 성공에서만 파생됩니다.
+scanner에는 위에 열거한 bounded safe path만 전달하며 ignored `0600` env/receipt를
+출력하거나 직접 scan하지 않습니다.
 tag 전제는 `test "$(git rev-parse origin/main)" = "$release_sha"` 입니다.
 
 ```bash
