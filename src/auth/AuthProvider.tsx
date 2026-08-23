@@ -1,13 +1,27 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import type { AuthAdapter, AuthResult, AuthUser } from "./types";
 import { mockAuthAdapter } from "./mockAuthAdapter";
+import {
+  bindAuthState,
+  createAuthOperationCoordinator,
+  createCheckingAuthState,
+  getVisibleAuthState,
+  resolveSessionRestore,
+} from "./sessionRestore";
+import type {
+  AdapterBoundAuthState,
+  AuthOperationCoordinator,
+  SessionRestoreState,
+} from "./sessionRestore";
 
 export type AuthStatus = "checking" | "signed-out" | "signed-in";
+export type AuthRestoreError = SessionRestoreState["restoreError"];
 
 export interface AuthContextValue {
   status: AuthStatus;
   user: AuthUser | null;
+  restoreError: AuthRestoreError;
   /** LoginScreen 이 실패 사유(wrong-domain/denied/error)를 직접 분기하려면 결과를 그대로 돌려줘야 한다. */
   signIn: () => Promise<AuthResult>;
   signOut: () => Promise<void>;
@@ -29,39 +43,54 @@ export function AuthProvider({
   children: ReactNode;
   adapter?: AuthAdapter;
 }) {
-  const [status, setStatus] = useState<AuthStatus>("checking");
-  const [user, setUser] = useState<AuthUser | null>(null);
+  const coordinatorRef = useRef<AuthOperationCoordinator | null>(null);
+  if (coordinatorRef.current === null) {
+    coordinatorRef.current = createAuthOperationCoordinator();
+  }
+  const coordinator = coordinatorRef.current;
+  const [authState, setAuthState] = useState<AdapterBoundAuthState>(() =>
+    createCheckingAuthState(adapter),
+  );
+  const { status, user, restoreError } = getVisibleAuthState(adapter, authState);
 
   useEffect(() => {
-    let cancelled = false;
-    adapter.restoreSession().then((restored) => {
-      if (cancelled) return;
-      setUser(restored);
-      setStatus(restored ? "signed-in" : "signed-out");
-    });
+    setAuthState(createCheckingAuthState(adapter));
+    void coordinator.run(
+      () => resolveSessionRestore(() => adapter.restoreSession()),
+      (restored) => setAuthState(bindAuthState(adapter, restored)),
+    );
     return () => {
-      cancelled = true;
+      coordinator.invalidate();
     };
-  }, [adapter]);
+  }, [adapter, coordinator]);
 
-  const signIn = useCallback(async (): Promise<AuthResult> => {
-    const result = await adapter.signIn();
-    if (result.ok) {
-      setUser(result.user);
-      setStatus("signed-in");
-    }
-    return result;
-  }, [adapter]);
+  const signIn = useCallback(
+    (): Promise<AuthResult> =>
+      coordinator.run(
+        () => adapter.signIn(),
+        (result) => {
+          const nextState: SessionRestoreState = result.ok
+            ? { status: "signed-in", user: result.user, restoreError: null }
+            : { status: "signed-out", user: null, restoreError: null };
+          setAuthState(bindAuthState(adapter, nextState));
+        },
+      ),
+    [adapter, coordinator],
+  );
 
   const signOut = useCallback(async () => {
-    await adapter.signOut();
-    setUser(null);
-    setStatus("signed-out");
-  }, [adapter]);
+    await coordinator.run(
+      () => adapter.signOut(),
+      () =>
+        setAuthState(
+          bindAuthState(adapter, { status: "signed-out", user: null, restoreError: null }),
+        ),
+    );
+  }, [adapter, coordinator]);
 
   const value = useMemo<AuthContextValue>(
-    () => ({ status, user, signIn, signOut }),
-    [status, user, signIn, signOut],
+    () => ({ status, user, restoreError, signIn, signOut }),
+    [status, user, restoreError, signIn, signOut],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

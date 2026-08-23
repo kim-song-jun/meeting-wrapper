@@ -194,6 +194,6 @@ export function parseAppConfig(input: ParseAppConfigInput = {}): AppConfig {
   return freeze({ deployment, adapter, googleClientId, allowedHostedDomain, rooms, policy });
 }
 
-export function assertBrowserConfiguration(modeEnv: Env): void {
-  parseAppConfig({ modeEnv });
+export function assertBrowserConfiguration(modeEnv: Env): AppConfig {
+  return parseAppConfig({ modeEnv });
 }

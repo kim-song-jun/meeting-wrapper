@@ -67,6 +67,26 @@ describe("parseAppConfig", () => {
     ).toBe("production");
   });
 
+  test("allows an explicitly selected mock adapter outside production", () => {
+    expect(
+      parseAppConfig({
+        commandEnv: { VITE_DEPLOYMENT: "preview", VITE_ADAPTER: "mock" },
+        rooms,
+        policy,
+      }),
+    ).toMatchObject({ deployment: "preview", adapter: "mock" });
+  });
+
+  test("rejects an unknown adapter without executing a fallback", () => {
+    expect(() =>
+      parseAppConfig({
+        commandEnv: { VITE_DEPLOYMENT: "preview", VITE_ADAPTER: "unexpected" },
+        rooms,
+        policy,
+      }),
+    ).toThrow("Invalid configuration: VITE_ADAPTER");
+  });
+
   test.each([
     ["VITE_ADAPTER", { VITE_ADAPTER: "mock" }],
     ["VITE_GOOGLE_CLIENT_ID", { VITE_GOOGLE_CLIENT_ID: "" }],
@@ -155,6 +175,16 @@ describe("parseAppConfig", () => {
 });
 
 describe("assertBrowserConfiguration", () => {
+  test("returns the immutable configuration that passed browser validation", () => {
+    const config = assertBrowserConfiguration({
+      VITE_DEPLOYMENT: "preview",
+      VITE_ADAPTER: "mock",
+    });
+
+    expect(config).toMatchObject({ deployment: "preview", adapter: "mock" });
+    expect(Object.isFrozen(config)).toBe(true);
+  });
+
   test("fails closed instead of falling back from invalid production settings", () => {
     expect(() =>
       assertBrowserConfiguration({
