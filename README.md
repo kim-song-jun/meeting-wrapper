@@ -1,6 +1,16 @@
-# molroom
+# MolRoom
 
 molcube 사내 회의실 예약. **서버 없음 · 데이터베이스 없음 · 시크릿 없음.**
+
+운영·릴리즈 문서:
+
+- [한국어 운영 가이드](README.ko.md)
+- [English operations guide](README.en.md)
+- [보안 정책 / Security policy](SECURITY.md)
+- [Google Workspace provisioning gate](docs/spikes/google-workspace/provisioning.md)
+
+현재는 mock auth/booking 단계이며 Google provisioning은 `INCOMPLETE / UNOBSERVED`,
+AWS 배포는 미완료입니다. 운영 출시를 완료했다고 해석하지 마세요.
 
 예약의 원본은 Google Calendar 다. 회의실은 Workspace 캘린더 리소스이고, 예약 하나는
 캘린더 이벤트 하나다. 저장·중복방지·초대·알림·개인 캘린더 동기화를 전부 구글이 운영한다.
