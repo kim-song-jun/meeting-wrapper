@@ -27,6 +27,7 @@ export function AttendeePicker({
   const [searching, setSearching] = useState(false);
   const [searchFailed, setSearchFailed] = useState(false);
   const timer = useRef<number | null>(null);
+  const searchGeneration = useRef(0);
 
   const has = (email: string) => selected.some((p) => p.email === email);
 
@@ -52,6 +53,7 @@ export function AttendeePicker({
   // 타이핑마다 API 를 때리지 않는다
   useEffect(() => {
     const q = query.trim();
+    const generation = ++searchGeneration.current;
     if (timer.current !== null) window.clearTimeout(timer.current);
     if (q.length < 1) {
       setResults([]);
@@ -60,25 +62,30 @@ export function AttendeePicker({
     }
     setSearching(true);
     timer.current = window.setTimeout(() => {
+      timer.current = null;
       repo
         .searchDirectory(q)
         .then((rows) => {
+          if (searchGeneration.current !== generation) return;
           setResults(rows.filter((r) => !has(r.email)));
           setSearchFailed(false);
         })
         .catch(() => {
+          if (searchGeneration.current !== generation) return;
           // 디렉터리를 못 읽는 것은 치명적이지 않다 — 직접 입력으로 넘어가면 된다.
           // 다만 조용히 삼키지 않고 아래에 안내를 띄운다.
           setResults([]);
           setSearchFailed(true);
         })
-        .finally(() => setSearching(false));
+        .finally(() => {
+          if (searchGeneration.current === generation) setSearching(false);
+        });
     }, 250);
     return () => {
       if (timer.current !== null) window.clearTimeout(timer.current);
+      searchGeneration.current += 1;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [query, selected.length]);
+  }, [query, selected]);
 
   const typedEmail = query.trim();
   const canAddRaw = EMAIL_RE.test(typedEmail) && !has(typedEmail);
