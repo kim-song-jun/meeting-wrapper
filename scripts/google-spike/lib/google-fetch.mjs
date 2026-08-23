@@ -493,20 +493,30 @@ export function createGoogleFetch({
     }, REQUEST_DEADLINE_MS);
     const init = Object.freeze({ ...built.init, signal: deadlineController.signal });
     const timeoutError = (attempts) => new GoogleFetchError("TIMEOUT", { attempts });
+    let terminal = false;
+    const transitionTerminal = (state, values) => {
+      if (terminal) return;
+      terminal = true;
+      transition(onTransition, state, values);
+    };
     transition(onTransition, "queued");
     let release;
+    let released = false;
+    let cleaned = false;
+    const releaseSlot = () => {
+      if (release === undefined || released) return;
+      released = true;
+      release();
+    };
+    const cleanup = () => {
+      if (cleaned) return;
+      cleaned = true;
+      clearTimeout(deadlineTimer);
+      built.signal?.removeEventListener("abort", onCallerAbort);
+    };
     let attempt = 0;
     try {
       release = await semaphore.acquire(deadlineController.signal);
-    } catch (error) {
-      if (timedOut) {
-        transition(onTransition, "failed", { category: "TIMEOUT" });
-        throw timeoutError(0);
-      }
-      if (error?.name === "AbortError") transition(onTransition, "aborted", { category: "ABORTED" });
-      throw error;
-    }
-    try {
       for (attempt = 1; attempt <= MAX_ATTEMPTS; attempt += 1) {
         throwIfAborted(deadlineController.signal);
         transition(onTransition, "running", { attempt });
@@ -518,11 +528,9 @@ export function createGoogleFetch({
           );
         } catch (error) {
           if (deadlineController.signal.aborted) {
-            if (timedOut) throw timeoutError(attempt);
-            transition(onTransition, "aborted", { attempt, category: "ABORTED" });
             throw abortError();
           }
-          transition(onTransition, "failed", { attempt, category: "NETWORK_ERROR" });
+          transitionTerminal("failed", { attempt, category: "NETWORK_ERROR" });
           throw new GoogleFetchError("NETWORK_ERROR", { attempts: attempt });
         }
         throwIfAborted(deadlineController.signal);
@@ -533,7 +541,7 @@ export function createGoogleFetch({
         );
         if (classification.ok) {
           throwIfAborted(deadlineController.signal);
-          transition(onTransition, "succeeded", { attempt, category: "SUCCESS" });
+          transitionTerminal("succeeded", { attempt, category: "SUCCESS" });
           return response;
         }
         if (classification.retryable && attempt < MAX_ATTEMPTS) {
@@ -547,16 +555,14 @@ export function createGoogleFetch({
             await awaitWithAbort(sleep(delay, deadlineController.signal), deadlineController.signal);
           } catch (error) {
             if (deadlineController.signal.aborted) {
-              if (timedOut) throw timeoutError(attempt);
-              transition(onTransition, "aborted", { attempt, category: "ABORTED" });
               throw abortError();
             }
-            transition(onTransition, "failed", { attempt, category: "SLEEP_FAILED" });
+            transitionTerminal("failed", { attempt, category: "SLEEP_FAILED" });
             throw new GoogleFetchError("SLEEP_FAILED", { attempts: attempt });
           }
           continue;
         }
-        transition(onTransition, "failed", {
+        transitionTerminal("failed", {
           attempt,
           category: classification.category,
         });
@@ -568,17 +574,17 @@ export function createGoogleFetch({
       throw new GoogleFetchError("RETRY_STATE_INVALID", { attempts: MAX_ATTEMPTS });
     } catch (error) {
       if (timedOut && error?.name === "AbortError") {
-        transition(onTransition, "failed", { attempt, category: "TIMEOUT" });
+        transitionTerminal("failed", { attempt, category: "TIMEOUT" });
         throw timeoutError(attempt);
       }
-      if (built.signal?.aborted && error?.name === "AbortError") {
-        transition(onTransition, "aborted", { attempt, category: "ABORTED" });
+      if (deadlineController.signal.aborted && error?.name === "AbortError") {
+        transitionTerminal("aborted", { attempt, category: "ABORTED" });
+        throw abortError();
       }
       throw error;
     } finally {
-      release();
-      clearTimeout(deadlineTimer);
-      built.signal?.removeEventListener("abort", onCallerAbort);
+      releaseSlot();
+      cleanup();
     }
   };
 

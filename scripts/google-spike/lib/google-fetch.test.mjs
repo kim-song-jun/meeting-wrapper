@@ -498,6 +498,7 @@ describe("Google request cancellation", () => {
     const controller = new AbortController();
     const secondGate = deferred();
     let calls = 0;
+    const transitions = [];
     const googleFetch = createGoogleFetch({
       fetch: async (_url, init) => {
         calls += 1;
@@ -509,6 +510,7 @@ describe("Google request cancellation", () => {
         if (calls === 2) await secondGate.promise;
         return success();
       },
+      onTransition: (entry) => transitions.push(entry),
     });
 
     const aborted = googleFetch.request({
@@ -533,6 +535,7 @@ describe("Google request cancellation", () => {
     expect(calls).toBe(2);
     controller.abort();
     await rejection;
+    expect(transitions.filter((entry) => entry.state === "aborted" && entry.category === "ABORTED")).toHaveLength(1);
     await Promise.resolve();
     await Promise.resolve();
     expect(calls).toBe(3);
@@ -545,6 +548,7 @@ describe("Google request deadline", () => {
   it("times out a hung active request at the total deadline and releases its slot", async () => {
     vi.useFakeTimers();
     let calls = 0;
+    const transitions = [];
     const googleFetch = createGoogleFetch({
       fetch: async (_url, init) => {
         calls += 1;
@@ -555,6 +559,7 @@ describe("Google request deadline", () => {
         }
         return success();
       },
+      onTransition: (entry) => transitions.push(entry),
     });
     const first = googleFetch.request({
       operation: "calendar-events-list",
@@ -564,6 +569,7 @@ describe("Google request deadline", () => {
     const firstRejection = expect(first).rejects.toMatchObject({ category: "TIMEOUT", attempts: 1 });
     await vi.advanceTimersByTimeAsync(30_000);
     await firstRejection;
+    expect(transitions.filter((entry) => entry.state === "failed" && entry.category === "TIMEOUT")).toHaveLength(1);
 
     await expect(
       googleFetch.request({
@@ -573,5 +579,67 @@ describe("Google request deadline", () => {
       }),
     ).resolves.toMatchObject({ status: 204 });
     expect(calls).toBe(2);
+  });
+
+  it("cleans a queued caller abort without leaving its deadline timer", async () => {
+    vi.useFakeTimers();
+    const pending = [deferred(), deferred()];
+    let calls = 0;
+    const googleFetch = createGoogleFetch({
+      fetch: async () => {
+        const index = calls;
+        calls += 1;
+        return pending[index].promise;
+      },
+    });
+    const request = (signal) =>
+      googleFetch.request({
+        operation: "calendar-events-list",
+        accessToken: "fixture-value",
+        path: { calendar: "calendar-alias" },
+        signal,
+      });
+    const first = request();
+    const second = request();
+    const controller = new AbortController();
+    const queued = request(controller.signal);
+    const queuedRejection = expect(queued).rejects.toMatchObject({ name: "AbortError" });
+    await Promise.resolve();
+    expect(calls).toBe(2);
+    controller.abort();
+    await queuedRejection;
+    expect(vi.getTimerCount()).toBe(2);
+
+    pending[0].resolve(success());
+    pending[1].resolve(success());
+    await Promise.all([first, second]);
+  });
+
+  it("cleans all request timers when a request waits in the queue through the deadline", async () => {
+    vi.useFakeTimers();
+    let calls = 0;
+    const transitions = [];
+    const googleFetch = createGoogleFetch({
+      fetch: async () => {
+        calls += 1;
+        return new Promise(() => undefined);
+      },
+      onTransition: (entry) => transitions.push(entry),
+    });
+    const request = () =>
+      googleFetch.request({
+        operation: "calendar-events-list",
+        accessToken: "fixture-value",
+        path: { calendar: "calendar-alias" },
+      });
+    const requests = [request(), request(), request()];
+    const rejections = requests.map((request_) =>
+      expect(request_).rejects.toMatchObject({ category: "TIMEOUT" }),
+    );
+    await vi.advanceTimersByTimeAsync(30_000);
+    await Promise.all(rejections);
+    expect(calls).toBe(3);
+    expect(vi.getTimerCount()).toBe(0);
+    expect(transitions.filter((entry) => entry.state === "failed" && entry.category === "TIMEOUT")).toHaveLength(3);
   });
 });
