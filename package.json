@@ -19,6 +19,7 @@
     "verify:toolchain": "node scripts/verify-toolchain.mjs",
     "scan:production-bundle": "node scripts/scan-production-bundle.mjs dist",
     "validate:readmes": "node scripts/validate-readmes.mjs",
+    "build:security-attestation": "node scripts/build-security-attestation.mjs",
     "build:release-manifest": "release_sha=\"$(git rev-parse HEAD)\" && node scripts/build-release-manifest.mjs --artifact-root dist --commit-sha \"$release_sha\" --source-date-epoch \"$(git show -s --format=%ct \"$release_sha\")\"",
     "upload:release-prefix": "node scripts/upload-release-prefix.mjs --artifact-root dist --bucket \"${MOLROOM_RELEASE_BUCKET:-molroom-000000000000-us-east-1-origin}\" --commit-sha \"$(git rev-parse HEAD)\" --dry-run",
     "verify:release-contract": "vitest run --pool=threads --maxWorkers=1 --minWorkers=1 scripts/lib/release-manifest.test.mjs"
