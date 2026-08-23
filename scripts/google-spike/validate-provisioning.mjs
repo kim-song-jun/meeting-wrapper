@@ -2,7 +2,7 @@
 
 import { constants as fsConstants } from "node:fs";
 import { open } from "node:fs/promises";
-import { EvidencePolicyError } from "./lib/evidence.mjs";
+import { EvidencePolicyError, parseStrictJson } from "./lib/evidence.mjs";
 import {
   assertProvisioningReady,
   createProvisioningEvidence,
@@ -29,17 +29,30 @@ async function readPrivateRegularFile(path, pointer) {
   let contents;
   let operationError;
   try {
-    const metadata = await handle.stat();
-    if (!metadata.isFile()) fail("PROVISIONING_PATH_NOT_REGULAR", pointer);
-    if ((metadata.mode & 0o777) !== 0o600) {
+    const before = await handle.stat();
+    if (!before.isFile()) fail("PROVISIONING_PATH_NOT_REGULAR", pointer);
+    if ((before.mode & 0o777) !== 0o600) {
       fail("PROVISIONING_PATH_NOT_PRIVATE", pointer);
     }
-    if (metadata.size > MAX_INPUT_BYTES) {
+    if (before.size > MAX_INPUT_BYTES) {
       fail("PROVISIONING_PATH_TOO_LARGE", pointer);
     }
-    const buffer = await handle.readFile();
-    if (buffer.byteLength > MAX_INPUT_BYTES) {
-      fail("PROVISIONING_PATH_TOO_LARGE", pointer);
+    const buffer = Buffer.alloc(before.size);
+    let offset = 0;
+    while (offset < buffer.length) {
+      const { bytesRead } = await handle.read(buffer, offset, buffer.length - offset, offset);
+      if (bytesRead === 0) fail("PROVISIONING_PATH_NOT_READABLE", pointer);
+      offset += bytesRead;
+    }
+    const after = await handle.stat();
+    if (
+      before.dev !== after.dev ||
+      before.ino !== after.ino ||
+      before.size !== after.size ||
+      before.mtimeMs !== after.mtimeMs ||
+      before.ctimeMs !== after.ctimeMs
+    ) {
+      fail("PROVISIONING_PATH_NOT_READABLE", pointer);
     }
     try {
       contents = new TextDecoder("utf-8", { fatal: true }).decode(buffer);
@@ -87,7 +100,7 @@ async function main() {
   const receiptText = await readPrivateRegularFile(receiptPath, "/receiptFile");
   let receipt;
   try {
-    receipt = JSON.parse(receiptText);
+    receipt = parseStrictJson(receiptText);
   } catch {
     fail("INVALID_PROVISIONING_RECEIPT_JSON", "/receipt");
   }

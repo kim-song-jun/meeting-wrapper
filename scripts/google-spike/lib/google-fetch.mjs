@@ -2,6 +2,7 @@ const MAX_CONCURRENCY = 2;
 const MAX_ATTEMPTS = 3;
 const BASE_DELAY_MS = 250;
 const MAX_DELAY_MS = 2_000;
+const REQUEST_DEADLINE_MS = 30_000;
 const REQUEST_KEYS = new Set(["operation", "accessToken", "path", "query", "body", "signal"]);
 
 function operation(endpointTemplate, method, pathKeys, queryKeys, kind, bodyMode = "none") {
@@ -177,6 +178,28 @@ function abortError() {
 
 function throwIfAborted(signal) {
   if (signal?.aborted) throw abortError();
+}
+
+function awaitWithAbort(promise, signal) {
+  throwIfAborted(signal);
+  return new Promise((resolve, reject) => {
+    const onAbort = () => {
+      cleanup();
+      reject(abortError());
+    };
+    const cleanup = () => signal?.removeEventListener("abort", onAbort);
+    signal?.addEventListener("abort", onAbort, { once: true });
+    Promise.resolve(promise).then(
+      (value) => {
+        cleanup();
+        resolve(value);
+      },
+      (error) => {
+        cleanup();
+        reject(error);
+      },
+    );
+  });
 }
 
 function assertRequestShape(request) {
@@ -397,7 +420,7 @@ function defaultSleep(delay, signal) {
 
 async function calendarErrorReason(response, signal) {
   try {
-    const payload = await response.json();
+    const payload = await awaitWithAbort(response.json(), signal);
     throwIfAborted(signal);
     const reason = payload?.error?.errors?.[0]?.reason;
     return typeof reason === "string" ? reason : null;
@@ -460,37 +483,56 @@ export function createGoogleFetch({
   const request = async (input) => {
     const built = buildRequest(input);
     throwIfAborted(built.signal);
+    const deadlineController = new AbortController();
+    let timedOut = false;
+    const onCallerAbort = () => deadlineController.abort();
+    built.signal?.addEventListener("abort", onCallerAbort, { once: true });
+    const deadlineTimer = setTimeout(() => {
+      timedOut = true;
+      deadlineController.abort();
+    }, REQUEST_DEADLINE_MS);
+    const init = Object.freeze({ ...built.init, signal: deadlineController.signal });
+    const timeoutError = (attempts) => new GoogleFetchError("TIMEOUT", { attempts });
     transition(onTransition, "queued");
     let release;
+    let attempt = 0;
     try {
-      release = await semaphore.acquire(built.signal);
+      release = await semaphore.acquire(deadlineController.signal);
     } catch (error) {
+      if (timedOut) {
+        transition(onTransition, "failed", { category: "TIMEOUT" });
+        throw timeoutError(0);
+      }
       if (error?.name === "AbortError") transition(onTransition, "aborted", { category: "ABORTED" });
       throw error;
     }
     try {
-      for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt += 1) {
-        throwIfAborted(built.signal);
+      for (attempt = 1; attempt <= MAX_ATTEMPTS; attempt += 1) {
+        throwIfAborted(deadlineController.signal);
         transition(onTransition, "running", { attempt });
         let response;
         try {
-          response = await fetchImplementation(built.url, built.init);
+          response = await awaitWithAbort(
+            fetchImplementation(built.url, init),
+            deadlineController.signal,
+          );
         } catch (error) {
-          if (built.signal?.aborted || error?.name === "AbortError") {
+          if (deadlineController.signal.aborted) {
+            if (timedOut) throw timeoutError(attempt);
             transition(onTransition, "aborted", { attempt, category: "ABORTED" });
             throw abortError();
           }
           transition(onTransition, "failed", { attempt, category: "NETWORK_ERROR" });
           throw new GoogleFetchError("NETWORK_ERROR", { attempts: attempt });
         }
-        throwIfAborted(built.signal);
+        throwIfAborted(deadlineController.signal);
         const classification = await classifyResponse(
           response,
           built.operationDefinition.kind,
-          built.signal,
+          deadlineController.signal,
         );
         if (classification.ok) {
-          throwIfAborted(built.signal);
+          throwIfAborted(deadlineController.signal);
           transition(onTransition, "succeeded", { attempt, category: "SUCCESS" });
           return response;
         }
@@ -502,9 +544,10 @@ export function createGoogleFetch({
             delay,
           });
           try {
-            await sleep(delay, built.signal);
+            await awaitWithAbort(sleep(delay, deadlineController.signal), deadlineController.signal);
           } catch (error) {
-            if (built.signal?.aborted || error?.name === "AbortError") {
+            if (deadlineController.signal.aborted) {
+              if (timedOut) throw timeoutError(attempt);
               transition(onTransition, "aborted", { attempt, category: "ABORTED" });
               throw abortError();
             }
@@ -523,8 +566,19 @@ export function createGoogleFetch({
         });
       }
       throw new GoogleFetchError("RETRY_STATE_INVALID", { attempts: MAX_ATTEMPTS });
+    } catch (error) {
+      if (timedOut && error?.name === "AbortError") {
+        transition(onTransition, "failed", { attempt, category: "TIMEOUT" });
+        throw timeoutError(attempt);
+      }
+      if (built.signal?.aborted && error?.name === "AbortError") {
+        transition(onTransition, "aborted", { attempt, category: "ABORTED" });
+      }
+      throw error;
     } finally {
       release();
+      clearTimeout(deadlineTimer);
+      built.signal?.removeEventListener("abort", onCallerAbort);
     }
   };
 

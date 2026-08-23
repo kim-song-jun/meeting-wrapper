@@ -618,7 +618,15 @@ describe("local probe server request boundary", () => {
       body: "{",
     });
     expect(malformed.status).toBe(400);
-    expect(await responseCategory(malformed)).toBe("MALFORMED_JSON");
+    expect(await responseCategory(malformed)).toBe("INVALID_EVIDENCE_JSON");
+
+    const duplicate = await fetch(endpoint(server, "/evidence"), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: String.raw`{"kind":"booking","kind":"booking"}`,
+    });
+    expect(duplicate.status).toBe(400);
+    expect(await responseCategory(duplicate)).toBe("DUPLICATE_JSON_KEY");
 
     const unknownPayload = { ...(await safeEvidence()), untrusted: "fixture-value" };
     const unknown = await fetch(endpoint(server, "/evidence"), {
@@ -845,6 +853,30 @@ describe("public probe configuration", () => {
     await chmod(files.configPath, 0o666);
     await expect(loadPublicConfig(files.configPath)).rejects.toMatchObject({
       category: "CONFIG_UNSAFE",
+    });
+  });
+
+  it("rejects duplicate JSON keys and non-calendar public room identifiers", async () => {
+    const files = await createHarnessFiles();
+    await writeFile(
+      files.configPath,
+      '{"schemaVersion":1,"schema\\u0056ersion":1,"googleClientId":"replace-with-public-browser-client-id","accountAliases":["ordinary"],"roomCalendars":{"room-a":"room-a@molcube.com"}}',
+      "utf8",
+    );
+    await expect(loadPublicConfig(files.configPath)).rejects.toMatchObject({
+      category: "CONFIG_INVALID",
+    });
+
+    await writeFile(
+      files.configPath,
+      JSON.stringify({
+        ...validConfig(),
+        roomCalendars: { "room-a": "opaque-credential-value" },
+      }),
+      "utf8",
+    );
+    await expect(loadPublicConfig(files.configPath)).rejects.toMatchObject({
+      category: "CONFIG_INVALID",
     });
   });
 });

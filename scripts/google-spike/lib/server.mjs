@@ -1,7 +1,12 @@
 import { constants as fsConstants } from "node:fs";
 import { lstat, open, unlink } from "node:fs/promises";
 import { createServer } from "node:http";
-import { validateEvidence, EvidencePolicyError } from "./evidence.mjs";
+import {
+  EvidencePolicyError,
+  parseStrictJson,
+  StrictJsonParseError,
+  validateEvidence,
+} from "./evidence.mjs";
 
 export const MAX_EVIDENCE_BYTES = 16_384;
 
@@ -17,6 +22,12 @@ const CONFIG_KEYS = new Set([
 const REQUEST_DIAGNOSTIC_KEYS = new Set(["category", "status", "bodyRead"]);
 const ALIAS_PATTERN = /^[a-z][a-z0-9-]{0,63}$/;
 const CLIENT_ID_PATTERN = /^\d{6,}-[a-z0-9]+\.apps\.googleusercontent\.com$/;
+const CALENDAR_LOCAL_PATTERN = /^(?=.{1,64}$)[a-z0-9!#$%&'*+/=?^_`{|}~-]+(?:\.[a-z0-9!#$%&'*+/=?^_`{|}~-]+)*$/;
+const DOMAIN_LABEL_PATTERN = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/;
+const CALENDAR_PLACEHOLDERS = new Set([
+  "replace-with-room-a-calendar-id",
+  "replace-with-room-b-calendar-id",
+]);
 const FORBIDDEN_CONFIG_KEY = /(?:authorization|bearer|clientsecret|cookie|password|refreshtoken|serviceaccount|token)/i;
 const SECURITY_HEADERS = Object.freeze({
   "Cache-Control": "no-store",
@@ -95,6 +106,19 @@ function assertNoForbiddenConfigKeys(value) {
   }
 }
 
+function assertCalendarIdentifier(value) {
+  assertString(value, { max: 254 });
+  if (CALENDAR_PLACEHOLDERS.has(value)) return;
+  const parts = value.split("@");
+  if (parts.length !== 2 || !CALENDAR_LOCAL_PATTERN.test(parts[0]) || value.length > 254) {
+    fail("CONFIG_INVALID");
+  }
+  const labels = parts[1].split(".");
+  if (labels.length < 2 || parts[1].length > 253 || labels.some((label) => !DOMAIN_LABEL_PATTERN.test(label))) {
+    fail("CONFIG_INVALID");
+  }
+}
+
 function validatePublicConfig(value) {
   assertNoForbiddenConfigKeys(value);
   if (!isPlainRecord(value)) fail("CONFIG_INVALID");
@@ -128,7 +152,7 @@ function validatePublicConfig(value) {
   if (rooms.length === 0 || rooms.length > 16) fail("CONFIG_INVALID");
   for (const [alias, calendarId] of rooms) {
     assertString(alias, { max: 64, pattern: ALIAS_PATTERN });
-    assertString(calendarId, { max: 512 });
+    assertCalendarIdentifier(calendarId);
   }
   return freeze({
     schemaVersion: 1,
@@ -140,19 +164,52 @@ function validatePublicConfig(value) {
 
 async function readRegularFile(path, { maxBytes, unsafeCategory, requirePrivate = false }) {
   let handle;
+  let result;
+  let operationError;
   try {
-    handle = await open(path, fsConstants.O_RDONLY | fsConstants.O_NOFOLLOW);
+    handle = await open(
+      path,
+      fsConstants.O_RDONLY | fsConstants.O_NOFOLLOW | fsConstants.O_NONBLOCK,
+    );
   } catch (_error) {
     fail(unsafeCategory);
   }
   try {
-    const metadata = await handle.stat();
-    if (!metadata.isFile() || metadata.size > maxBytes) fail(unsafeCategory);
-    if (requirePrivate && (metadata.mode & 0o022) !== 0) fail(unsafeCategory);
-    return await handle.readFile("utf8");
-  } finally {
-    await handle.close();
+    const before = await handle.stat();
+    if (!before.isFile() || before.size > maxBytes) fail(unsafeCategory);
+    if (requirePrivate && (before.mode & 0o022) !== 0) fail(unsafeCategory);
+    const buffer = Buffer.alloc(before.size);
+    let offset = 0;
+    while (offset < buffer.length) {
+      const { bytesRead } = await handle.read(buffer, offset, buffer.length - offset, offset);
+      if (bytesRead === 0) fail(unsafeCategory);
+      offset += bytesRead;
+    }
+    const after = await handle.stat();
+    if (
+      before.dev !== after.dev ||
+      before.ino !== after.ino ||
+      before.size !== after.size ||
+      before.mtimeMs !== after.mtimeMs ||
+      before.ctimeMs !== after.ctimeMs
+    ) {
+      fail(unsafeCategory);
+    }
+    try {
+      result = new TextDecoder("utf-8", { fatal: true }).decode(buffer);
+    } catch (_error) {
+      fail(unsafeCategory);
+    }
+  } catch (error) {
+    operationError = error instanceof ProbeServerError ? error : new ProbeServerError(unsafeCategory);
   }
+  try {
+    await handle.close();
+  } catch (_error) {
+    if (!operationError) operationError = new ProbeServerError(unsafeCategory);
+  }
+  if (operationError) throw operationError;
+  return result;
 }
 
 export async function loadPublicConfig(path) {
@@ -163,7 +220,7 @@ export async function loadPublicConfig(path) {
   });
   let value;
   try {
-    value = JSON.parse(text);
+    value = parseStrictJson(text);
   } catch (_error) {
     fail("CONFIG_INVALID");
   }
@@ -200,13 +257,6 @@ function isProcessAlive(pid) {
 }
 
 async function classifyExistingPidFile(pidPath) {
-  let metadata;
-  try {
-    metadata = await lstat(pidPath);
-  } catch (_error) {
-    fail("PIDFILE_UNSAFE");
-  }
-  if (!metadata.isFile() || metadata.isSymbolicLink()) fail("PIDFILE_UNSAFE");
   const text = await readRegularFile(pidPath, {
     maxBytes: 32,
     unsafeCategory: "PIDFILE_UNSAFE",
@@ -483,9 +533,13 @@ function createRequestHandler({ config, files, port, onDiagnostic }) {
     }
     let evidence;
     try {
-      evidence = JSON.parse(bounded.body);
-    } catch (_error) {
-      sendJson(response, 400, "MALFORMED_JSON", undefined, onDiagnostic, true);
+      evidence = parseStrictJson(bounded.body);
+    } catch (error) {
+      const category =
+        error instanceof StrictJsonParseError && error.category === "DUPLICATE_JSON_KEY"
+          ? "DUPLICATE_JSON_KEY"
+          : "INVALID_EVIDENCE_JSON";
+      sendJson(response, 400, category, undefined, onDiagnostic, true);
       return;
     }
     try {

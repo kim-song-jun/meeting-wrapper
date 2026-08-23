@@ -196,6 +196,27 @@ describe("Google Workspace provisioning policy", () => {
     expect(Object.keys(parsed)).toEqual(Object.keys(safeEnvValues));
   });
 
+  it("rejects a receipt with escaped-equivalent duplicate keys without echoing receipt material", async () => {
+    const root = await mkdtemp(join(tmpdir(), "molroom-provisioning-duplicate-"));
+    temporaryRoots.push(root);
+    const envPath = join(root, "operator.env");
+    const receiptPath = join(root, "operator-receipt.json");
+    await writePrivate(envPath, envText());
+    await writePrivate(
+      receiptPath,
+      JSON.stringify(completeReceipt).replace(
+        '"schemaVersion":1',
+        String.raw`"schemaVersion":1,"schema\u0056ersion":1`,
+      ),
+    );
+
+    const result = runCli([envPath, receiptPath]);
+    expect(result.status).toBe(1);
+    expect(result.stderr).toBe("INVALID_PROVISIONING_RECEIPT_JSON pointer=/receipt\n");
+    expect(result.stderr).not.toContain("schemaVersion");
+    expect(result.stderr).not.toContain(completeReceipt.workspaceEdition);
+  });
+
   it.each([
     ["unknown key", `${envText()}GOOGLE_SPIKE_UNEXPECTED=value\n`],
     [

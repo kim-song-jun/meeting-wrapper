@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { GOOGLE_ENDPOINT_TEMPLATES } from "./evidence.mjs";
 import {
   GOOGLE_OPERATIONS,
@@ -30,6 +30,8 @@ function deferred() {
 function abortError() {
   return new DOMException("The operation was aborted", "AbortError");
 }
+
+afterEach(() => vi.useRealTimers());
 
 describe("Google request construction", () => {
   it("keeps every fixed operation on the Task 2 endpoint-template allowlist", () => {
@@ -536,5 +538,40 @@ describe("Google request cancellation", () => {
     expect(calls).toBe(3);
     secondGate.resolve(success());
     await Promise.all([second, third]);
+  });
+});
+
+describe("Google request deadline", () => {
+  it("times out a hung active request at the total deadline and releases its slot", async () => {
+    vi.useFakeTimers();
+    let calls = 0;
+    const googleFetch = createGoogleFetch({
+      fetch: async (_url, init) => {
+        calls += 1;
+        if (calls === 1) {
+          await new Promise((_, reject) => {
+            init.signal.addEventListener("abort", () => reject(abortError()), { once: true });
+          });
+        }
+        return success();
+      },
+    });
+    const first = googleFetch.request({
+      operation: "calendar-events-list",
+      accessToken: "fixture-value",
+      path: { calendar: "calendar-alias" },
+    });
+    const firstRejection = expect(first).rejects.toMatchObject({ category: "TIMEOUT", attempts: 1 });
+    await vi.advanceTimersByTimeAsync(30_000);
+    await firstRejection;
+
+    await expect(
+      googleFetch.request({
+        operation: "drive-files-list",
+        accessToken: "fixture-value",
+        path: {},
+      }),
+    ).resolves.toMatchObject({ status: 204 });
+    expect(calls).toBe(2);
   });
 });
