@@ -1,1036 +1,452 @@
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { validateReadmeParity } from "./readme-parity.mjs";
+import { ARCHIVE_VERIFIER_COMMAND, validateReadmeParity } from "./readme-parity.mjs";
 
 const root = join(import.meta.dirname, "../..");
-const VALID_PACKAGE_SCRIPTS = Object.freeze({
-  "build:release-manifest": "release_sha=\"$(git rev-parse HEAD)\" && node scripts/build-release-manifest.mjs --artifact-root dist --commit-sha \"$release_sha\" --source-date-epoch \"$(git show -s --format=%ct \"$release_sha\")\"",
-  "upload:release-prefix": "node scripts/upload-release-prefix.mjs --artifact-root dist --bucket \"${MOLROOM_RELEASE_BUCKET:-molroom-000000000000-us-east-1-origin}\" --commit-sha \"$(git rev-parse HEAD)\" --dry-run",
-  "verify:release-contract": "vitest run --pool=threads --maxWorkers=1 --minWorkers=1 scripts/lib/release-manifest.test.mjs",
+
+async function documents() {
+  const [
+    korean,
+    english,
+    koreanRunbook,
+    englishRunbook,
+    releaseWorkflow,
+    productionSpec,
+    publicEnvExample,
+    privateEnvExample,
+  ] = await Promise.all([
+    readFile(join(root, "README.ko.md"), "utf8"),
+    readFile(join(root, "README.en.md"), "utf8"),
+    readFile(join(root, "docs/ops/release-ko.md"), "utf8"),
+    readFile(join(root, "docs/ops/release-en.md"), "utf8"),
+    readFile(join(root, ".github/workflows/release.yml"), "utf8"),
+    readFile(join(root, "docs/superpowers/specs/2026-08-21-molroom-production-readiness-program-design.md"), "utf8"),
+    readFile(join(root, ".env.example"), "utf8"),
+    readFile(join(root, ".env.google-spike.example"), "utf8"),
+  ]);
+  return {
+    english,
+    englishRunbook,
+    korean,
+    koreanRunbook,
+    privateEnvExample,
+    productionSpec,
+    publicEnvExample,
+    releaseWorkflow,
+  };
+}
+
+function validationOptions(documentSet, overrides = {}) {
+  return {
+    root,
+    englishRunbook: documentSet.englishRunbook,
+    koreanRunbook: documentSet.koreanRunbook,
+    privateEnvExample: documentSet.privateEnvExample,
+    productionSpec: documentSet.productionSpec,
+    publicEnvExample: documentSet.publicEnvExample,
+    releaseWorkflow: documentSet.releaseWorkflow,
+    ...overrides,
+  };
+}
+
+const CONTROLLER_SHA = "7ba2814f491dccee9462c7bf01958dd28600b048";
+const CONTROLLER_TAG = "molroom-release-controller-v1";
+const EXACT_CONTRACT_LINES = Object.freeze([
+  "public.env.keys=VITE_DEPLOYMENT,VITE_ADAPTER,VITE_GOOGLE_CLIENT_ID,VITE_ALLOWED_HD",
+  "private.env.keys=VITE_GOOGLE_CLIENT_ID,VITE_ALLOWED_HD,GOOGLE_SPIKE_AUTHORIZED_ORIGINS,GOOGLE_SPIKE_ORDINARY_ACCOUNT,GOOGLE_SPIKE_ADMIN_ACCOUNT,GOOGLE_SPIKE_ROOM_A_CALENDAR_ID,GOOGLE_SPIKE_ROOM_B_CALENDAR_ID",
+  "task5.env.keys=GOOGLE_SPIKE_ORDINARY_ACCOUNT,GOOGLE_SPIKE_ADMIN_ACCOUNT,GOOGLE_SPIKE_ROOM_A_CALENDAR_ID,GOOGLE_SPIKE_ROOM_B_CALENDAR_ID",
+  "github.repository.variables=VITE_GOOGLE_CLIENT_ID,VITE_ALLOWED_HD",
+  "github.production_environment.variables=AWS_ACCOUNT_ID,AWS_DEPLOY_ROLE_ARN,CLOUDFORMATION_ROLE_ARN,HOSTED_ZONE_ID",
+  `release.controller.ref=refs/tags/${CONTROLLER_TAG}`,
+  `release.controller.sha=${CONTROLLER_SHA}`,
+  "release.controller.inputs=mode,version,target_sha,candidate_run_id,security_gate_run_id,execute_cutover,confirmation",
+]);
+
+const PINNED_GOOGLE_COMMANDS = Object.freeze([
+  'MOLROOM_NODE_ROOT="${MOLROOM_NODE_ROOT:?set to the Node 24.19.0 installation root}"',
+  'MOLROOM_NODE="$MOLROOM_NODE_ROOT/bin/node"',
+  'MOLROOM_NPM_CLI="$MOLROOM_NODE_ROOT/lib/node_modules/npm/bin/npm-cli.js"',
+  'test "$("$MOLROOM_NODE" --version)" = "v24.19.0"',
+  'test "$("$MOLROOM_NODE" "$MOLROOM_NPM_CLI" --version)" = "11.17.0"',
+  '"$MOLROOM_NODE" scripts/google-spike/validate-evidence.mjs',
+  '"$MOLROOM_NODE" scripts/google-spike/validate-provisioning.mjs',
+  '"$MOLROOM_NODE" scripts/google-spike/validate-account-matrix.mjs',
+  '"$MOLROOM_NODE" scripts/google-spike/scan-sensitive-paths.mjs --redact',
+]);
+
+const GOOGLE_SETUP_MARKERS = Object.freeze([
+  "http://localhost:5184",
+  "https://molroom.molcube.com",
+  "Calendar API",
+  "Drive API",
+  "People API",
+  "https://www.googleapis.com/auth/calendar.events",
+  "https://www.googleapis.com/auth/calendar.readonly",
+  "https://www.googleapis.com/auth/drive.appdata",
+  "ordinary-chrome-desktop",
+  "ordinary-safari-desktop",
+  "admin-chrome-desktop",
+  "admin-safari-desktop",
+  "room-a",
+  "room-b",
+  "ACL",
+  "auto-accept",
+  "UNOBSERVED",
+]);
+const README_SECTION_CONTRACT = "release.readme.sections=release.toolchain,release.google-oauth,release.env,release.validation,release.aws-oidc,release.first-release,release.rollback,release.security";
+const OPERATOR_WORDING = Object.freeze({
+  ko: Object.freeze([
+    "권한 있는 운영자가 직접 수행하십시오.",
+    "사람이 관찰하기 전에는 성공으로 기록하지 마십시오.",
+  ]),
+  en: Object.freeze([
+    "An authorized operator must perform these steps.",
+    "Do not record success until a human has observed it.",
+  ]),
 });
-const EVIDENCE_COMMAND = "node scripts/google-spike/validate-evidence.mjs docs/spikes/google-workspace/evidence/provisioning.json";
-const PROVISIONING_COMMAND = "node scripts/google-spike/validate-provisioning.mjs .env.google-spike.local provisioning-receipt.local";
-const SENSITIVE_SCAN_ARGUMENTS = "--redact docs/spikes/google-workspace/provisioning.md docs/spikes/google-workspace/evidence/provisioning.json scripts/google-spike/lib/provisioning.mjs scripts/google-spike/lib/provisioning.test.mjs scripts/google-spike/validate-provisioning.mjs";
-const SENSITIVE_SCAN_COMMAND = `node scripts/google-spike/scan-sensitive-paths.mjs ${SENSITIVE_SCAN_ARGUMENTS}`;
-const VALIDATOR_COMMANDS = Object.freeze([
-  [EVIDENCE_COMMAND, "node scripts/google-spike/validate-evidence.mjs"],
-  [PROVISIONING_COMMAND, "node scripts/google-spike/validate-provisioning.mjs"],
-  [SENSITIVE_SCAN_COMMAND, "node scripts/google-spike/scan-sensitive-paths.mjs --redact"],
-]);
-const CLEAN_WORKTREE_COMMAND = "git diff --quiet";
-const CLEAN_INDEX_COMMAND = "git diff --cached --quiet";
-const RELEASE_RANGE_DIFF = 'git diff --quiet "${release_sha}^" "${release_sha}"';
-const REPEATED_SPACE_RELEASE_RANGE_DIFF = 'git  diff --quiet "${release_sha}^" "${release_sha}"';
-const EVIDENCE_PREFIX = "node scripts/google-spike/validate-evidence.mjs";
-const PROVISIONING_PREFIX = "node scripts/google-spike/validate-provisioning.mjs";
-const SENSITIVE_SCAN_PREFIX = "node scripts/google-spike/scan-sensitive-paths.mjs";
-const VALIDATOR_PREFIX_COLLISIONS = Object.freeze([
-  [EVIDENCE_PREFIX, EVIDENCE_COMMAND, `${EVIDENCE_COMMAND} --kind provisioning`],
-  [PROVISIONING_PREFIX, PROVISIONING_COMMAND, `${PROVISIONING_COMMAND} unexpected`],
-  [SENSITIVE_SCAN_PREFIX, SENSITIVE_SCAN_COMMAND, `${SENSITIVE_SCAN_COMMAND} docs/spikes/google-workspace/provisioning.md`],
-]);
-const CLEAN_PREFIX_COLLISIONS = Object.freeze([
-  [CLEAN_WORKTREE_COMMAND, CLEAN_WORKTREE_COMMAND, `${CLEAN_WORKTREE_COMMAND} -- README.ko.md`],
-  [CLEAN_INDEX_COMMAND, CLEAN_INDEX_COMMAND, `${CLEAN_INDEX_COMMAND} -- README.ko.md`],
-]);
-const EVIDENCE_TAB_COLLISION = "node scripts/google-spike/validate-evidence.mjs\tdocs/spikes/google-workspace/evidence/provisioning.json";
-const INTERNAL_NODE_TAB_COLLISION = "node\tscripts/google-spike/validate-evidence.mjs docs/spikes/google-workspace/evidence/provisioning.json";
-const FETCH_COMMAND = "git fetch origin main --quiet";
-const RELEASE_SHA_COMMAND = 'release_sha="$(git rev-parse HEAD)"';
-const CLEAN_STATUS_COMMAND = 'test -z "$(git status --porcelain)"';
-const ORIGIN_EQUALITY_COMMAND = 'test "$(git rev-parse origin/main)" = "${release_sha}"';
-const README_BUILD_COMMAND = 'node scripts/build-release-manifest.mjs --artifact-root dist --commit-sha "${release_sha}" --package-version "$(node -p \'require(\\\"./package.json\\\").version\')" --source-date-epoch "$(git show -s --format=%ct "${release_sha}")"';
-const RUNBOOK_BUILD_COMMAND = 'node scripts/build-release-manifest.mjs --artifact-root dist --commit-sha "$release_sha" --package-version "$(node -p \'require(\\\"./package.json\\\").version\')" --source-date-epoch "$(git show -s --format=%ct "$release_sha")"';
 
-const README_UPLOAD_PREFIX = "node scripts/upload-release-prefix.mjs";
-const README_UPLOAD_COMMAND = 'node scripts/upload-release-prefix.mjs --artifact-root dist --bucket "molroom-<account>-us-east-1-origin" --commit-sha "${release_sha}" --dry-run';
-const README_UPLOAD_WITHOUT_DRY_RUN = README_UPLOAD_COMMAND.replace(" --dry-run", "");
-const README_PLAN_COMMANDS = Object.freeze([
-  FETCH_COMMAND,
-  RELEASE_SHA_COMMAND,
-  CLEAN_STATUS_COMMAND,
-  CLEAN_WORKTREE_COMMAND,
-  CLEAN_INDEX_COMMAND,
-  ORIGIN_EQUALITY_COMMAND,
-  README_BUILD_COMMAND,
-  README_UPLOAD_COMMAND,
-]);
-const README_PLAN_NEW_COMMAND_SPECS = Object.freeze([
-  [RELEASE_SHA_COMMAND, RELEASE_SHA_COMMAND, `${RELEASE_SHA_COMMAND} unexpected`],
-  [CLEAN_STATUS_COMMAND, CLEAN_STATUS_COMMAND, `${CLEAN_STATUS_COMMAND} unexpected`],
-  [README_UPLOAD_PREFIX, README_UPLOAD_COMMAND, `${README_UPLOAD_COMMAND} unexpected`],
-]);
-const FORBIDDEN_LOCAL_TAG_COMMANDS = Object.freeze([
-  'git\ttag\tv0.1.0\t"${release_sha}"',
-  'git  tag -s -m "MolRoom release" v0.1.0 "${release_sha}"',
-  'git\ttag\t-u\tA1B2C3D4\t-F\trelease-message.txt\tv0.1.0',
-  'git  tag --trailer "Release: true" v0.1.0 "${release_sha}"',
-  'git\ttag\t-a\tv0.1.0\t"${release_sha}"',
-]);
-const FORBIDDEN_LOCAL_PUSH_COMMANDS = Object.freeze([
-  "git\tpush",
-  "git\tpush\tupstream\t--tags",
-  "git  push --tags  upstream",
-  "git\tpush\t--atomic\tfork\tmain",
-]);
-const SECURITY_DOCUMENT_TARGETS = Object.freeze([
-  ["Korean README", "ko", "readme"],
-  ["English README", "en", "readme"],
-  ["Korean runbook", "ko", "runbook"],
-  ["English runbook", "en", "runbook"],
-]);
-
-function sectionBounds(document, heading) {
-  const marker = `## ${heading}`;
-  const start = document.indexOf(marker);
-  if (start < 0) throw new Error(`missing test fixture heading: ${heading}`);
-  const next = document.indexOf("\n## ", start + marker.length);
-  return { start, end: next < 0 ? document.length : next };
-}
-
-function moveMarker(document, { from, to, marker, asComment = false }) {
-  const source = from === null
-    ? { start: 0, end: document.indexOf("\n## ") }
-    : sectionBounds(document, from);
-  const sourceBody = document.slice(source.start, source.end);
-  if (!sourceBody.includes(marker)) throw new Error(`missing test fixture marker: ${marker}`);
-  const withoutSourceMarker = `${document.slice(0, source.start)}${sourceBody.replaceAll(marker, "")}${document.slice(source.end)}`;
-  const target = sectionBounds(withoutSourceMarker, to);
-  const movedMarker = asComment ? `<!-- ${marker} -->` : marker;
-  return `${withoutSourceMarker.slice(0, target.end)}\n${movedMarker}\n${withoutSourceMarker.slice(target.end)}`;
-}
-
-function appendMarkerToSection(document, heading, marker) {
-  const section = sectionBounds(document, heading);
-  return `${document.slice(0, section.end)}\n${marker}${document.slice(section.end)}`;
-}
-
-function moveCommandOutsideFence(document, heading, command) {
-  const section = sectionBounds(document, heading);
-  const body = document.slice(section.start, section.end);
-  const commandLine = `\n${command}\n`;
-  if (!body.includes(commandLine)) throw new Error(`missing fenced test fixture command: ${command}`);
-  const withoutCommand = `${document.slice(0, section.start)}${body.replace(commandLine, "\n")}${document.slice(section.end)}`;
-  return appendMarkerToSection(withoutCommand, heading, command);
-}
-
-function replaceCommandFence(document, heading, command, openingFence, closingFence) {
-  const section = sectionBounds(document, heading);
-  const body = document.slice(section.start, section.end);
-  const commandIndex = body.indexOf(`\n${command}\n`);
-  if (commandIndex < 0) throw new Error(`missing fenced test fixture command: ${command}`);
-  const opening = "\n```bash\n";
-  const closing = "\n```\n";
-  const openingIndex = body.lastIndexOf(opening, commandIndex);
-  const closingIndex = body.indexOf(closing, commandIndex);
-  if (openingIndex < 0 || closingIndex < 0) throw new Error(`missing test fixture fence for command: ${command}`);
-  const mutatedBody = `${body.slice(0, openingIndex)}\n${openingFence}\n${body.slice(openingIndex + opening.length, closingIndex)}\n${closingFence}\n${body.slice(closingIndex + closing.length)}`;
-  return `${document.slice(0, section.start)}${mutatedBody}${document.slice(section.end)}`;
-}
-
-function insertLineBeforeCommand(document, command, line) {
-  const commandLine = `\n${command}\n`;
-  if (!document.includes(commandLine)) throw new Error(`missing test fixture command: ${command}`);
-  return document.replace(commandLine, `\n${line}\n${command}\n`);
-}
-
-function moveCommandAfterLongerFenceClose(document, heading, command) {
-  const section = sectionBounds(document, heading);
-  const body = document.slice(section.start, section.end);
-  const commandLine = `\n${command}\n`;
-  const commandIndex = body.indexOf(commandLine);
-  if (commandIndex < 0) throw new Error(`missing fenced test fixture command: ${command}`);
-  const withoutCommand = body.replace(commandLine, "\n");
-  const openingIndex = withoutCommand.lastIndexOf("\n```bash\n", commandIndex);
-  const closing = "\n```\n";
-  const closingIndex = withoutCommand.indexOf(closing, openingIndex);
-  if (openingIndex < 0 || closingIndex < 0) throw new Error(`missing test fixture fence for command: ${command}`);
-  const mutatedBody = `${withoutCommand.slice(0, closingIndex)}\n\`\`\`\`\n${command}\n\`\`\`\n${withoutCommand.slice(closingIndex + closing.length)}`;
-  return `${document.slice(0, section.start)}${mutatedBody}${document.slice(section.end)}`;
-}
-
-function swapExactLines(document, first, second) {
-  const lines = document.split("\n");
-  const firstIndex = lines.indexOf(first);
-  const secondIndex = lines.indexOf(second);
-  if (firstIndex < 0 || secondIndex < 0) throw new Error("missing exact test fixture command");
-  [lines[firstIndex], lines[secondIndex]] = [lines[secondIndex], lines[firstIndex]];
-  return lines.join("\n");
-}
-
-function swapAdjacentSections(document, firstHeading, secondHeading) {
-  const first = sectionBounds(document, firstHeading);
-  const second = sectionBounds(document, secondHeading);
-  if (first.end + 1 !== second.start) throw new Error("test fixture sections are not adjacent");
-  const separator = document.slice(first.end, second.start);
-  return `${document.slice(0, first.start)}${document.slice(second.start, second.end)}${separator}${document.slice(first.start, first.end)}${document.slice(second.end)}`;
-}
-
-function withExecutableRunbookCommands(document) {
-  return document
-    .replace(/^node scripts\/google-spike\/validate-evidence\.mjs.*$/m, EVIDENCE_COMMAND)
-    .replace(/^node scripts\/google-spike\/validate-provisioning\.mjs.*$/m, PROVISIONING_COMMAND)
-    .replace(/^node scripts\/google-spike\/scan-sensitive-paths\.mjs.*$/m, SENSITIVE_SCAN_COMMAND);
-}
-
-function withSafeReleaseDiffCommands(document) {
-  return document.replace(RELEASE_RANGE_DIFF, `${CLEAN_WORKTREE_COMMAND}\n${CLEAN_INDEX_COMMAND}`);
+function addExecutableLine(document, line) {
+  return `${document.trimEnd()}\n\n\`\`\`bash\n${line}\n\`\`\`\n`;
 }
 
 describe("bilingual release documentation parity", () => {
-  it("requires the same release-critical contract in Korean and English", async () => {
-    const [korean, english, koreanRunbook, englishRunbook] = await Promise.all([
-      readFile(join(root, "README.ko.md"), "utf8"),
-      readFile(join(root, "README.en.md"), "utf8"),
-      readFile(join(root, "docs/ops/release-ko.md"), "utf8"),
-      readFile(join(root, "docs/ops/release-en.md"), "utf8"),
-    ]);
+  it("keeps one byte-identical closed archive command in each locale runbook and none in the README", async () => {
+    const { korean, english, koreanRunbook, englishRunbook } = await documents();
+    const commandBytes = Buffer.from(`${ARCHIVE_VERIFIER_COMMAND}\n`);
 
-    expect(await validateReadmeParity(korean, english, { root, koreanRunbook, englishRunbook })).toEqual({ valid: true, missing: [] });
-  });
-
-  it("reports missing critical content instead of accepting a partial translation", async () => {
-    const result = await validateReadmeParity("# Korean\n", "# English\n", { root, koreanRunbook: "", englishRunbook: "" });
-
-    expect(result.valid).toBe(false);
-    expect(result.missing.length).toBeGreaterThan(0);
-    expect(result.missing).toContain("ko:heading:release.toolchain");
-  });
-
-  it.each([
-    ["Korean", "ko"],
-    ["English", "en"],
-  ])("rejects the release commit-range diff in %s", async (_label, locale) => {
-    const [korean, english, koreanRunbook, englishRunbook] = await Promise.all([
-      readFile(join(root, "README.ko.md"), "utf8"), readFile(join(root, "README.en.md"), "utf8"),
-      readFile(join(root, "docs/ops/release-ko.md"), "utf8"), readFile(join(root, "docs/ops/release-en.md"), "utf8"),
-    ]);
-    const result = await validateReadmeParity(
-      locale === "ko" ? `${korean}\n${RELEASE_RANGE_DIFF}\n` : korean,
-      locale === "en" ? `${english}\n${RELEASE_RANGE_DIFF}\n` : english,
-      { root, koreanRunbook, englishRunbook },
-    );
-    expect(result.valid).toBe(false);
-    expect(result.missing).toContain(`${locale}:forbidden:release-commit-range-diff`);
-  });
-
-  it.each([
-    ["Korean worktree", "ko", CLEAN_WORKTREE_COMMAND],
-    ["Korean index", "ko", CLEAN_INDEX_COMMAND],
-    ["English worktree", "en", CLEAN_WORKTREE_COMMAND],
-    ["English index", "en", CLEAN_INDEX_COMMAND],
-  ])("requires the clean %s command in the first-release section", async (_label, locale, command) => {
-    const [korean, english, koreanRunbook, englishRunbook] = await Promise.all([
-      readFile(join(root, "README.ko.md"), "utf8"), readFile(join(root, "README.en.md"), "utf8"),
-      readFile(join(root, "docs/ops/release-ko.md"), "utf8"), readFile(join(root, "docs/ops/release-en.md"), "utf8"),
-    ]);
-    const safeKorean = withSafeReleaseDiffCommands(korean);
-    const safeEnglish = withSafeReleaseDiffCommands(english);
-    const result = await validateReadmeParity(
-      locale === "ko" ? safeKorean.replace(command, "clean check removed") : safeKorean,
-      locale === "en" ? safeEnglish.replace(command, "clean check removed") : safeEnglish,
-      { root, koreanRunbook, englishRunbook },
-    );
-    expect(result.valid).toBe(false);
-    expect(result.missing).toContain(`${locale}:section:release.first-release:${command}`);
-  });
-
-  it.each([
-    ["Korean", "ko"],
-    ["English", "en"],
-  ])("rejects naked or incomplete Google validation commands in the %s README", async (_label, locale) => {
-    const [korean, english, koreanRunbook, englishRunbook] = await Promise.all([
-      readFile(join(root, "README.ko.md"), "utf8"), readFile(join(root, "README.en.md"), "utf8"),
-      readFile(join(root, "docs/ops/release-ko.md"), "utf8"), readFile(join(root, "docs/ops/release-en.md"), "utf8"),
-    ]);
-    for (const [command, incomplete] of VALIDATOR_COMMANDS) {
-      const result = await validateReadmeParity(
-        locale === "ko" ? korean.replace(command, incomplete) : korean,
-        locale === "en" ? english.replace(command, incomplete) : english,
-        { root, koreanRunbook, englishRunbook },
-      );
-      expect(result.valid).toBe(false);
-      expect(result.missing).toContain(`${locale}:section:release.env:${command}`);
+    for (const document of [korean, english]) {
+      expect(document.match(new RegExp(ARCHIVE_VERIFIER_COMMAND.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "g")) ?? []).toHaveLength(0);
     }
-  });
-
-  it.each([
-    ["Korean", "ko"],
-    ["English", "en"],
-  ])("rejects naked or incomplete Google validation commands in the %s runbook", async (_label, locale) => {
-    const [korean, english, koreanRunbook, englishRunbook] = await Promise.all([
-      readFile(join(root, "README.ko.md"), "utf8"), readFile(join(root, "README.en.md"), "utf8"),
-      readFile(join(root, "docs/ops/release-ko.md"), "utf8"), readFile(join(root, "docs/ops/release-en.md"), "utf8"),
-    ]);
-    const executableKorean = withExecutableRunbookCommands(koreanRunbook);
-    const executableEnglish = withExecutableRunbookCommands(englishRunbook);
-    for (const [command, incomplete] of VALIDATOR_COMMANDS) {
-      const result = await validateReadmeParity(korean, english, {
-        root,
-        koreanRunbook: locale === "ko" ? executableKorean.replace(command, incomplete) : executableKorean,
-        englishRunbook: locale === "en" ? executableEnglish.replace(command, incomplete) : executableEnglish,
-      });
-      expect(result.valid).toBe(false);
-      expect(result.missing).toContain(`${locale}:runbook-section:runbook.operator-input:${command}`);
+    for (const runbook of [koreanRunbook, englishRunbook]) {
+      const matches = runbook.match(new RegExp(`^${ARCHIVE_VERIFIER_COMMAND.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`, "gm")) ?? [];
+      expect(matches).toHaveLength(1);
+      expect(Buffer.from(`${matches[0]}\n`)).toEqual(commandBytes);
     }
+    const documentSet = await documents();
+    await expect(validateReadmeParity(korean, english, validationOptions(documentSet))).resolves.toEqual({
+      valid: true,
+      missing: [],
+    });
   });
 
-  it.each([
-    ["Korean README", "ko", "readme"],
-    ["English README", "en", "readme"],
-    ["Korean runbook", "ko", "runbook"],
-    ["English runbook", "en", "runbook"],
-  ])("rejects a TAB-delimited command-prefix collision in the %s", async (_label, locale, kind) => {
-    const [korean, english, koreanRunbook, englishRunbook] = await Promise.all([
-      readFile(join(root, "README.ko.md"), "utf8"), readFile(join(root, "README.en.md"), "utf8"),
-      readFile(join(root, "docs/ops/release-ko.md"), "utf8"), readFile(join(root, "docs/ops/release-en.md"), "utf8"),
-    ]);
-    const readmeHeading = locale === "ko" ? "[release.env] 3. 운영 env와 검증" : "[release.env] 3. Operator env and validation";
-    const runbookHeading = locale === "ko" ? "운영 입력 계약" : "Operator input contract";
-    const result = await validateReadmeParity(
-      kind === "readme" && locale === "ko" ? appendMarkerToSection(korean, readmeHeading, EVIDENCE_TAB_COLLISION) : korean,
-      kind === "readme" && locale === "en" ? appendMarkerToSection(english, readmeHeading, EVIDENCE_TAB_COLLISION) : english,
-      {
-        root,
-        koreanRunbook: kind === "runbook" && locale === "ko" ? appendMarkerToSection(koreanRunbook, runbookHeading, EVIDENCE_TAB_COLLISION) : koreanRunbook,
-        englishRunbook: kind === "runbook" && locale === "en" ? appendMarkerToSection(englishRunbook, runbookHeading, EVIDENCE_TAB_COLLISION) : englishRunbook,
-      },
-    );
-    expect(result.valid).toBe(false);
-    const section = kind === "readme" ? "section:release.env" : "runbook-section:runbook.operator-input";
-    expect(result.missing).toContain(`${locale}:${section}:noncanonical-command:${EVIDENCE_PREFIX}`);
-  });
-
-  it.each([
-    ["Korean README", "ko", "readme"],
-    ["English README", "en", "readme"],
-    ["Korean runbook", "ko", "runbook"],
-    ["English runbook", "en", "runbook"],
-  ])("rejects exact commands duplicated outside their required section in the %s", async (_label, locale, kind) => {
-    const [korean, english, koreanRunbook, englishRunbook] = await Promise.all([
-      readFile(join(root, "README.ko.md"), "utf8"), readFile(join(root, "README.en.md"), "utf8"),
-      readFile(join(root, "docs/ops/release-ko.md"), "utf8"), readFile(join(root, "docs/ops/release-en.md"), "utf8"),
-    ]);
-    const readmeHeading = locale === "ko" ? "[release.toolchain] 1. 고정 도구와 안전한 시작" : "[release.toolchain] 1. Pinned tools and safe start";
-    const runbookHeading = locale === "ko" ? "사전 조건" : "Prerequisites";
-    const specs = kind === "readme"
-      ? [...VALIDATOR_PREFIX_COLLISIONS, ...CLEAN_PREFIX_COLLISIONS, ...README_PLAN_NEW_COMMAND_SPECS]
-      : VALIDATOR_PREFIX_COLLISIONS;
-    for (const [, exact] of specs) {
-      const result = await validateReadmeParity(
-        kind === "readme" && locale === "ko" ? appendMarkerToSection(korean, readmeHeading, exact) : korean,
-        kind === "readme" && locale === "en" ? appendMarkerToSection(english, readmeHeading, exact) : english,
-        {
-          root,
-          koreanRunbook: kind === "runbook" && locale === "ko" ? appendMarkerToSection(koreanRunbook, runbookHeading, exact) : koreanRunbook,
-          englishRunbook: kind === "runbook" && locale === "en" ? appendMarkerToSection(englishRunbook, runbookHeading, exact) : englishRunbook,
-        },
-      );
-      expect(result.valid).toBe(false);
-      const label = kind === "readme" ? "document" : "runbook-document";
-      expect(result.missing).toContain(`${locale}:${label}:command-count:${exact}`);
-    }
-  });
-
-  it.each([
-    ["Korean README", "ko", "readme"],
-    ["English README", "en", "readme"],
-    ["Korean runbook", "ko", "runbook"],
-    ["English runbook", "en", "runbook"],
-  ])("rejects noncanonical command prefixes outside their required section in the %s", async (_label, locale, kind) => {
-    const [korean, english, koreanRunbook, englishRunbook] = await Promise.all([
-      readFile(join(root, "README.ko.md"), "utf8"), readFile(join(root, "README.en.md"), "utf8"),
-      readFile(join(root, "docs/ops/release-ko.md"), "utf8"), readFile(join(root, "docs/ops/release-en.md"), "utf8"),
-    ]);
-    const readmeHeading = locale === "ko" ? "[release.toolchain] 1. 고정 도구와 안전한 시작" : "[release.toolchain] 1. Pinned tools and safe start";
-    const runbookHeading = locale === "ko" ? "사전 조건" : "Prerequisites";
-    const specs = kind === "readme"
-      ? [...VALIDATOR_PREFIX_COLLISIONS, ...CLEAN_PREFIX_COLLISIONS, ...README_PLAN_NEW_COMMAND_SPECS]
-      : VALIDATOR_PREFIX_COLLISIONS;
-    for (const [prefix, , collision] of specs) {
-      const result = await validateReadmeParity(
-        kind === "readme" && locale === "ko" ? appendMarkerToSection(korean, readmeHeading, collision) : korean,
-        kind === "readme" && locale === "en" ? appendMarkerToSection(english, readmeHeading, collision) : english,
-        {
-          root,
-          koreanRunbook: kind === "runbook" && locale === "ko" ? appendMarkerToSection(koreanRunbook, runbookHeading, collision) : koreanRunbook,
-          englishRunbook: kind === "runbook" && locale === "en" ? appendMarkerToSection(englishRunbook, runbookHeading, collision) : englishRunbook,
-        },
-      );
-      expect(result.valid).toBe(false);
-      const label = kind === "readme" ? "document" : "runbook-document";
-      expect(result.missing).toContain(`${locale}:${label}:noncanonical-command:${prefix}`);
-    }
-  });
-
-  it.each([
-    ["Korean README", "ko", "readme"],
-    ["English README", "en", "readme"],
-    ["Korean runbook", "ko", "runbook"],
-    ["English runbook", "en", "runbook"],
-  ])("rejects an internal node-to-script TAB separator in the %s", async (_label, locale, kind) => {
-    const [korean, english, koreanRunbook, englishRunbook] = await Promise.all([
-      readFile(join(root, "README.ko.md"), "utf8"), readFile(join(root, "README.en.md"), "utf8"),
-      readFile(join(root, "docs/ops/release-ko.md"), "utf8"), readFile(join(root, "docs/ops/release-en.md"), "utf8"),
-    ]);
-    const readmeHeading = locale === "ko" ? "[release.env] 3. 운영 env와 검증" : "[release.env] 3. Operator env and validation";
-    const runbookHeading = locale === "ko" ? "운영 입력 계약" : "Operator input contract";
-    const result = await validateReadmeParity(
-      kind === "readme" && locale === "ko" ? appendMarkerToSection(korean, readmeHeading, INTERNAL_NODE_TAB_COLLISION) : korean,
-      kind === "readme" && locale === "en" ? appendMarkerToSection(english, readmeHeading, INTERNAL_NODE_TAB_COLLISION) : english,
-      {
-        root,
-        koreanRunbook: kind === "runbook" && locale === "ko" ? appendMarkerToSection(koreanRunbook, runbookHeading, INTERNAL_NODE_TAB_COLLISION) : koreanRunbook,
-        englishRunbook: kind === "runbook" && locale === "en" ? appendMarkerToSection(englishRunbook, runbookHeading, INTERNAL_NODE_TAB_COLLISION) : englishRunbook,
-      },
-    );
-    expect(result.valid).toBe(false);
-    const section = kind === "readme" ? "section:release.env" : "runbook-section:runbook.operator-input";
-    expect(result.missing).toContain(`${locale}:${section}:noncanonical-command:${EVIDENCE_PREFIX}`);
-  });
-
-  it.each([
-    ["Korean", "ko"],
-    ["English", "en"],
-  ])("rejects repeated internal spaces in the %s release commit-range diff", async (_label, locale) => {
-    const [korean, english, koreanRunbook, englishRunbook] = await Promise.all([
-      readFile(join(root, "README.ko.md"), "utf8"), readFile(join(root, "README.en.md"), "utf8"),
-      readFile(join(root, "docs/ops/release-ko.md"), "utf8"), readFile(join(root, "docs/ops/release-en.md"), "utf8"),
-    ]);
-    const heading = locale === "ko" ? "[release.first-release] 6. 첫 릴리즈와 smoke" : "[release.first-release] 6. First release and smoke";
-    const result = await validateReadmeParity(
-      locale === "ko" ? appendMarkerToSection(korean, heading, REPEATED_SPACE_RELEASE_RANGE_DIFF) : korean,
-      locale === "en" ? appendMarkerToSection(english, heading, REPEATED_SPACE_RELEASE_RANGE_DIFF) : english,
-      { root, koreanRunbook, englishRunbook },
-    );
-    expect(result.valid).toBe(false);
-    expect(result.missing).toContain(`${locale}:section:release.first-release:noncanonical-command:${CLEAN_WORKTREE_COMMAND}`);
-    expect(result.missing).toContain(`${locale}:forbidden:release-commit-range-diff`);
-  });
-
-  it.each([
-    ["Korean README", "ko", "readme"],
-    ["English README", "en", "readme"],
-    ["Korean runbook", "ko", "runbook"],
-    ["English runbook", "en", "runbook"],
-  ])("requires Google commands inside executable fences in the %s", async (_label, locale, kind) => {
-    const [korean, english, koreanRunbook, englishRunbook] = await Promise.all([
-      readFile(join(root, "README.ko.md"), "utf8"), readFile(join(root, "README.en.md"), "utf8"),
-      readFile(join(root, "docs/ops/release-ko.md"), "utf8"), readFile(join(root, "docs/ops/release-en.md"), "utf8"),
-    ]);
-    const heading = kind === "readme"
-      ? (locale === "ko" ? "[release.env] 3. 운영 env와 검증" : "[release.env] 3. Operator env and validation")
-      : (locale === "ko" ? "운영 입력 계약" : "Operator input contract");
-    const result = await validateReadmeParity(
-      kind === "readme" && locale === "ko" ? moveCommandOutsideFence(korean, heading, SENSITIVE_SCAN_COMMAND) : korean,
-      kind === "readme" && locale === "en" ? moveCommandOutsideFence(english, heading, SENSITIVE_SCAN_COMMAND) : english,
-      {
-        root,
-        koreanRunbook: kind === "runbook" && locale === "ko" ? moveCommandOutsideFence(koreanRunbook, heading, SENSITIVE_SCAN_COMMAND) : koreanRunbook,
-        englishRunbook: kind === "runbook" && locale === "en" ? moveCommandOutsideFence(englishRunbook, heading, SENSITIVE_SCAN_COMMAND) : englishRunbook,
-      },
-    );
-    expect(result.valid).toBe(false);
-    const section = kind === "readme" ? "section:release.env" : "runbook-section:runbook.operator-input";
-    expect(result.missing).toContain(`${locale}:${section}:executable-command-count:${SENSITIVE_SCAN_COMMAND}`);
-  });
-
-  it.each([
-    ["Korean", "ko"],
-    ["English", "en"],
-  ])("requires every first-release PLAN command inside an executable fence in the %s README", async (_label, locale) => {
-    const [korean, english, koreanRunbook, englishRunbook] = await Promise.all([
-      readFile(join(root, "README.ko.md"), "utf8"), readFile(join(root, "README.en.md"), "utf8"),
-      readFile(join(root, "docs/ops/release-ko.md"), "utf8"), readFile(join(root, "docs/ops/release-en.md"), "utf8"),
-    ]);
-    const heading = locale === "ko" ? "[release.first-release] 6. 첫 릴리즈와 smoke" : "[release.first-release] 6. First release and smoke";
-    for (const command of README_PLAN_COMMANDS) {
-      const result = await validateReadmeParity(
-        locale === "ko" ? moveCommandOutsideFence(korean, heading, command) : korean,
-        locale === "en" ? moveCommandOutsideFence(english, heading, command) : english,
-        { root, koreanRunbook, englishRunbook },
-      );
-      expect(result.valid).toBe(false);
-      expect(result.missing).toContain(`${locale}:section:release.first-release:executable-command-count:${command}`);
-    }
-  });
-
-  it.each([
-    ["Korean", "ko"],
-    ["English", "en"],
-  ])("rejects a removed exact first-release PLAN command in the %s README", async (_label, locale) => {
-    const [korean, english, koreanRunbook, englishRunbook] = await Promise.all([
-      readFile(join(root, "README.ko.md"), "utf8"), readFile(join(root, "README.en.md"), "utf8"),
-      readFile(join(root, "docs/ops/release-ko.md"), "utf8"), readFile(join(root, "docs/ops/release-en.md"), "utf8"),
-    ]);
-    const heading = locale === "ko" ? "[release.first-release] 6. 첫 릴리즈와 smoke" : "[release.first-release] 6. First release and smoke";
-    for (const command of [RELEASE_SHA_COMMAND, CLEAN_STATUS_COMMAND, README_UPLOAD_COMMAND]) {
-      const source = locale === "ko" ? korean : english;
-      let mutated = source.replace(`\n${command}\n`, "\n");
-      if (command === README_UPLOAD_COMMAND) {
-        mutated = appendMarkerToSection(mutated, heading, `${README_UPLOAD_PREFIX}\n--dry-run`);
-      }
-      const result = await validateReadmeParity(
-        locale === "ko" ? mutated : korean,
-        locale === "en" ? mutated : english,
-        { root, koreanRunbook, englishRunbook },
-      );
-      expect(result.valid).toBe(false);
-      expect(result.missing).toContain(`${locale}:section:release.first-release:command-count:${command}`);
-    }
-  });
-
-  it.each([
-    ["Korean", "ko"],
-    ["English", "en"],
-  ])("rejects duplicate and prefixed first-release PLAN commands in the %s README", async (_label, locale) => {
-    const [korean, english, koreanRunbook, englishRunbook] = await Promise.all([
-      readFile(join(root, "README.ko.md"), "utf8"), readFile(join(root, "README.en.md"), "utf8"),
-      readFile(join(root, "docs/ops/release-ko.md"), "utf8"), readFile(join(root, "docs/ops/release-en.md"), "utf8"),
-    ]);
-    const heading = locale === "ko" ? "[release.first-release] 6. 첫 릴리즈와 smoke" : "[release.first-release] 6. First release and smoke";
-    for (const [prefix, exact, collision] of README_PLAN_NEW_COMMAND_SPECS) {
-      const duplicate = locale === "ko"
-        ? [appendMarkerToSection(korean, heading, exact), english]
-        : [korean, appendMarkerToSection(english, heading, exact)];
-      const duplicateResult = await validateReadmeParity(duplicate[0], duplicate[1], { root, koreanRunbook, englishRunbook });
-      expect(duplicateResult.valid).toBe(false);
-      expect(duplicateResult.missing).toContain(`${locale}:section:release.first-release:command-count:${exact}`);
-
-      const prefixed = locale === "ko"
-        ? [appendMarkerToSection(korean, heading, collision), english]
-        : [korean, appendMarkerToSection(english, heading, collision)];
-      const prefixedResult = await validateReadmeParity(prefixed[0], prefixed[1], { root, koreanRunbook, englishRunbook });
-      expect(prefixedResult.valid).toBe(false);
-      expect(prefixedResult.missing).toContain(`${locale}:section:release.first-release:noncanonical-command:${prefix}`);
-    }
-  });
-
-  it.each([
-    ["Korean fetch/assignment", "ko", FETCH_COMMAND, RELEASE_SHA_COMMAND],
-    ["Korean manifest/upload", "ko", README_BUILD_COMMAND, README_UPLOAD_COMMAND],
-    ["English fetch/assignment", "en", FETCH_COMMAND, RELEASE_SHA_COMMAND],
-    ["English manifest/upload", "en", README_BUILD_COMMAND, README_UPLOAD_COMMAND],
-  ])("rejects out-of-order first-release PLAN commands in %s", async (_label, locale, first, second) => {
-    const [korean, english, koreanRunbook, englishRunbook] = await Promise.all([
-      readFile(join(root, "README.ko.md"), "utf8"), readFile(join(root, "README.en.md"), "utf8"),
-      readFile(join(root, "docs/ops/release-ko.md"), "utf8"), readFile(join(root, "docs/ops/release-en.md"), "utf8"),
-    ]);
-    const result = await validateReadmeParity(
-      locale === "ko" ? swapExactLines(korean, first, second) : korean,
-      locale === "en" ? swapExactLines(english, first, second) : english,
-      { root, koreanRunbook, englishRunbook },
-    );
-    expect(result.valid).toBe(false);
-    expect(result.missing).toContain(`${locale}:section:release.first-release:command-order`);
-  });
-
-  it.each([
-    ["Korean", "ko"],
-    ["English", "en"],
-  ])("binds --dry-run to the exact upload command in the %s README", async (_label, locale) => {
-    const [korean, english, koreanRunbook, englishRunbook] = await Promise.all([
-      readFile(join(root, "README.ko.md"), "utf8"), readFile(join(root, "README.en.md"), "utf8"),
-      readFile(join(root, "docs/ops/release-ko.md"), "utf8"), readFile(join(root, "docs/ops/release-en.md"), "utf8"),
-    ]);
-    const heading = locale === "ko" ? "[release.first-release] 6. 첫 릴리즈와 smoke" : "[release.first-release] 6. First release and smoke";
-    const source = locale === "ko" ? korean : english;
-    const mutated = appendMarkerToSection(source.replace(README_UPLOAD_COMMAND, README_UPLOAD_WITHOUT_DRY_RUN), heading, "--dry-run");
-    const result = await validateReadmeParity(
-      locale === "ko" ? mutated : korean,
-      locale === "en" ? mutated : english,
-      { root, koreanRunbook, englishRunbook },
-    );
-    expect(result.valid).toBe(false);
-    expect(result.missing).toContain(`${locale}:section:release.first-release:command-count:${README_UPLOAD_COMMAND}`);
-    expect(result.missing).toContain(`${locale}:section:release.first-release:noncanonical-command:${README_UPLOAD_PREFIX}`);
-  });
-
-  it.each([
-    ["Korean", "ko"],
-    ["English", "en"],
-  ])("requires origin and build commands inside executable fences in the %s runbook", async (_label, locale) => {
-    const [korean, english, koreanRunbook, englishRunbook] = await Promise.all([
-      readFile(join(root, "README.ko.md"), "utf8"), readFile(join(root, "README.en.md"), "utf8"),
-      readFile(join(root, "docs/ops/release-ko.md"), "utf8"), readFile(join(root, "docs/ops/release-en.md"), "utf8"),
-    ]);
-    const operatorHeading = locale === "ko" ? "운영 입력 계약" : "Operator input contract";
-    const sequenceHeading = locale === "ko" ? "실행 순서" : "Sequence";
-    for (const [heading, section, command] of [
-      [operatorHeading, "runbook.operator-input", FETCH_COMMAND],
-      [operatorHeading, "runbook.operator-input", ORIGIN_EQUALITY_COMMAND],
-      [sequenceHeading, "runbook.sequence", RUNBOOK_BUILD_COMMAND],
+  it("fails closed for a missing, changed, or duplicated archive command", async () => {
+    const { korean, english, koreanRunbook, englishRunbook } = await documents();
+    for (const [runbook, expected] of [
+      [koreanRunbook.replace(ARCHIVE_VERIFIER_COMMAND, "archive command removed"), "ko:runbook:archive-command"],
+      [englishRunbook.replace(ARCHIVE_VERIFIER_COMMAND, `${ARCHIVE_VERIFIER_COMMAND} --unsafe`), "en:runbook:archive-command"],
+      [`${koreanRunbook}\n\`\`\`bash\n${ARCHIVE_VERIFIER_COMMAND}\n\`\`\`\n`, "ko:runbook:archive-command-count"],
     ]) {
       const result = await validateReadmeParity(korean, english, {
         root,
-        koreanRunbook: locale === "ko" ? moveCommandOutsideFence(koreanRunbook, heading, command) : koreanRunbook,
-        englishRunbook: locale === "en" ? moveCommandOutsideFence(englishRunbook, heading, command) : englishRunbook,
+        koreanRunbook: expected.startsWith("ko:") ? runbook : koreanRunbook,
+        englishRunbook: expected.startsWith("en:") ? runbook : englishRunbook,
       });
       expect(result.valid).toBe(false);
-      expect(result.missing).toContain(`${locale}:runbook-section:${section}:executable-command-count:${command}`);
+      expect(result.missing).toContain(expected);
     }
   });
 
   it.each([
-    ["Korean README four-backtick fence", "ko", "readme", "   ````bash\t", "  ````   "],
-    ["English README tilde fence", "en", "readme", "~~~sh\t", " ~~~~  "],
-    ["Korean runbook tilde fence", "ko", "runbook", "  ~~~bash  ", "~~~\t"],
-    ["English runbook four-backtick fence", "en", "runbook", "````sh  ", "   `````"],
-  ])("accepts a bounded CommonMark executable %s", async (_label, locale, kind, opening, closing) => {
-    const [korean, english, koreanRunbook, englishRunbook] = await Promise.all([
-      readFile(join(root, "README.ko.md"), "utf8"), readFile(join(root, "README.en.md"), "utf8"),
-      readFile(join(root, "docs/ops/release-ko.md"), "utf8"), readFile(join(root, "docs/ops/release-en.md"), "utf8"),
-    ]);
-    const readmeHeading = locale === "ko" ? "[release.env] 3. 운영 env와 검증" : "[release.env] 3. Operator env and validation";
-    const runbookHeading = locale === "ko" ? "운영 입력 계약" : "Operator input contract";
-    const mutate = (document) => replaceCommandFence(
-      document,
-      kind === "readme" ? readmeHeading : runbookHeading,
-      SENSITIVE_SCAN_COMMAND,
-      opening,
-      closing,
-    );
-    const result = await validateReadmeParity(
-      kind === "readme" && locale === "ko" ? mutate(korean) : korean,
-      kind === "readme" && locale === "en" ? mutate(english) : english,
-      {
-        root,
-        koreanRunbook: kind === "runbook" && locale === "ko" ? mutate(koreanRunbook) : koreanRunbook,
-        englishRunbook: kind === "runbook" && locale === "en" ? mutate(englishRunbook) : englishRunbook,
-      },
-    );
-    expect(result).toEqual({ valid: true, missing: [] });
-  });
-
-  it.each([
-    ["shorter backtick delimiter", "ko", "````bash", "````", "```"],
-    ["mismatched backtick delimiter", "en", "~~~sh", "~~~~", "```"],
-  ])("does not close an executable fence with a %s", async (_label, locale, opening, closing, embeddedDelimiter) => {
-    const [korean, english, koreanRunbook, englishRunbook] = await Promise.all([
-      readFile(join(root, "README.ko.md"), "utf8"), readFile(join(root, "README.en.md"), "utf8"),
-      readFile(join(root, "docs/ops/release-ko.md"), "utf8"), readFile(join(root, "docs/ops/release-en.md"), "utf8"),
-    ]);
-    const heading = locale === "ko" ? "[release.env] 3. 운영 env와 검증" : "[release.env] 3. Operator env and validation";
-    const source = locale === "ko" ? korean : english;
-    const fenced = replaceCommandFence(source, heading, SENSITIVE_SCAN_COMMAND, opening, closing);
-    const mutated = insertLineBeforeCommand(fenced, SENSITIVE_SCAN_COMMAND, embeddedDelimiter);
-    const result = await validateReadmeParity(
-      locale === "ko" ? mutated : korean,
-      locale === "en" ? mutated : english,
-      { root, koreanRunbook, englishRunbook },
-    );
-    expect(result).toEqual({ valid: true, missing: [] });
-  });
-
-  it.each([
-    ["Korean README", "ko", "readme"],
-    ["English README", "en", "readme"],
-    ["Korean runbook", "ko", "runbook"],
-    ["English runbook", "en", "runbook"],
-  ])("treats a four-backtick delimiter as the close of a triple-backtick fence in the %s", async (_label, locale, kind) => {
-    const [korean, english, koreanRunbook, englishRunbook] = await Promise.all([
-      readFile(join(root, "README.ko.md"), "utf8"), readFile(join(root, "README.en.md"), "utf8"),
-      readFile(join(root, "docs/ops/release-ko.md"), "utf8"), readFile(join(root, "docs/ops/release-en.md"), "utf8"),
-    ]);
-    const readmeHeading = locale === "ko" ? "[release.env] 3. 운영 env와 검증" : "[release.env] 3. Operator env and validation";
-    const runbookHeading = locale === "ko" ? "운영 입력 계약" : "Operator input contract";
-    const mutate = (document) => moveCommandAfterLongerFenceClose(
-      document,
-      kind === "readme" ? readmeHeading : runbookHeading,
-      SENSITIVE_SCAN_COMMAND,
-    );
-    const result = await validateReadmeParity(
-      kind === "readme" && locale === "ko" ? mutate(korean) : korean,
-      kind === "readme" && locale === "en" ? mutate(english) : english,
-      {
-        root,
-        koreanRunbook: kind === "runbook" && locale === "ko" ? mutate(koreanRunbook) : koreanRunbook,
-        englishRunbook: kind === "runbook" && locale === "en" ? mutate(englishRunbook) : englishRunbook,
-      },
-    );
-    expect(result.valid).toBe(false);
-    const section = kind === "readme" ? "section:release.env" : "runbook-section:runbook.operator-input";
-    expect(result.missing).toContain(`${locale}:${section}:executable-command-count:${SENSITIVE_SCAN_COMMAND}`);
-  });
-
-  it.each([
-    ["Korean README", "ko", "readme"],
-    ["English README", "en", "readme"],
-    ["Korean runbook", "ko", "runbook"],
-    ["English runbook", "en", "runbook"],
-  ])("rejects scanner arguments moved out of the executable section in the %s", async (_label, locale, kind) => {
-    const [korean, english, koreanRunbook, englishRunbook] = await Promise.all([
-      readFile(join(root, "README.ko.md"), "utf8"), readFile(join(root, "README.en.md"), "utf8"),
-      readFile(join(root, "docs/ops/release-ko.md"), "utf8"), readFile(join(root, "docs/ops/release-en.md"), "utf8"),
-    ]);
-    const executableKorean = withExecutableRunbookCommands(koreanRunbook);
-    const executableEnglish = withExecutableRunbookCommands(englishRunbook);
-    const moveReadmeArguments = (document, from, to) => moveMarker(document, { from, to, marker: SENSITIVE_SCAN_ARGUMENTS });
-    const moveRunbookArguments = (document, from, to) => moveMarker(document, { from, to, marker: SENSITIVE_SCAN_ARGUMENTS });
-    const result = await validateReadmeParity(
-      kind === "readme" && locale === "ko" ? moveReadmeArguments(korean, "[release.env] 3. 운영 env와 검증", "[release.toolchain] 1. 고정 도구와 안전한 시작") : korean,
-      kind === "readme" && locale === "en" ? moveReadmeArguments(english, "[release.env] 3. Operator env and validation", "[release.toolchain] 1. Pinned tools and safe start") : english,
-      {
-        root,
-        koreanRunbook: kind === "runbook" && locale === "ko" ? moveRunbookArguments(executableKorean, "운영 입력 계약", "사전 조건") : executableKorean,
-        englishRunbook: kind === "runbook" && locale === "en" ? moveRunbookArguments(executableEnglish, "Operator input contract", "Prerequisites") : executableEnglish,
-      },
-    );
-    expect(result.valid).toBe(false);
-    const section = kind === "readme" ? "section:release.env" : "runbook-section:runbook.operator-input";
-    expect(result.missing).toContain(`${locale}:${section}:${SENSITIVE_SCAN_COMMAND}`);
-  });
-
-  it.each([
-    ["Korean", "ko"],
-    ["English", "en"],
-  ])("rejects duplicate standalone exact commands in the %s documents", async (_label, locale) => {
-    const [korean, english, koreanRunbook, englishRunbook] = await Promise.all([
-      readFile(join(root, "README.ko.md"), "utf8"), readFile(join(root, "README.en.md"), "utf8"),
-      readFile(join(root, "docs/ops/release-ko.md"), "utf8"), readFile(join(root, "docs/ops/release-en.md"), "utf8"),
-    ]);
-    const readmeEnvHeading = locale === "ko" ? "[release.env] 3. 운영 env와 검증" : "[release.env] 3. Operator env and validation";
-    const readmeReleaseHeading = locale === "ko" ? "[release.first-release] 6. 첫 릴리즈와 smoke" : "[release.first-release] 6. First release and smoke";
-    const runbookInputHeading = locale === "ko" ? "운영 입력 계약" : "Operator input contract";
-    for (const [kind, heading, command, expectedError] of [
-      ["readme", readmeEnvHeading, EVIDENCE_COMMAND, `${locale}:section:release.env:command-count:${EVIDENCE_COMMAND}`],
-      ["readme", readmeReleaseHeading, CLEAN_WORKTREE_COMMAND, `${locale}:section:release.first-release:command-count:${CLEAN_WORKTREE_COMMAND}`],
-      ["runbook", runbookInputHeading, EVIDENCE_COMMAND, `${locale}:runbook-section:runbook.operator-input:command-count:${EVIDENCE_COMMAND}`],
-    ]) {
-      const result = await validateReadmeParity(
-        kind === "readme" && locale === "ko" ? appendMarkerToSection(korean, heading, command) : korean,
-        kind === "readme" && locale === "en" ? appendMarkerToSection(english, heading, command) : english,
-        {
-          root,
-          koreanRunbook: kind === "runbook" && locale === "ko" ? appendMarkerToSection(koreanRunbook, heading, command) : koreanRunbook,
-          englishRunbook: kind === "runbook" && locale === "en" ? appendMarkerToSection(englishRunbook, heading, command) : englishRunbook,
-        },
-      );
-      expect(result.valid).toBe(false);
-      expect(result.missing).toContain(expectedError);
-    }
-  });
-
-  it.each([
-    ["Korean", "ko"],
-    ["English", "en"],
-  ])("rejects noncanonical command-prefix collisions in the %s documents", async (_label, locale) => {
-    const [korean, english, koreanRunbook, englishRunbook] = await Promise.all([
-      readFile(join(root, "README.ko.md"), "utf8"), readFile(join(root, "README.en.md"), "utf8"),
-      readFile(join(root, "docs/ops/release-ko.md"), "utf8"), readFile(join(root, "docs/ops/release-en.md"), "utf8"),
-    ]);
-    const readmeEnvHeading = locale === "ko" ? "[release.env] 3. 운영 env와 검증" : "[release.env] 3. Operator env and validation";
-    const readmeReleaseHeading = locale === "ko" ? "[release.first-release] 6. 첫 릴리즈와 smoke" : "[release.first-release] 6. First release and smoke";
-    const runbookInputHeading = locale === "ko" ? "운영 입력 계약" : "Operator input contract";
-    for (const [prefix, , collision] of VALIDATOR_PREFIX_COLLISIONS) {
-      for (const [kind, heading, expectedError] of [
-        ["readme", readmeEnvHeading, `${locale}:section:release.env:noncanonical-command:${prefix}`],
-        ["runbook", runbookInputHeading, `${locale}:runbook-section:runbook.operator-input:noncanonical-command:${prefix}`],
-      ]) {
-        const result = await validateReadmeParity(
-          kind === "readme" && locale === "ko" ? appendMarkerToSection(korean, heading, collision) : korean,
-          kind === "readme" && locale === "en" ? appendMarkerToSection(english, heading, collision) : english,
-          {
-            root,
-            koreanRunbook: kind === "runbook" && locale === "ko" ? appendMarkerToSection(koreanRunbook, heading, collision) : koreanRunbook,
-            englishRunbook: kind === "runbook" && locale === "en" ? appendMarkerToSection(englishRunbook, heading, collision) : englishRunbook,
-          },
-        );
-        expect(result.valid).toBe(false);
-        expect(result.missing).toContain(expectedError);
-      }
-    }
-    for (const [command, , collision] of CLEAN_PREFIX_COLLISIONS) {
-      const result = await validateReadmeParity(
-        locale === "ko" ? appendMarkerToSection(korean, readmeReleaseHeading, collision) : korean,
-        locale === "en" ? appendMarkerToSection(english, readmeReleaseHeading, collision) : english,
-        { root, koreanRunbook, englishRunbook },
-      );
-      expect(result.valid).toBe(false);
-      expect(result.missing).toContain(`${locale}:section:release.first-release:noncanonical-command:${command}`);
-    }
-  });
-
-  it.each([
-    ["Korean README", "ko", "readme"],
-    ["English README", "en", "readme"],
-    ["Korean runbook", "ko", "runbook"],
-    ["English runbook", "en", "runbook"],
-  ])("rejects out-of-order Google validation commands in the %s", async (_label, locale, kind) => {
-    const [korean, english, koreanRunbook, englishRunbook] = await Promise.all([
-      readFile(join(root, "README.ko.md"), "utf8"), readFile(join(root, "README.en.md"), "utf8"),
-      readFile(join(root, "docs/ops/release-ko.md"), "utf8"), readFile(join(root, "docs/ops/release-en.md"), "utf8"),
-    ]);
-    const result = await validateReadmeParity(
-      kind === "readme" && locale === "ko" ? swapExactLines(korean, EVIDENCE_COMMAND, PROVISIONING_COMMAND) : korean,
-      kind === "readme" && locale === "en" ? swapExactLines(english, EVIDENCE_COMMAND, PROVISIONING_COMMAND) : english,
-      {
-        root,
-        koreanRunbook: kind === "runbook" && locale === "ko" ? swapExactLines(koreanRunbook, EVIDENCE_COMMAND, PROVISIONING_COMMAND) : koreanRunbook,
-        englishRunbook: kind === "runbook" && locale === "en" ? swapExactLines(englishRunbook, EVIDENCE_COMMAND, PROVISIONING_COMMAND) : englishRunbook,
-      },
-    );
-    expect(result.valid).toBe(false);
-    const section = kind === "readme" ? "section:release.env" : "runbook-section:runbook.operator-input";
-    expect(result.missing).toContain(`${locale}:${section}:command-order`);
-  });
-
-  it("rejects a shared noncanonical README heading order", async () => {
-    const [korean, english, koreanRunbook, englishRunbook] = await Promise.all([
-      readFile(join(root, "README.ko.md"), "utf8"), readFile(join(root, "README.en.md"), "utf8"),
-      readFile(join(root, "docs/ops/release-ko.md"), "utf8"), readFile(join(root, "docs/ops/release-en.md"), "utf8"),
-    ]);
-    const result = await validateReadmeParity(
-      swapAdjacentSections(korean, "[release.env] 3. 운영 env와 검증", "[release.validation] 4. 검증과 빌드 gate"),
-      swapAdjacentSections(english, "[release.env] 3. Operator env and validation", "[release.validation] 4. Verification and build gate"),
-      { root, koreanRunbook, englishRunbook },
-    );
-    expect(result.valid).toBe(false);
-    expect(result.missing).toContain("ko:heading-order");
-    expect(result.missing).toContain("en:heading-order");
-  });
-
-  it.each([
-    ["Korean", "ko"],
-    ["English", "en"],
-  ])("rejects a noncanonical %s runbook heading order", async (_label, locale) => {
-    const [korean, english, koreanRunbook, englishRunbook] = await Promise.all([
-      readFile(join(root, "README.ko.md"), "utf8"), readFile(join(root, "README.en.md"), "utf8"),
-      readFile(join(root, "docs/ops/release-ko.md"), "utf8"), readFile(join(root, "docs/ops/release-en.md"), "utf8"),
-    ]);
+    ["tag", "git -c core.pager=cat tag -a v0.1.0", "local-git-tag"],
+    ["push", "sh -c 'command git push origin main'", "local-git-push"],
+    ["ref", "gh api --method POST repos/example/repo/git/refs", "local-git-ref"],
+    ["native ref", "git update-ref refs/tags/v0.1.0 deadbeef", "local-git-ref"],
+  ])("keeps local %s mutation examples fail-closed", async (_label, injected, code) => {
+    const { korean, english, koreanRunbook, englishRunbook } = await documents();
     const result = await validateReadmeParity(korean, english, {
       root,
-      koreanRunbook: locale === "ko" ? swapAdjacentSections(koreanRunbook, "사전 조건", "실행 순서") : koreanRunbook,
-      englishRunbook: locale === "en" ? swapAdjacentSections(englishRunbook, "Prerequisites", "Sequence") : englishRunbook,
+      koreanRunbook: addExecutableLine(koreanRunbook, injected),
+      englishRunbook,
     });
     expect(result.valid).toBe(false);
-    expect(result.missing).toContain(`${locale}:runbook-heading-order`);
+    expect(result.missing).toContain(`ko:runbook-forbidden:${code}`);
   });
 
-  it.each([
-    ["heading", (text) => text.replace("## [release.env]", "## Environment"), "ko:heading:release.env"],
-    ["command", (text) => text.replace("npm run build", "npm run compile"), "ko:section:release.validation:npm run build"],
-    ["link", (text) => text.replace("(SECURITY.md)", "(missing-security.md)"), "ko:link:missing-security.md"],
-    ["env key", (text) => text.replace("VITE_ALLOWED_HD", "VITE_REMOVED"), "ko:section:release.env:VITE_ALLOWED_HD"],
-    ["receipt key", (text) => text.replace("tenantPolicy", "removedPolicy"), "ko:section:release.env:tenantPolicy"],
-    ["state", (text) => text.replaceAll("INCOMPLETE / UNOBSERVED", "READY"), "ko:section:release.status:INCOMPLETE / UNOBSERVED"],
-    ["origin fetch", (text) => text.replace("git fetch origin main --quiet", "git fetch removed"), "ko:section:release.first-release:git fetch origin main --quiet"],
-    ["origin equality", (text) => text.replace("test \"$(git rev-parse origin/main)\" = \"${release_sha}\"", "test true"), "ko:section:release.first-release:test \"$(git rev-parse origin/main)\" = \"${release_sha}\""],
-  ])("rejects a mutated %s contract", async (_label, mutate, expectedError) => {
-    const [korean, english, koreanRunbook, englishRunbook] = await Promise.all([
-      readFile(join(root, "README.ko.md"), "utf8"), readFile(join(root, "README.en.md"), "utf8"),
-      readFile(join(root, "docs/ops/release-ko.md"), "utf8"), readFile(join(root, "docs/ops/release-en.md"), "utf8"),
-    ]);
-    const result = await validateReadmeParity(mutate(korean), english, { root, koreanRunbook, englishRunbook });
-    expect(result.valid).toBe(false);
-    expect(result.missing).toContain(expectedError);
+  it("uses section counts and closed commands instead of the retired shell-command allowlist", async () => {
+    const source = await readFile(join(root, "scripts/lib/readme-parity.mjs"), "utf8");
+    expect(source).not.toContain("requireArchiveCommandAllowlist");
+    expect(source).not.toContain("shellLex(");
+    expect(source).toContain("ARCHIVE_VERIFIER_COMMAND");
+    expect(source).toContain("archive-command-count");
   });
 
-  it.each([
-    ["runbook env key", (text) => text.replace("VITE_ALLOWED_HD", "VITE_REMOVED"), "ko:runbook-section:runbook.operator-input:VITE_ALLOWED_HD"],
-    ["runbook receipt", (text) => text.replace("tenantPolicy", "removedPolicy"), "ko:runbook-section:runbook.operator-input:tenantPolicy"],
-    ["origin equality", (text) => text.replace("test \"$(git rev-parse origin/main)\" = \"${release_sha}\"", "origin/main check removed"), "ko:runbook-section:runbook.operator-input:test \"$(git rev-parse origin/main)\" = \"${release_sha}\""],
-  ])("rejects a mutated runbook %s contract", async (_label, mutate, expectedError) => {
-    const [korean, english, koreanRunbook, englishRunbook] = await Promise.all([
-      readFile(join(root, "README.ko.md"), "utf8"), readFile(join(root, "README.en.md"), "utf8"),
-      readFile(join(root, "docs/ops/release-ko.md"), "utf8"), readFile(join(root, "docs/ops/release-en.md"), "utf8"),
-    ]);
-    const result = await validateReadmeParity(korean, english, { root, koreanRunbook: mutate(koreanRunbook), englishRunbook });
-    expect(result.valid).toBe(false);
-    expect(result.missing).toContain(expectedError);
-  });
-
-  it("rejects contradictory implementation status", async () => {
-    const [korean, english, koreanRunbook, englishRunbook] = await Promise.all([
-      readFile(join(root, "README.ko.md"), "utf8"), readFile(join(root, "README.en.md"), "utf8"),
-      readFile(join(root, "docs/ops/release-ko.md"), "utf8"), readFile(join(root, "docs/ops/release-en.md"), "utf8"),
-    ]);
-    expect((await validateReadmeParity(korean.replace("AWS CloudFormation·CloudFront·GitHub OIDC 배포 경로는 committed/defined 되어\n있지만 아직 configured/deployed/live 상태가 아닙니다.", "AWS CloudFormation·CloudFront·GitHub OIDC 배포는 아직 구현되지 않았습니다."), english, { root, koreanRunbook, englishRunbook })).valid).toBe(false);
-  });
-
-  it.each(SECURITY_DOCUMENT_TARGETS.flatMap(([label, locale, kind]) => (
-    FORBIDDEN_LOCAL_TAG_COMMANDS.map((command) => [`${label}: ${command}`, locale, kind, command])
-  )))("rejects token-normalized local tag command in %s", async (_label, locale, kind, command) => {
-    const [korean, english, koreanRunbook, englishRunbook] = await Promise.all([
-      readFile(join(root, "README.ko.md"), "utf8"), readFile(join(root, "README.en.md"), "utf8"),
-      readFile(join(root, "docs/ops/release-ko.md"), "utf8"), readFile(join(root, "docs/ops/release-en.md"), "utf8"),
-    ]);
-    const anchor = kind === "readme" ? README_UPLOAD_COMMAND : RUNBOOK_BUILD_COMMAND;
-    const mutate = (document) => insertLineBeforeCommand(document, anchor, command);
+  it("rejects a heading/section-count mismatch and keeps the local AWS identity separate from the GitHub deploy role", async () => {
+    const documentSet = await documents();
+    const { korean, english, koreanRunbook, englishRunbook } = documentSet;
     const result = await validateReadmeParity(
-      kind === "readme" && locale === "ko" ? mutate(korean) : korean,
-      kind === "readme" && locale === "en" ? mutate(english) : english,
-      {
-        root,
-        koreanRunbook: kind === "runbook" && locale === "ko" ? mutate(koreanRunbook) : koreanRunbook,
-        englishRunbook: kind === "runbook" && locale === "en" ? mutate(englishRunbook) : englishRunbook,
-      },
+      korean.replace("## [release.rollback]", "## [release.renamed]"),
+      english,
+      validationOptions(documentSet),
     );
     expect(result.valid).toBe(false);
-    const errorLabel = kind === "readme" ? "forbidden" : "runbook-forbidden";
-    expect(result.missing).toContain(`${locale}:${errorLabel}:local-git-tag`);
-    expect(result.missing).not.toContain(`${locale}:${errorLabel}:local-git-push`);
-  });
-
-  it.each(SECURITY_DOCUMENT_TARGETS.flatMap(([label, locale, kind]) => (
-    FORBIDDEN_LOCAL_PUSH_COMMANDS.map((command) => [`${label}: ${command}`, locale, kind, command])
-  )))("rejects token-normalized local push command in %s", async (_label, locale, kind, command) => {
-    const [korean, english, koreanRunbook, englishRunbook] = await Promise.all([
-      readFile(join(root, "README.ko.md"), "utf8"), readFile(join(root, "README.en.md"), "utf8"),
-      readFile(join(root, "docs/ops/release-ko.md"), "utf8"), readFile(join(root, "docs/ops/release-en.md"), "utf8"),
-    ]);
-    const anchor = kind === "readme" ? README_UPLOAD_COMMAND : RUNBOOK_BUILD_COMMAND;
-    const mutate = (document) => insertLineBeforeCommand(document, anchor, command);
-    const result = await validateReadmeParity(
-      kind === "readme" && locale === "ko" ? mutate(korean) : korean,
-      kind === "readme" && locale === "en" ? mutate(english) : english,
-      {
-        root,
-        koreanRunbook: kind === "runbook" && locale === "ko" ? mutate(koreanRunbook) : koreanRunbook,
-        englishRunbook: kind === "runbook" && locale === "en" ? mutate(englishRunbook) : englishRunbook,
-      },
-    );
-    expect(result.valid).toBe(false);
-    const errorLabel = kind === "readme" ? "forbidden" : "runbook-forbidden";
-    expect(result.missing).toContain(`${locale}:${errorLabel}:local-git-push`);
-    expect(result.missing).not.toContain(`${locale}:${errorLabel}:local-git-tag`);
-  });
-
-  it.each(SECURITY_DOCUMENT_TARGETS)("ignores local tag/push prose and shell comments in the %s", async (_label, locale, kind) => {
-    const [korean, english, koreanRunbook, englishRunbook] = await Promise.all([
-      readFile(join(root, "README.ko.md"), "utf8"), readFile(join(root, "README.en.md"), "utf8"),
-      readFile(join(root, "docs/ops/release-ko.md"), "utf8"), readFile(join(root, "docs/ops/release-en.md"), "utf8"),
-    ]);
-    const heading = kind === "readme"
-      ? (locale === "ko" ? "[release.first-release] 6. 첫 릴리즈와 smoke" : "[release.first-release] 6. First release and smoke")
-      : (locale === "ko" ? "실행 순서" : "Sequence");
-    const anchor = kind === "readme" ? README_UPLOAD_COMMAND : RUNBOOK_BUILD_COMMAND;
-    const mutate = (document) => {
-      const withComments = insertLineBeforeCommand(
-        insertLineBeforeCommand(document, anchor, "# git tag -s v0.1.0"),
-        anchor,
-        "#\tgit push upstream --tags",
-      );
-      return appendMarkerToSection(
-        withComments,
-        heading,
-        "git tag -a v0.1.0 is a forbidden prose example; do not run it.\ngit push origin main is a forbidden prose example; do not run it.",
-      );
-    };
-    const result = await validateReadmeParity(
-      kind === "readme" && locale === "ko" ? mutate(korean) : korean,
-      kind === "readme" && locale === "en" ? mutate(english) : english,
-      {
-        root,
-        koreanRunbook: kind === "runbook" && locale === "ko" ? mutate(koreanRunbook) : koreanRunbook,
-        englishRunbook: kind === "runbook" && locale === "en" ? mutate(englishRunbook) : englishRunbook,
-      },
-    );
-    expect(result).toEqual({ valid: true, missing: [] });
-  });
-
-  it("keeps plan-only release and immutable rollback contracts section-local", async () => {
-    const [korean, english, koreanRunbook, englishRunbook] = await Promise.all([
-      readFile(join(root, "README.ko.md"), "utf8"), readFile(join(root, "README.en.md"), "utf8"),
-      readFile(join(root, "docs/ops/release-ko.md"), "utf8"), readFile(join(root, "docs/ops/release-en.md"), "utf8"),
-    ]);
-    expect((await validateReadmeParity(korean, english, { root, koreanRunbook: koreanRunbook.replace("releases/${release_sha}/", "upload/copy releases/${release_sha}/"), englishRunbook })).valid).toBe(false);
-    expect((await validateReadmeParity(korean, english, { root, koreanRunbook: `${koreanRunbook}\nnpm run upload:release-prefix -- --execute`, englishRunbook })).valid).toBe(false);
-  });
-
-  it.each([
-    [
-      "env key",
-      { from: "[release.env] 3. 운영 env와 검증", to: "[release.toolchain] 1. 고정 도구와 안전한 시작", marker: "VITE_GOOGLE_CLIENT_ID" },
-      "ko:section:release.env:VITE_GOOGLE_CLIENT_ID",
-    ],
-    [
-      "receipt key",
-      { from: "[release.env] 3. 운영 env와 검증", to: "[release.toolchain] 1. 고정 도구와 안전한 시작", marker: "tenantPolicy", asComment: true },
-      "ko:section:release.env:tenantPolicy",
-    ],
-    [
-      "readiness state",
-      { from: null, to: "[release.toolchain] 1. 고정 도구와 안전한 시작", marker: "INCOMPLETE / UNOBSERVED" },
-      "ko:section:release.status:INCOMPLETE / UNOBSERVED",
-    ],
-    [
-      "dry-run mode",
-      { from: "[release.first-release] 6. 첫 릴리즈와 smoke", to: "[release.rollback] 7. 롤백과 사고 대응", marker: "--dry-run" },
-      "ko:section:release.first-release:--dry-run",
-    ],
-    [
-      "executable origin equality",
-      { from: "[release.first-release] 6. 첫 릴리즈와 smoke", to: "[release.env] 3. 운영 env와 검증", marker: "test \"$(git rev-parse origin/main)\" = \"${release_sha}\"" },
-      "ko:section:release.first-release:test \"$(git rev-parse origin/main)\" = \"${release_sha}\"",
-    ],
-    [
-      "release contract verification",
-      { from: "[release.validation] 4. 검증과 빌드 gate", to: "[release.first-release] 6. 첫 릴리즈와 smoke", marker: "npm run verify:release-contract" },
-      "ko:section:release.validation:npm run verify:release-contract",
-    ],
-  ])("rejects a %s marker moved into the wrong README section", async (_label, movement, expectedError) => {
-    const [korean, english, koreanRunbook, englishRunbook] = await Promise.all([
-      readFile(join(root, "README.ko.md"), "utf8"), readFile(join(root, "README.en.md"), "utf8"),
-      readFile(join(root, "docs/ops/release-ko.md"), "utf8"), readFile(join(root, "docs/ops/release-en.md"), "utf8"),
-    ]);
-    const result = await validateReadmeParity(moveMarker(korean, movement), english, { root, koreanRunbook, englishRunbook });
-    expect(result.valid).toBe(false);
-    expect(result.missing).toContain(expectedError);
-  });
-
-  it("rejects a marker moved between runbook Prerequisites and Operator input sections", async () => {
-    const [korean, english, koreanRunbook, englishRunbook] = await Promise.all([
-      readFile(join(root, "README.ko.md"), "utf8"), readFile(join(root, "README.en.md"), "utf8"),
-      readFile(join(root, "docs/ops/release-ko.md"), "utf8"), readFile(join(root, "docs/ops/release-en.md"), "utf8"),
-    ]);
-    const moved = moveMarker(koreanRunbook, { from: "운영 입력 계약", to: "사전 조건", marker: "umask 077" });
-    const result = await validateReadmeParity(korean, english, { root, koreanRunbook: moved, englishRunbook });
-    expect(result.valid).toBe(false);
-    expect(result.missing).toContain("ko:runbook-section:runbook.operator-input:umask 077");
-  });
-
-  it.each([
-    [
-      "current double symbolic HEAD build",
-      { ...VALID_PACKAGE_SCRIPTS, "build:release-manifest": "node scripts/build-release-manifest.mjs --artifact-root dist --commit-sha \"$(git rev-parse HEAD)\" --source-date-epoch \"$(git show -s --format=%ct HEAD)\"" },
-      "package:script:build:release-manifest",
-    ],
-    [
-      "mixed build SHA source",
-      { ...VALID_PACKAGE_SCRIPTS, "build:release-manifest": VALID_PACKAGE_SCRIPTS["build:release-manifest"].replace("$(git rev-parse HEAD)", "$GITHUB_SHA") },
-      "package:script:build:release-manifest",
-    ],
-    [
-      "upload without dry-run",
-      { ...VALID_PACKAGE_SCRIPTS, "upload:release-prefix": VALID_PACKAGE_SCRIPTS["upload:release-prefix"].replace(" --dry-run", "") },
-      "package:script:upload:release-prefix",
-    ],
-    [
-      "upload execute mode",
-      { ...VALID_PACKAGE_SCRIPTS, "upload:release-prefix": VALID_PACKAGE_SCRIPTS["upload:release-prefix"].replace("--dry-run", "--execute") },
-      "package:script:upload:release-prefix",
-    ],
-    [
-      "broadened release test scope",
-      { ...VALID_PACKAGE_SCRIPTS, "verify:release-contract": VALID_PACKAGE_SCRIPTS["verify:release-contract"].replace("scripts/lib/release-manifest.test.mjs", "scripts/**/*.test.mjs") },
-      "package:script:verify:release-contract",
-    ],
-  ])("rejects a mutated package script: %s", async (_label, scripts, expectedError) => {
-    const packageRoot = await mkdtemp(join(tmpdir(), "molroom-readme-parity-"));
-    try {
-      await writeFile(join(packageRoot, "package.json"), `${JSON.stringify({ scripts })}\n`, { mode: 0o600 });
-      const [korean, english, koreanRunbook, englishRunbook] = await Promise.all([
-        readFile(join(root, "README.ko.md"), "utf8"), readFile(join(root, "README.en.md"), "utf8"),
-        readFile(join(root, "docs/ops/release-ko.md"), "utf8"), readFile(join(root, "docs/ops/release-en.md"), "utf8"),
-      ]);
-      const result = await validateReadmeParity(korean, english, { root: packageRoot, koreanRunbook, englishRunbook });
-      expect(result.valid).toBe(false);
-      expect(result.missing).toContain(expectedError);
-    } finally {
-      await rm(packageRoot, { recursive: true, force: true });
+    expect(result.missing).toContain("ko:heading:release.rollback");
+    for (const document of [korean, english, koreanRunbook, englishRunbook]) {
+      expect(document).toContain("AWS SSO");
+      expect(document).not.toContain("assumed-role/molroom-github-deploy");
     }
+  });
+
+  it("pins the candidate-only workflow to the exact protected annotated controller tag and SHA", async () => {
+    const documentSet = await documents();
+    const workflow = documentSet.releaseWorkflow;
+    expect(workflow).toContain(`ref: refs/tags/${CONTROLLER_TAG}`);
+    expect(workflow).toContain(`expected_controller_sha="${CONTROLLER_SHA}"`);
+    expect(workflow).toContain(`git -C controller cat-file -t refs/tags/${CONTROLLER_TAG}`);
+    expect(workflow).not.toContain("PHASE_1_CONTROLLER_SHA");
+    expect(workflow).not.toContain("github.workflow_sha");
+    expect(workflow).not.toMatch(/^\s*environment\s*:/m);
+    expect(workflow).not.toMatch(/\b(?:id-token|actions|contents|deployments|packages)\s*:\s*write\b/);
+    expect(workflow).not.toContain("aws-actions/configure-aws-credentials");
+    expect(workflow).not.toContain("secrets.");
+
+    const jobNames = [...workflow.matchAll(/^  ([a-z][a-z0-9-]*):\s*$/gm)].map((match) => match[1]);
+    expect(jobNames).toEqual(["verify-candidate"]);
+
+    for (const [mutatedWorkflow, error] of [
+      [workflow.replace(CONTROLLER_SHA, "PHASE_1_CONTROLLER_SHA"), "workflow:controller-sha"],
+      [workflow.replace(`refs/tags/${CONTROLLER_TAG}`, "refs/heads/main"), "workflow:controller-tag"],
+      [workflow.replace("contents: read", "contents: write"), "workflow:permissions"],
+      [workflow.replace("contents: read", "contents: read\n      id-token: write"), "workflow:permissions"],
+      [workflow.replace("timeout-minutes: 60", "timeout-minutes: 60\n    environment: production"), "workflow:environment"],
+      [workflow.replace("      VITE_ADAPTER: google\n", ""), "workflow:public-env"],
+      [workflow.replace(`test "$(git -C controller cat-file -t refs/tags/${CONTROLLER_TAG})" = tag\n`, ""), "workflow:annotated-tag"],
+      [`${workflow}\n# github.workflow_sha\n`, "workflow:forbidden:github.workflow_sha"],
+      [`${workflow}\n# \${{ secrets.PRIVATE_TOKEN }}\n`, "workflow:secrets"],
+    ]) {
+      const result = await validateReadmeParity(documentSet.korean, documentSet.english, validationOptions(documentSet, {
+        releaseWorkflow: mutatedWorkflow,
+      }));
+      expect(result.valid).toBe(false);
+      expect(result.missing).toContain(error);
+    }
+  });
+
+  it("accepts exactly target_sha as the candidate dispatch input and exactly four public job env bindings", async () => {
+    const documentSet = await documents();
+    const workflow = documentSet.releaseWorkflow;
+    const mutations = [
+      [
+        workflow.replace(
+          "\nconcurrency:",
+          "      extra_input:\n        description: Must be rejected\n        required: false\n        type: string\n\nconcurrency:",
+        ),
+        "workflow:dispatch-inputs",
+      ],
+      [
+        workflow.replace(
+          /      target_sha:\n        description:[^\n]+\n        required: true\n        type: string\n/,
+          "",
+        ),
+        "workflow:dispatch-inputs",
+      ],
+      [
+        workflow.replace(
+          "      VITE_GOOGLE_CLIENT_ID: ${{ vars.VITE_GOOGLE_CLIENT_ID }}",
+          "      VITE_GOOGLE_CLIENT_ID: ${{ vars.VITE_GOOGLE_CLIENT_ID }}\n      VITE_EXTRA: unexpected",
+        ),
+        "workflow:public-env",
+      ],
+      [
+        workflow.replace("      VITE_DEPLOYMENT: production", "      VITE_DEPLOYMENT: preview"),
+        "workflow:public-env",
+      ],
+    ];
+    for (const [releaseWorkflow, expected] of mutations) {
+      const result = await validateReadmeParity(
+        documentSet.korean,
+        documentSet.english,
+        validationOptions(documentSet, { releaseWorkflow }),
+      );
+      expect(result.valid).toBe(false);
+      expect(result.missing).toContain(expected);
+    }
+  });
+
+  it("enforces exact public/private environment examples and bilingual operator inventories", async () => {
+    const documentSet = await documents();
+    const publicAssignments = documentSet.publicEnvExample.match(/^[A-Z][A-Z0-9_]*=.*$/gm) ?? [];
+    expect(publicAssignments).toEqual([
+      "VITE_DEPLOYMENT=production",
+      "VITE_ADAPTER=google",
+      "VITE_GOOGLE_CLIENT_ID=<google-oauth-web-client-id>",
+      "VITE_ALLOWED_HD=<workspace-hosted-domain>",
+    ]);
+    const privateKeys = (documentSet.privateEnvExample.match(/^[A-Z][A-Z0-9_]*=/gm) ?? []).map((entry) => entry.slice(0, -1));
+    expect(privateKeys).toEqual([
+      "VITE_GOOGLE_CLIENT_ID",
+      "VITE_ALLOWED_HD",
+      "GOOGLE_SPIKE_AUTHORIZED_ORIGINS",
+      "GOOGLE_SPIKE_ORDINARY_ACCOUNT",
+      "GOOGLE_SPIKE_ADMIN_ACCOUNT",
+      "GOOGLE_SPIKE_ROOM_A_CALENDAR_ID",
+      "GOOGLE_SPIKE_ROOM_B_CALENDAR_ID",
+    ]);
+
+    for (const document of [documentSet.korean, documentSet.english, documentSet.koreanRunbook, documentSet.englishRunbook]) {
+      for (const line of EXACT_CONTRACT_LINES) expect(document.split(/\r?\n/)).toContain(line);
+      expect(document).toContain("cp .env.example .env");
+      expect(document).toContain("chmod 600 .env .env.google-spike.local provisioning-receipt.local");
+      expect(document).toContain("git check-ignore -v .env .env.google-spike.local provisioning-receipt.local");
+      for (const marker of PINNED_GOOGLE_COMMANDS) expect(document).toContain(marker);
+    }
+
+    for (const [mutatedDocument, key, expected] of [
+      [documentSet.korean.replace(EXACT_CONTRACT_LINES[0], `${EXACT_CONTRACT_LINES[0]},EXTRA`), "korean", "ko:exact:public.env.keys"],
+      [documentSet.englishRunbook.replace(EXACT_CONTRACT_LINES[4], `${EXACT_CONTRACT_LINES[4]},EXTRA`), "englishRunbook", "en:runbook-exact:github.production_environment.variables"],
+      [documentSet.english.replace('"$MOLROOM_NODE" scripts/google-spike/validate-account-matrix.mjs', "validator removed"), "english", "en:section:release.env:validate-account-matrix.mjs"],
+    ]) {
+      const result = await validateReadmeParity(
+        key === "korean" ? mutatedDocument : documentSet.korean,
+        key === "english" ? mutatedDocument : documentSet.english,
+        validationOptions(documentSet, key.endsWith("Runbook") ? { [key]: mutatedDocument } : {}),
+      );
+      expect(result.valid).toBe(false);
+      expect(result.missing).toContain(expected);
+    }
+  });
+
+  it("keeps the Google setup operator-followable and preserves honest blocked states", async () => {
+    const documentSet = await documents();
+    for (const document of [documentSet.korean, documentSet.english, documentSet.koreanRunbook, documentSet.englishRunbook]) {
+      expect(document).toContain("Internal");
+      expect(document).toContain("Web application");
+      for (const marker of GOOGLE_SETUP_MARKERS) expect(document).toContain(marker);
+      expect(document).toContain("INCOMPLETE / UNOBSERVED");
+      expect(document).toContain("operatorVerified=false");
+      expect(document).toContain("TENANT_POLICY_BLOCKED");
+    }
+
+    const swapped = documentSet.englishRunbook
+      .replace("cp .env.example .env", "ORDER_SWAP_A")
+      .replace("cp .env.google-spike.example .env.google-spike.local", "cp .env.example .env")
+      .replace("ORDER_SWAP_A", "cp .env.google-spike.example .env.google-spike.local");
+    const result = await validateReadmeParity(documentSet.korean, documentSet.english, validationOptions(documentSet, {
+      englishRunbook: swapped,
+    }));
+    expect(result.valid).toBe(false);
+    expect(result.missing).toContain("en:runbook:operator-order");
+  });
+
+  it("treats Google origins/scopes as exact tokens and requires imperative, unobserved operator wording", async () => {
+    const documentSet = await documents();
+    for (const document of [documentSet.korean, documentSet.koreanRunbook]) {
+      for (const marker of OPERATOR_WORDING.ko) expect(document).toContain(marker);
+    }
+    for (const document of [documentSet.english, documentSet.englishRunbook]) {
+      for (const marker of OPERATOR_WORDING.en) expect(document).toContain(marker);
+    }
+
+    for (const [overrides, expected] of [
+      [
+        { english: documentSet.english.replace("http://localhost:5184", "http://localhost:5184.evil.example") },
+        "en:section:release.google-oauth:http://localhost:5184",
+      ],
+      [
+        { koreanRunbook: documentSet.koreanRunbook.replace(
+          "https://www.googleapis.com/auth/calendar.events",
+          "https://www.googleapis.com/auth/calendar.events.extra",
+        ) },
+        "ko:runbook-section:runbook.prerequisites:https://www.googleapis.com/auth/calendar.events",
+      ],
+      [
+        { korean: documentSet.korean.replace(OPERATOR_WORDING.ko[0], "운영 설정이 존재합니다.") },
+        "ko:operator-wording",
+      ],
+      [
+        { englishRunbook: documentSet.englishRunbook.replace(OPERATOR_WORDING.en[1], "The state is successful.") },
+        "en:runbook:operator-wording",
+      ],
+    ]) {
+      const result = await validateReadmeParity(
+        overrides.korean ?? documentSet.korean,
+        overrides.english ?? documentSet.english,
+        validationOptions(documentSet, {
+          ...(overrides.koreanRunbook === undefined ? {} : { koreanRunbook: overrides.koreanRunbook }),
+          ...(overrides.englishRunbook === undefined ? {} : { englishRunbook: overrides.englishRunbook }),
+        }),
+      );
+      expect(result.valid).toBe(false);
+      expect(result.missing).toContain(expected);
+    }
+  });
+
+  it("documents the protected GitHub/AWS bootstrap and trusted controller sequence without live claims", async () => {
+    const documentSet = await documents();
+    const releaseMarkers = [
+      "infra/aws/molroom-bootstrap.yml",
+      "ControllerTag=molroom-release-controller-v1",
+      "HostedZoneId",
+      "ProductionStackName",
+      "ExistingGitHubOidcProviderArn",
+      "repo:kim-song-jun/meeting-wrapper:environment:production",
+      "required reviewer",
+      "self-approval",
+      "v*",
+      ".github/workflows/security-gate.yml",
+      ".github/workflows/release-controller.yml",
+      "candidate_run_id",
+      "security_gate_run_id",
+      "execute_cutover",
+      "PLAN",
+      "repair",
+      "rollback",
+      "smoke",
+      "restore",
+    ];
+    for (const document of [documentSet.korean, documentSet.english, documentSet.koreanRunbook, documentSet.englishRunbook]) {
+      for (const marker of releaseMarkers) expect(document).toContain(marker);
+      expect(document).toContain("AWS SSO");
+      expect(document).toContain("us-east-1");
+      expect(document).toContain("no long-lived AWS");
+      expect(document).not.toContain("github.workflow_sha");
+    }
+    expect(documentSet.productionSpec).toContain(`refs/tags/${CONTROLLER_TAG}`);
+    expect(documentSet.productionSpec).toContain(CONTROLLER_SHA);
+    expect(documentSet.productionSpec).toContain("approved security-gate workflow blob");
+    expect(documentSet.productionSpec).toContain("dispatch_actor");
+    expect(documentSet.productionSpec).not.toContain("github.workflow_sha");
+
+    for (const [productionSpec, error] of [
+      [documentSet.productionSpec.replace(CONTROLLER_SHA, "PHASE_1_CONTROLLER_SHA"), "spec:controller-sha"],
+      [`${documentSet.productionSpec}\n\`\${{ github.workflow_sha }}\`\n`, "spec:forbidden:github.workflow_sha"],
+      [documentSet.productionSpec.replace("dispatch_actor", "actor binding removed"), "spec:security-gate-actor"],
+    ]) {
+      const result = await validateReadmeParity(documentSet.korean, documentSet.english, validationOptions(documentSet, { productionSpec }));
+      expect(result.valid).toBe(false);
+      expect(result.missing).toContain(error);
+    }
+  });
+
+  it("binds spec section 11 to the actual canonical eight README sections", async () => {
+    const documentSet = await documents();
+    const section = documentSet.productionSpec.slice(
+      documentSet.productionSpec.indexOf("## 11. 한영 문서 구조"),
+      documentSet.productionSpec.indexOf("## 12. Wave 계획"),
+    );
+    expect(section.split(/\r?\n/)).toContain(README_SECTION_CONTRACT);
+    expect([...section.matchAll(/^\d+\. \[([^\]]+)]/gm)].map((match) => match[1])).toEqual([
+      "release.toolchain",
+      "release.google-oauth",
+      "release.env",
+      "release.validation",
+      "release.aws-oidc",
+      "release.first-release",
+      "release.rollback",
+      "release.security",
+    ]);
+    expect(section).not.toMatch(/^\d{2,}\. /m);
+
+    const productionSpec = documentSet.productionSpec.replace(
+      README_SECTION_CONTRACT,
+      README_SECTION_CONTRACT + "\n9. [release.extra] stale chapter",
+    );
+    const result = await validateReadmeParity(
+      documentSet.korean,
+      documentSet.english,
+      validationOptions(documentSet, { productionSpec }),
+    );
+    expect(result.valid).toBe(false);
+    expect(result.missing).toContain("spec:readme-sections");
   });
 });

@@ -1,101 +1,161 @@
-# MolRoom Production Release Runbook (English)
+# MolRoom production release runbook
 
-This is the execution checklist for [README.en.md](../../README.en.md). Google
-provisioning is currently `INCOMPLETE / UNOBSERVED`, and AWS/GitHub OIDC deploy
-automation is defined but live success is not verified; this runbook describes
-prerequisites, not passed gates.
+Google provisioning and the account matrix remain INCOMPLETE / UNOBSERVED
+with operatorVerified=false. AWS bootstrap, production deployment, smoke, and
+restore have not been executed or observed. This runbook defines the sequence
+for authorized humans after external gates; it makes no live claim.
 
 ## Prerequisites
 
-- Node `24.19.0`, npm `11.17.0`, and serial verification
-- The 14-step [Google provisioning gate](../spikes/google-workspace/provisioning.md)
-  with `COMPLETE` evidence
-- Organization-owned Google Cloud project and `Internal` OAuth Web client
-- origins: `http://localhost:5184`, `https://molroom.molcube.com`
-- initial scopes: Calendar events, Calendar readonly, Drive appdata
-- no client secret, refresh token, MFA code, or AWS access key
+Use Node 24.19.0 and npm 11.17.0 from one pinned installation. Apply host
+preflight and owned-PID cleanup. Follow the
+[provisioning guide](../spikes/google-workspace/provisioning.md) exactly.
+
+An authorized operator must perform these steps.
+Do not record success until a human has observed it.
+
+Use a Google Cloud project owned by the molcube.com Workspace organization.
+Set the OAuth audience to Internal and client type to Web application. Register
+only `http://localhost:5184` and `https://molroom.molcube.com` as Authorized
+JavaScript origins. Enable Calendar API, Drive API, and People API. Restrict
+the initial scopes to
+`https://www.googleapis.com/auth/calendar.events`,
+`https://www.googleapis.com/auth/calendar.readonly`, and
+`https://www.googleapis.com/auth/drive.appdata`.
+
+Prepare distinct ordinary and room-writer-admin accounts plus room-a and
+room-b Calendar resources. Inspect each ACL for domain read, ordinary
+non-writer, and room-writer-admin writer, then observe each room's auto-accept
+in the UI. Isolate exactly four profiles: ordinary-chrome-desktop,
+ordinary-safari-desktop, admin-chrome-desktop, and admin-safari-desktop.
+A block is TENANT_POLICY_BLOCKED; keep INCOMPLETE / UNOBSERVED and
+operatorVerified=false rather than bypassing or guessing.
+
+The exact GitHub/AWS setup inventory is:
+
+~~~text
+public.env.keys=VITE_DEPLOYMENT,VITE_ADAPTER,VITE_GOOGLE_CLIENT_ID,VITE_ALLOWED_HD
+private.env.keys=VITE_GOOGLE_CLIENT_ID,VITE_ALLOWED_HD,GOOGLE_SPIKE_AUTHORIZED_ORIGINS,GOOGLE_SPIKE_ORDINARY_ACCOUNT,GOOGLE_SPIKE_ADMIN_ACCOUNT,GOOGLE_SPIKE_ROOM_A_CALENDAR_ID,GOOGLE_SPIKE_ROOM_B_CALENDAR_ID
+task5.env.keys=GOOGLE_SPIKE_ORDINARY_ACCOUNT,GOOGLE_SPIKE_ADMIN_ACCOUNT,GOOGLE_SPIKE_ROOM_A_CALENDAR_ID,GOOGLE_SPIKE_ROOM_B_CALENDAR_ID
+github.repository.variables=VITE_GOOGLE_CLIENT_ID,VITE_ALLOWED_HD
+github.production_environment.variables=AWS_ACCOUNT_ID,AWS_DEPLOY_ROLE_ARN,CLOUDFORMATION_ROLE_ARN,HOSTED_ZONE_ID
+release.controller.ref=refs/tags/molroom-release-controller-v1
+release.controller.sha=7ba2814f491dccee9462c7bf01958dd28600b048
+release.controller.inputs=mode,version,target_sha,candidate_run_id,security_gate_run_id,execute_cutover,confirmation
+~~~
+
+On the GitHub production Environment, configure a required reviewer, prohibit
+self-approval, and restrict deployment refs to the protected
+molroom-release-controller-v1 tag. Protect that controller tag and v* tags.
+Do not store AWS access keys (no long-lived AWS credentials).
+
+As an AWS SSO administrator, never AWS root, deploy
+infra/aws/molroom-bootstrap.yml in us-east-1. Parameters are
+ControllerTag=molroom-release-controller-v1, HostedZoneId,
+ProductionStackName=molroom-production, optional
+ExistingGitHubOidcProviderArn, and
+GitHubOidcSubject=repo:kim-song-jun/meeting-wrapper:environment:production.
+The trust workflow_ref is
+.github/workflows/release-controller.yml@refs/tags/molroom-release-controller-v1.
+Map GitHubDeployRoleArn→AWS_DEPLOY_ROLE_ARN,
+CloudFormationExecutionRoleArn→CLOUDFORMATION_ROLE_ARN, account ID→AWS_ACCOUNT_ID,
+and HostedZoneId→HOSTED_ZONE_ID.
+
+~~~bash
+AWS_CLI="${AWS_CLI:?set to the approved AWS CLI executable}"
+"$AWS_CLI" sts get-caller-identity
+"$AWS_CLI" cloudformation deploy --region us-east-1 --stack-name molroom-bootstrap --template-file infra/aws/molroom-bootstrap.yml --capabilities CAPABILITY_NAMED_IAM --parameter-overrides ControllerTag=molroom-release-controller-v1 HostedZoneId="${HOSTED_ZONE_ID:?set hosted zone}" ProductionStackName=molroom-production ExistingGitHubOidcProviderArn="${EXISTING_GITHUB_OIDC_PROVIDER_ARN:-}" GitHubOidcSubject=repo:kim-song-jun/meeting-wrapper:environment:production
+~~~
+
+.github/workflows/release.yml is the unprivileged candidate producer, and
+.github/workflows/security-gate.yml is the approved gate. The controller runs
+from an independently protected immutable tag/SHA and binds the approved
+security-gate workflow blob plus dispatch_actor to the server run. PLAN,
+release, repair, rollback, smoke, and restore all require real reviewer
+approval and observation.
 
 ## Sequence
 
-1. The operator creates ignored `0600` env/receipt files from `.env.example`.
-2. Run `validate-evidence`, `validate-provisioning`, and the sensitive scan.
-3. Run `npm run typecheck`, `npm test`, `npm run build`,
-   `npm run scan:production-bundle`, and `npm run validate:readmes`
-   serially.
-4. Use required reviewer approval on the GitHub `production` Environment and
-   OIDC role to run `.github/workflows/release.yml`. The security gate is
-   `.github/workflows/security-gate.yml`; provision
-   `infra/aws/molroom-bootstrap.yml` before `infra/aws/molroom-production.yml`.
-   Current GitHub environments=0, AWS session expired, and
-   `molroom.molcube.com` is unresolved.
-5. Run the following clean-room PLAN commands; verify the same-SHA artifact checksum,
-   immutable `releases/${release_sha}/` prefix, CloudFront invalidation, Google
-   evidence, and production smoke result; local tag/push is prohibited and the
-   protected production workflow alone creates the tag and GitHub Release;
-   local plans use `--dry-run` only;
-   then use the guarded clean-tree SHA sequence to create the `v0.1.0` release.
-6. Smoke `https://molroom.molcube.com` for TLS, deep links, login/logout,
-   room read, create/edit/cancel, and secret exposure.
+1. Confirm the exact target SHA is origin/main.
+2. Dispatch .github/workflows/release.yml with target_sha and retain its
+   candidate artifact.
+3. Run the approved security gate for the same SHA and retain
+   security-gate-<sha>.
+4. From molroom-release-controller-v1 at exact SHA
+   7ba2814f491dccee9462c7bf01958dd28600b048, dispatch the protected release workflow
+   .github/workflows/release-controller.yml with mode, version,
+   target_sha, candidate_run_id, security_gate_run_id, execute_cutover, and
+   confirmation.
+5. For mode=release, review PLAN with execute_cutover=false before approving
+   execute_cutover=true and confirmation=RELEASE.
 
-```bash
-release_sha="$(git rev-parse HEAD)"
-node scripts/build-release-manifest.mjs --artifact-root dist --commit-sha "$release_sha" --package-version "$(node -p 'require(\"./package.json\").version')" --source-date-epoch "$(git show -s --format=%ct "$release_sha")"
-node scripts/upload-release-prefix.mjs --artifact-root dist --bucket "molroom-<account>-us-east-1-origin" --commit-sha "$release_sha" --dry-run
-npm run verify:release-contract
-```
+repair uses confirmation=REPAIR to restore active-target metadata/Release
+without cutover. rollback uses confirmation=ROLLBACK and only an existing
+verified prefix. Keep fresh prepare→protected deploy→fresh publish authority
+separation. After invalidation, a failed target-SHA smoke restores prior state
+and runs restored-SHA smoke. A failed first release restores
+UNRELEASED/false. Workflow-file self-pinning is not a trust boundary.
+
+## Committed archive clean-room verification
+
+Even when the shared worktree is dirty, this command inspects only a committed
+archive in a separate temp area and emits redacted output plus the retained
+artifact/receipt. Candidate execution receives no local AWS SSO or GitHub
+credential.
+
+~~~bash
+node scripts/verify-release-archive.mjs
+~~~
+
+Do not push, tag, or release unless this exact one-line gate is green.
 
 ## Rollback
 
-Do not move tags or force-push. Verify and reuse the approved **previous artifact**
-already present at immutable `releases/${release_sha}/`; do not re-upload or copy it.
-Change only `ActiveReleaseSha`, invalidate CloudFront, run smoke, and record the
-incident. The protected workflow verifies and reuses the remote immutable prefix;
-it does not build, upload, or copy a local artifact. Follow [SECURITY.md](../../SECURITY.md) for
-secret rotation.
+mode=rollback verifies and reuses the exact objects, checksums, and metadata in
+the immutable releases/${release_sha}/ prefix; it is not re-upload/copy.
+Capture prior ActiveReleaseSha and DistributionEnabled before
+cutover/invalidation/smoke. A failed restore or restored-SHA smoke is fatal;
+never move a tag or force-push around it.
 
 ## Operator input contract
 
-`.env.google-spike.local` permits exactly seven unquoted keys. Blank lines and
-`#` comments are the only extras; duplicate/unknown keys, quoting, and
-interpolation fail closed.
+Copy the exact public four from [.env.example](../../.env.example) to the
+ignored .env and the exact private seven from
+[.env.google-spike.example](../../.env.google-spike.example) to
+.env.google-spike.local. The allowed keys are VITE_GOOGLE_CLIENT_ID,
+VITE_ALLOWED_HD, GOOGLE_SPIKE_AUTHORIZED_ORIGINS,
+GOOGLE_SPIKE_ORDINARY_ACCOUNT, GOOGLE_SPIKE_ADMIN_ACCOUNT,
+GOOGLE_SPIKE_ROOM_A_CALENDAR_ID, and GOOGLE_SPIKE_ROOM_B_CALENDAR_ID; Task 5
+requires only the last four.
+Receipt closed keys are schemaVersion, observation, appType, domain,
+clientIdSuffix, workspaceEdition, enabledApis, initialScopes,
+directoryScopeTiming, origins, accounts, rooms, tenantPolicy, and
+operatorVerified.
 
-```dotenv
-VITE_GOOGLE_CLIENT_ID=<web-client-id>
-VITE_ALLOWED_HD=molcube.com
-GOOGLE_SPIKE_AUTHORIZED_ORIGINS=http://localhost:5184,https://molroom.molcube.com
-GOOGLE_SPIKE_ORDINARY_ACCOUNT=<ordinary-account>
-GOOGLE_SPIKE_ADMIN_ACCOUNT=<room-writer-admin-account>
-GOOGLE_SPIKE_ROOM_A_CALENDAR_ID=<room-a-calendar-identifier>
-GOOGLE_SPIKE_ROOM_B_CALENDAR_ID=<room-b-calendar-identifier>
-```
+~~~bash
+MOLROOM_NODE_ROOT="${MOLROOM_NODE_ROOT:?set to the Node 24.19.0 installation root}"
+MOLROOM_NODE="$MOLROOM_NODE_ROOT/bin/node"
+MOLROOM_NPM_CLI="$MOLROOM_NODE_ROOT/lib/node_modules/npm/bin/npm-cli.js"
+test -x "$MOLROOM_NODE"
+test -r "$MOLROOM_NPM_CLI"
+test "$("$MOLROOM_NODE" --version)" = "v24.19.0"
+test "$("$MOLROOM_NODE" "$MOLROOM_NPM_CLI" --version)" = "11.17.0"
 
-`provisioning-receipt.local` is closed JSON and permits only `schemaVersion`,
-`observation`, `appType`, `domain`, `clientIdSuffix`, `workspaceEdition`,
-`enabledApis`, `initialScopes`, `directoryScopeTiming`, `origins`, `accounts`,
-`rooms`, `tenantPolicy`, and `operatorVerified`. The validator derives `kind`,
-`probeId`, `status`, and `capability`. Initial state is
-`INCOMPLETE / UNOBSERVED`, `observation=UNOBSERVED`, `operatorVerified=false`.
-
-```bash
 umask 077
-spike_tmp_dir="$(mktemp -d "${TMPDIR:-/tmp}/molroom-spike.XXXXXX")"
-trap 'rm -f -- "$spike_tmp_dir"/*; rmdir -- "$spike_tmp_dir"' EXIT
-touch .env.google-spike.local provisioning-receipt.local
-chmod 600 .env.google-spike.local provisioning-receipt.local
-git check-ignore -v .env.google-spike.local provisioning-receipt.local
-node scripts/google-spike/validate-evidence.mjs docs/spikes/google-workspace/evidence/provisioning.json
-node scripts/google-spike/validate-provisioning.mjs .env.google-spike.local provisioning-receipt.local
-node scripts/google-spike/scan-sensitive-paths.mjs --redact docs/spikes/google-workspace/provisioning.md docs/spikes/google-workspace/evidence/provisioning.json scripts/google-spike/lib/provisioning.mjs scripts/google-spike/lib/provisioning.test.mjs scripts/google-spike/validate-provisioning.mjs
-```
+cp .env.example .env
+cp .env.google-spike.example .env.google-spike.local
+touch provisioning-receipt.local
+chmod 600 .env .env.google-spike.local provisioning-receipt.local
+git check-ignore -v .env .env.google-spike.local provisioning-receipt.local
 
-`COMPLETE` is derived only after every live fact is observed and the three
-commands succeed in that order.
-Pass only the bounded safe paths enumerated above to the scanner; never print or
-scan the ignored `0600` env/receipt files directly.
-The tag prerequisite is `test "$(git rev-parse origin/main)" = "$release_sha"`.
+"$MOLROOM_NODE" scripts/google-spike/validate-evidence.mjs docs/spikes/google-workspace/evidence/provisioning.json
+"$MOLROOM_NODE" scripts/google-spike/validate-provisioning.mjs .env.google-spike.local provisioning-receipt.local
+"$MOLROOM_NODE" scripts/google-spike/validate-account-matrix.mjs docs/spikes/google-workspace/account-matrix.json .env.google-spike.local
+"$MOLROOM_NODE" scripts/google-spike/scan-sensitive-paths.mjs --redact docs/spikes/google-workspace/provisioning.md docs/spikes/google-workspace/evidence/provisioning.json scripts/google-spike/lib/provisioning.mjs scripts/google-spike/lib/provisioning.test.mjs scripts/google-spike/validate-provisioning.mjs
+~~~
 
-```bash
-git fetch origin main --quiet
-release_sha="$(git rev-parse HEAD)"
-test "$(git rev-parse origin/main)" = "${release_sha}"
-```
+Never enter a secret, password, MFA value, token, refresh material, or
+service-account material. Real bootstrap, GitHub protection, Google human
+evidence, and release smoke remain external; do not report configured,
+deployed, or live before them. Follow [SECURITY.md](../../SECURITY.md) for
+incident response.

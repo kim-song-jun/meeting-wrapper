@@ -1,163 +1,203 @@
 # MolRoom 운영·릴리즈 가이드
 
-이 문서는 Google Cloud 설정부터 AWS CloudFront 배포·롤백까지의 재현 절차입니다.
-현재 상태는 **출시 전**입니다. 브라우저 runtime은 mock auth/booking adapter를
-사용하고, Google provisioning evidence는 `INCOMPLETE / UNOBSERVED`이며,
-AWS CloudFormation·CloudFront·GitHub OIDC 배포 경로는 committed/defined 되어
-있지만 아직 configured/deployed/live 상태가 아닙니다.
+이 문서는 Google Cloud/Workspace 준비부터 AWS 배포·복구까지 운영자가 그대로
+따를 수 있는 순서입니다. 현재 브라우저 runtime은 mock adapter를 사용합니다.
+Google evidence와 계정 행렬은 INCOMPLETE / UNOBSERVED이며
+operatorVerified=false입니다. AWS bootstrap, OIDC, CloudFormation, CloudFront,
+DNS, smoke, restore는 실제 계정에서 실행·관찰되지 않았습니다.
 
 ## [release.toolchain] 1. 고정 도구와 안전한 시작
 
-Node `24.19.0`, npm `11.17.0`을 사용합니다. 테스트·빌드 전 host load,
-memory/swap, Node·브라우저 프로세스와 포트를 확인하고 직렬 실행합니다.
-작업 중 만든 PID·포트는 끝에서 회수합니다. 공유 작업트리에서 stash, reset,
-clean, branch 전환을 하지 않습니다.
+Node 24.19.0과 npm 11.17.0 한 벌만 사용합니다. repository root에서 다음처럼
+설치 root를 지정하고, 다른 사람의 home 경로나 shell의 bare node/npm에
+의존하지 않습니다. 테스트 전에는 host load, swap, 소유 PID와 포트를 확인합니다.
 
-```bash
-node --version                 # v24.19.0
-npm --version                  # 11.17.0
-npm ci
-npm run verify:toolchain
-```
+~~~bash
+MOLROOM_NODE_ROOT="${MOLROOM_NODE_ROOT:?set to the Node 24.19.0 installation root}"
+MOLROOM_NODE="$MOLROOM_NODE_ROOT/bin/node"
+MOLROOM_NPM_CLI="$MOLROOM_NODE_ROOT/lib/node_modules/npm/bin/npm-cli.js"
+test -x "$MOLROOM_NODE"
+test -r "$MOLROOM_NPM_CLI"
+test "$("$MOLROOM_NODE" --version)" = "v24.19.0"
+test "$("$MOLROOM_NODE" "$MOLROOM_NPM_CLI" --version)" = "11.17.0"
+~~~
 
-## [release.google-oauth] 2. Google OAuth와 Workspace
+## [release.google-oauth] 2. Google Cloud OAuth와 Workspace
 
-권한 있는 운영자가 [provisioning gate](docs/spikes/google-workspace/provisioning.md)의
-14단계를 자신의 브라우저에서 수행합니다. 조직 소유 프로젝트와 `Internal`
-OAuth를 사용하고 Web client origin에는 다음 두 값만 둡니다.
+권한 있는 운영자가 직접 수행하십시오.
+사람이 관찰하기 전에는 성공으로 기록하지 마십시오.
 
-```text
+[Google provisioning gate](docs/spikes/google-workspace/provisioning.md)를 먼저
+완료합니다. molcube.com Workspace 조직 소유 Cloud 프로젝트에서 OAuth consent
+audience를 Internal로 두고, client type이 Web application인 OAuth client를
+만듭니다. SPA용 client secret은 다운로드하거나 사용하지 않습니다.
+Authorized JavaScript origins는 정확히 다음 둘입니다.
+
+~~~text
 http://localhost:5184
 https://molroom.molcube.com
-```
+~~~
 
-Calendar/Drive/People API를 확인하고 초기 scope는 다음 세 개로 제한합니다.
-People directory scope는 Task 11까지 지연합니다.
+Calendar API, Drive API, People API가 켜져 있어야 합니다. 초기 consent scope는
+아래 셋뿐이며 People directory scope는 별도 incremental-consent gate까지
+미룹니다.
 
-```text
+~~~text
 https://www.googleapis.com/auth/calendar.events
 https://www.googleapis.com/auth/calendar.readonly
 https://www.googleapis.com/auth/drive.appdata
-```
+~~~
 
-브라우저 SPA client secret은 만들거나 다운로드하지 않습니다. 전체 client ID,
-refresh material, 비밀번호, MFA 코드는 저장소에 기록하지 않습니다.
+hosted domain의 서로 다른 실제 계정 두 개를 ordinary와 room-writer-admin으로
+지정하고, Calendar resource 두 개를 room-a와 room-b로 매핑합니다. 두 room의
+ACL은 domain read를 허용하고 ordinary에는 writer를 주지 않으며
+room-writer-admin에만 writer를 줍니다. Google Admin과 Calendar UI에서 각 room의
+auto-accept가 충돌 없는 초대를 수락하도록 직접 확인합니다.
 
-## [release.env] 3. 운영 env와 검증
+운영자 소유의 새 profile 네 개
+ordinary-chrome-desktop, ordinary-safari-desktop, admin-chrome-desktop,
+admin-safari-desktop을 분리합니다. 앞의 둘에는 ordinary만, 뒤의 둘에는
+room-writer-admin만 로그인합니다. 계정 전환기·복수 로그인·guest/incognito는
+대체 수단이 아닙니다. 권한이나 tenant policy가 막히면 우회하지 않고
+TENANT_POLICY_BLOCKED로 기록합니다. 사람이 모든 사실을 확인하기 전에는
+INCOMPLETE / UNOBSERVED와 operatorVerified=false를 유지합니다.
 
-운영자가 [.env.example](.env.example)를 참고해 ignored `.env.google-spike.local`과
-`provisioning-receipt.local`을 직접 만들고 `0600`으로 제한합니다.
-`VITE_GOOGLE_CLIENT_ID`를 포함해 placeholder가 아닌 관찰된 값만 사용합니다.
+## [release.env] 3. public/private env와 로컬 검증
 
-허용되는 정확한 7개 env key는 다음뿐입니다. 값은 unquoted `KEY=value`이며
-blank line과 `#` comment만 추가할 수 있습니다. account와 calendar 값은
-로컬 파일에만 두고 committed 문서와 evidence에는 alias만 남깁니다.
+[.env.example](.env.example)은 브라우저에 공개되는 정확한 네 VITE assignment의
+committed template입니다. [.env.google-spike.example](.env.google-spike.example)은
+비밀이 아닌 식별자만 허용하는 정확한 일곱-key private template이며, 그중 Task 5
+필수 subset은 계정 둘과 room calendar 둘입니다.
 
-```dotenv
-VITE_GOOGLE_CLIENT_ID=<web-client-id>
-VITE_ALLOWED_HD=molcube.com
-GOOGLE_SPIKE_AUTHORIZED_ORIGINS=http://localhost:5184,https://molroom.molcube.com
-GOOGLE_SPIKE_ORDINARY_ACCOUNT=<ordinary-account>
-GOOGLE_SPIKE_ADMIN_ACCOUNT=<room-writer-admin-account>
-GOOGLE_SPIKE_ROOM_A_CALENDAR_ID=<room-a-calendar-identifier>
-GOOGLE_SPIKE_ROOM_B_CALENDAR_ID=<room-b-calendar-identifier>
-```
+~~~text
+public.env.keys=VITE_DEPLOYMENT,VITE_ADAPTER,VITE_GOOGLE_CLIENT_ID,VITE_ALLOWED_HD
+private.env.keys=VITE_GOOGLE_CLIENT_ID,VITE_ALLOWED_HD,GOOGLE_SPIKE_AUTHORIZED_ORIGINS,GOOGLE_SPIKE_ORDINARY_ACCOUNT,GOOGLE_SPIKE_ADMIN_ACCOUNT,GOOGLE_SPIKE_ROOM_A_CALENDAR_ID,GOOGLE_SPIKE_ROOM_B_CALENDAR_ID
+task5.env.keys=GOOGLE_SPIKE_ORDINARY_ACCOUNT,GOOGLE_SPIKE_ADMIN_ACCOUNT,GOOGLE_SPIKE_ROOM_A_CALENDAR_ID,GOOGLE_SPIKE_ROOM_B_CALENDAR_ID
+~~~
 
-receipt는 다음 closed JSON key만 사용합니다: `schemaVersion`, `observation`,
-`appType`, `domain`, `clientIdSuffix`, `workspaceEdition`, `enabledApis`,
-`initialScopes`, `directoryScopeTiming`, `origins`, `accounts`, `rooms`,
-`tenantPolicy`, `operatorVerified`. `kind`, `probeId`, `status`, `capability`는
-validator가 파생하므로 입력하지 않습니다. 실제 확인 전에는
-`observation=UNOBSERVED`, `operatorVerified=false`를 유지합니다.
+receipt는 다음 closed JSON key만 허용합니다: schemaVersion, observation, appType,
+domain, clientIdSuffix, workspaceEdition, enabledApis, initialScopes,
+directoryScopeTiming, origins, accounts, rooms, tenantPolicy, operatorVerified.
+비밀번호, MFA, OAuth client secret, token, refresh material, service-account
+material은 어느 로컬 env에도 넣지 않습니다.
 
-```bash
+아래 순서로 ignored 0600 파일을 만들고 네 validator를 실행합니다.
+
+~~~bash
 umask 077
-spike_tmp_dir="$(mktemp -d "${TMPDIR:-/tmp}/molroom-spike.XXXXXX")"
-trap 'rm -f -- "$spike_tmp_dir"/*; rmdir -- "$spike_tmp_dir"' EXIT
-touch .env.google-spike.local provisioning-receipt.local
-chmod 600 .env.google-spike.local provisioning-receipt.local
-git check-ignore -v .env.google-spike.local provisioning-receipt.local
-```
+cp .env.example .env
+cp .env.google-spike.example .env.google-spike.local
+touch provisioning-receipt.local
+chmod 600 .env .env.google-spike.local provisioning-receipt.local
+git check-ignore -v .env .env.google-spike.local provisioning-receipt.local
 
-`COMPLETE`는 모든 live fact를 관찰하고 exact `validate-evidence`,
-`validate-provisioning`, `scan-sensitive-paths` 순서가 성공할 때만 파생됩니다.
+"$MOLROOM_NODE" scripts/google-spike/validate-evidence.mjs docs/spikes/google-workspace/evidence/provisioning.json
+"$MOLROOM_NODE" scripts/google-spike/validate-provisioning.mjs .env.google-spike.local provisioning-receipt.local
+"$MOLROOM_NODE" scripts/google-spike/validate-account-matrix.mjs docs/spikes/google-workspace/account-matrix.json .env.google-spike.local
+"$MOLROOM_NODE" scripts/google-spike/scan-sensitive-paths.mjs --redact docs/spikes/google-workspace/provisioning.md docs/spikes/google-workspace/evidence/provisioning.json scripts/google-spike/lib/provisioning.mjs scripts/google-spike/lib/provisioning.test.mjs scripts/google-spike/validate-provisioning.mjs
+~~~
 
-```bash
-umask 077
-chmod 600 .env.google-spike.local provisioning-receipt.local
-git check-ignore -v .env.google-spike.local provisioning-receipt.local
-node scripts/google-spike/validate-evidence.mjs docs/spikes/google-workspace/evidence/provisioning.json
-node scripts/google-spike/validate-provisioning.mjs .env.google-spike.local provisioning-receipt.local
-node scripts/google-spike/scan-sensitive-paths.mjs --redact docs/spikes/google-workspace/provisioning.md docs/spikes/google-workspace/evidence/provisioning.json scripts/google-spike/lib/provisioning.mjs scripts/google-spike/lib/provisioning.test.mjs scripts/google-spike/validate-provisioning.mjs
-```
+검증 실패나 미관찰 값은 성공으로 바꾸지 않습니다. COMPLETE는 실제 운영자 증거와
+validator가 함께 증명할 때만 파생합니다.
 
-상태가 `COMPLETE`가 아니면 다음 capability probe나 production runtime 작업을
-시작하지 않습니다.
+## [release.validation] 4. 정적 검증과 candidate gate
 
-## [release.validation] 4. 검증과 빌드 gate
+같은 pinned toolchain으로 필요한 명령만 직렬 실행합니다.
 
-```bash
-npm run typecheck
-npm test
-npm run build
-npm run scan:production-bundle
-npm run validate:readmes
-node scripts/build-design-standalone.mjs
-node scripts/validate-design-examples.mjs
-```
+~~~bash
+"$MOLROOM_NODE" "$MOLROOM_NPM_CLI" ci
+"$MOLROOM_NODE" "$MOLROOM_NPM_CLI" run typecheck
+"$MOLROOM_NODE" "$MOLROOM_NPM_CLI" test
+"$MOLROOM_NODE" "$MOLROOM_NPM_CLI" run build
+"$MOLROOM_NODE" "$MOLROOM_NPM_CLI" run scan:production-bundle
+"$MOLROOM_NODE" "$MOLROOM_NPM_CLI" run validate:readmes
+"$MOLROOM_NODE" "$MOLROOM_NPM_CLI" run verify:release-contract
+~~~
 
-Production bundle에 mock identity, QA backdoor, title sentinel, OAuth secret,
-AWS key가 없어야 합니다. UI 변경은 실제 화면 screenshot도 확인합니다.
-`npm run build:release-manifest`, `npm run upload:release-prefix`,
-`npm run verify:release-contract`로 release contract를 확인합니다.
+.github/workflows/release.yml은 target_sha만 받는 credential-free candidate
+producer입니다. exact four public VITE values 외 secret, OIDC, production
+Environment, write permission이 없고, protected annotated controller tag의 trusted
+verifier로 disposable container를 제어한 뒤 retained artifact를 만듭니다.
 
-## [release.aws-oidc] 5. GitHub Environment와 OIDC
+## [release.aws-oidc] 5. GitHub와 AWS bootstrap
 
-GitHub Environment, OIDC role, AWS workflow는 다음 canonical 경로를 사용합니다:
-`.github/workflows/release.yml`, `.github/workflows/security-gate.yml`,
-`infra/aws/molroom-bootstrap.yml`, `infra/aws/molroom-production.yml`.
-현재 GitHub environments=0, AWS session expired, `molroom.molcube.com` unresolved입니다.
-구성 시
-`production` Environment required reviewer와 tag 보호를 설정하고, repository와
-Environment에 제한된 AWS OIDC role만 사용합니다. 장기 AWS access key는 만들지
-않습니다. CloudFormation은 private S3, CloudFront Origin Access Control, ACM
-(`us-east-1`), Route 53 alias `molroom.molcube.com`, SPA fallback과 security
-headers를 재현해야 합니다. 실제 IDs·ARN·client ID는 문서에 쓰지 않습니다.
+다음 줄은 설정 inventory의 exact contract입니다.
 
-## [release.first-release] 6. 첫 릴리즈와 smoke
+~~~text
+github.repository.variables=VITE_GOOGLE_CLIENT_ID,VITE_ALLOWED_HD
+github.production_environment.variables=AWS_ACCOUNT_ID,AWS_DEPLOY_ROLE_ARN,CLOUDFORMATION_ROLE_ARN,HOSTED_ZONE_ID
+release.controller.ref=refs/tags/molroom-release-controller-v1
+release.controller.sha=7ba2814f491dccee9462c7bf01958dd28600b048
+release.controller.inputs=mode,version,target_sha,candidate_run_id,security_gate_run_id,execute_cutover,confirmation
+~~~
 
-Google provisioning `COMPLETE`, Google runtime acceptance, security scan High/
-Critical 0, CI build/bundle scan, CloudFront deploy가 같은 commit에서 통과한
-뒤에만 GitHub Release를 만듭니다.
+GitHub repository variables에는 위 두 VITE 값만 둡니다. production Environment에는
+위 네 AWS 값을 두고 required reviewer를 지정하며 self-approval을 금지합니다.
+deployment branch/tag restriction은 protected controller tag
+molroom-release-controller-v1만 허용합니다. controller tag와 v* release tag를
+immutable/protected로 만들고 장기 access key를 저장하지 않습니다
+(no long-lived AWS credentials).
 
-```bash
-git fetch origin main --quiet
-release_sha="$(git rev-parse HEAD)"
-test -z "$(git status --porcelain)"
-git diff --quiet
-git diff --cached --quiet
-test "$(git rev-parse origin/main)" = "${release_sha}"
-node scripts/build-release-manifest.mjs --artifact-root dist --commit-sha "${release_sha}" --package-version "$(node -p 'require(\"./package.json\").version')" --source-date-epoch "$(git show -s --format=%ct "${release_sha}")"
-node scripts/upload-release-prefix.mjs --artifact-root dist --bucket "molroom-<account>-us-east-1-origin" --commit-sha "${release_sha}" --dry-run
-# 실제 tag/Release 생성과 cutover는 protected production workflow에서만 수행합니다.
-```
+AWS root가 아닌 AWS SSO 관리자 세션에서 us-east-1을 선택합니다. 기존 account-wide
+OIDC provider가 있으면 ExistingGitHubOidcProviderArn에 넣고, 없으면 빈 값으로
+template이 생성하게 합니다. exact OIDC subject는
+repo:kim-song-jun/meeting-wrapper:environment:production이고 trust의 workflow_ref는
+.github/workflows/release-controller.yml@refs/tags/molroom-release-controller-v1입니다.
 
-Release에는 SHA, artifact checksum, evidence reference, smoke 결과를 남깁니다.
-immutable object prefix는 `releases/${release_sha}/`이며, production smoke와
-CloudFront invalidation을 통과해야 합니다.
-`https://molroom.molcube.com`에서 TLS, deep link, login/logout, room read,
-create/edit/cancel과 secret 노출을 확인합니다. 현재 실행되지 않았습니다.
+~~~bash
+AWS_CLI="${AWS_CLI:?set to the approved AWS CLI executable}"
+"$AWS_CLI" sts get-caller-identity
+"$AWS_CLI" cloudformation deploy --region us-east-1 --stack-name molroom-bootstrap --template-file infra/aws/molroom-bootstrap.yml --capabilities CAPABILITY_NAMED_IAM --parameter-overrides ControllerTag=molroom-release-controller-v1 HostedZoneId="${HOSTED_ZONE_ID:?set hosted zone}" ProductionStackName=molroom-production ExistingGitHubOidcProviderArn="${EXISTING_GITHUB_OIDC_PROVIDER_ARN:-}" GitHubOidcSubject=repo:kim-song-jun/meeting-wrapper:environment:production
+~~~
 
-## [release.rollback] 7. 롤백과 사고 대응
+stack output GitHubDeployRoleArn은 AWS_DEPLOY_ROLE_ARN,
+CloudFormationExecutionRoleArn은 CLOUDFORMATION_ROLE_ARN에 매핑합니다. 현재 AWS
+account ID는 AWS_ACCOUNT_ID, 입력 HostedZoneId는 HOSTED_ZONE_ID가 됩니다.
+infra/aws/molroom-bootstrap.yml의 실제 deploy와 output 관찰은 아직 수행되지
+않았습니다.
 
-tag 이동·force push 대신 승인된 **previous artifact**의 기존 immutable
-`releases/${release_sha}/` prefix를 checksum으로 확인하고 재사용합니다.
-재업로드나 복사는 하지 않습니다(not re-upload/copy). 현재 SHA·CloudFront distribution ID·artifact checksum을 기록하고,
-ActiveReleaseSha만 이전 SHA로 바꾼 뒤 CloudFront invalidation과 production smoke를
-수행합니다. 원인 수정 후 새 commit/tag를 배포합니다. 자세한 secret rotation과
-incident response는 [SECURITY.md](SECURITY.md)를 따릅니다.
+## [release.first-release] 6. PLAN, release, repair
 
-## [release.security] 8. 보안과 사고 대응
+순서는 고정입니다.
 
-자세한 secret rotation과 incident response는 [SECURITY.md](SECURITY.md)의
-절차를 따릅니다.
+1. origin/main의 candidate SHA로 .github/workflows/release.yml을 target_sha 입력으로 실행해
+   verified-release artifact를 만듭니다.
+2. 같은 SHA의 approved .github/workflows/security-gate.yml을 실행하고
+   security-gate-<sha> evidence를 얻습니다.
+3. protected release workflow인 .github/workflows/release-controller.yml을
+   protected tag에서 dispatch합니다.
+   입력은 mode, version, target_sha, candidate_run_id, security_gate_run_id,
+   execute_cutover, confirmation입니다.
+
+controller는 independently protected immutable tag/SHA에서만 실행됩니다. approved
+security-gate workflow blob을 target SHA의 blob과 byte 비교하고 evidence의
+dispatch_actor를 server workflow-run actor에 묶습니다. workflow-file
+self-pinning은 신뢰 근거가 아닙니다.
+
+mode=release에서 먼저 execute_cutover=false로 PLAN을 검토하고, 승인 뒤
+execute_cutover=true와 confirmation=RELEASE로 cutover합니다. mode=repair는
+confirmation=REPAIR로 active target의 metadata/GitHub Release만 고치며 cutover하지
+않습니다. mode=rollback은 confirmation=ROLLBACK으로 기존 verified prefix만
+재사용합니다. candidate verification, security gate, controller dispatch의
+run ID와 target SHA가 모두 같아야 합니다.
+
+fresh unprivileged prepare, fresh protected AWS deploy, fresh contents-write publish
+job은 권한을 나눕니다. 배포는 invalidation 뒤 target-SHA release-metadata smoke를
+수행하고 실패하면 prior SHA로 restore한 뒤 restored-SHA smoke를 수행합니다.
+첫 release 실패는 UNRELEASED/false 상태로 복구합니다. 아직 live release,
+smoke, restore 성공을 주장하지 않습니다.
+
+## [release.rollback] 7. rollback과 복구
+
+rollback은 기존 immutable releases/${release_sha}/ prefix를 checksum과 metadata로
+검증해 재사용하며 not re-upload/copy입니다. tag 이동이나 force push를 하지
+않습니다. prior ActiveReleaseSha/DistributionEnabled를 먼저 저장하고, 실패한
+restore 또는 smoke는 fatal입니다. 원인 수정은 새 SHA/version의 별도 release로
+진행합니다.
+
+## [release.security] 8. 외부 blocker와 사고 대응
+
+실제 Google tenant 확인, 두 계정·두 room의 사람 검증, GitHub protection/Environment
+설정, AWS SSO bootstrap, DNS/TLS, release/repair/rollback, smoke/restore는 외부
+운영 작업으로 남아 있습니다. 완료 전에는 configured/deployed/live로 표현하지
+않습니다. secret rotation과 사고 대응은 [SECURITY.md](SECURITY.md)를 따릅니다.

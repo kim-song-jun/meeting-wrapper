@@ -297,7 +297,7 @@ production stack은 `ActiveReleaseSha`와 `DistributionEnabled` parameter를 받
 
 배포 파일은 bucket root가 아니라 `releases/<commit-sha>/` 아래에 immutable하게 올린다. 각 prefix는 artifact 파일과 함께 `_manifest.sha256`, `_release.json`, `_security-gate.json`을 포함한다. `_manifest.sha256`은 runtime artifact object만 경로순으로 기록하고 metadata 파일 자체는 포함하지 않는다. `_release.json`은 schema version, package version, commit SHA, commit timestamp(`SOURCE_DATE_EPOCH`), manifest SHA-256만 담는 결정적 파일이다. workflow run URL, 실제 build 시각, runner tool version처럼 rerun마다 바뀔 수 있는 값은 넣지 않는다. `_security-gate.json`은 §8.1의 승인된 redacted attestation 원본이다. 최초 upload provenance와 실제 toolchain은 GitHub workflow artifact와 최종 Release note에 별도로 기록한다.
 
-bucket versioning을 켠다. `releases/*`의 모든 upload는 `PutObject`의 `If-None-Match: *`를 사용하고 bucket policy가 `s3:if-none-match` 없는 쓰기를 거부한다. deploy role과 일반 운영 주체에는 `DeleteObject`, `DeleteObjectVersion`, `PutLifecycleConfiguration` 권한을 주지 않고 bucket policy도 이를 거부한다. workflow는 `aws s3 sync`를 쓰지 않고 `s3api put-object` 또는 SDK의 조건부 write만 사용한다. `412 Precondition Failed`이면 기존 object와 S3 metadata manifest를 읽어 hash가 모두 같을 때만 재사용하고, 다르면 immutable violation으로 실패한다. Object Lock은 새 current version 생성을 막지 못하므로 이 기본 계약에 사용하지 않는다.
+bucket versioning을 켠다. `releases/*`의 모든 upload는 `PutObject`의 `If-None-Match: *`를 사용하고 bucket policy가 `s3:if-none-match` 없는 쓰기를 거부한다. deploy role과 일반 운영 주체에는 `DeleteObject`, `DeleteObjectVersion`, `PutLifecycleConfiguration` 권한을 주지 않고 bucket policy도 이를 거부한다. workflow는 upload에 `aws s3 sync`를 쓰지 않고 `s3api put-object` 또는 SDK의 조건부 write만 사용한다. repair/rollback의 private temporary directory download는 remote bytes의 bounded controller reinspection을 위한 read-only `s3 sync`만 허용하며 re-upload/copy에는 사용하지 않는다. `412 Precondition Failed`이면 기존 object와 S3 metadata manifest를 읽어 hash가 모두 같을 때만 재사용하고, 다르면 immutable violation으로 실패한다. Object Lock은 새 current version 생성을 막지 못하므로 이 기본 계약에 사용하지 않는다.
 
 CloudFront Function은 `ActiveReleaseSha`를 코드 상수로 받아 요청을 해당 prefix로 보낸다. 확장자가 없는 route는 `releases/<sha>/index.html`로, 실제 asset/file은 `releases/<sha>/<path>`로 보낸다. `/assets/*`와 실제 파일의 404를 SPA 문서로 바꾸지 않는다. release/rollback mode만 명시적으로 active parameter를 바꾸며, workflow 재시작 시 현재 상태는 stack parameter를 다시 조회해 복구한다.
 
@@ -354,38 +354,36 @@ build toolchain은 `.node-version`의 정확한 Node patch와 `package.json#pack
 
 ### 8.2 Production workflow
 
-수동 `workflow_dispatch`는 `mode=release | rollback`, `version`, `target_sha`, release mode의 `security_gate_run_id`를 받는다.
+Release A의 exact machine-readable contract는 다음과 같다.
 
-release mode:
+```text
+public.env.keys=VITE_DEPLOYMENT,VITE_ADAPTER,VITE_GOOGLE_CLIENT_ID,VITE_ALLOWED_HD
+private.env.keys=VITE_GOOGLE_CLIENT_ID,VITE_ALLOWED_HD,GOOGLE_SPIKE_AUTHORIZED_ORIGINS,GOOGLE_SPIKE_ORDINARY_ACCOUNT,GOOGLE_SPIKE_ADMIN_ACCOUNT,GOOGLE_SPIKE_ROOM_A_CALENDAR_ID,GOOGLE_SPIKE_ROOM_B_CALENDAR_ID
+task5.env.keys=GOOGLE_SPIKE_ORDINARY_ACCOUNT,GOOGLE_SPIKE_ADMIN_ACCOUNT,GOOGLE_SPIKE_ROOM_A_CALENDAR_ID,GOOGLE_SPIKE_ROOM_B_CALENDAR_ID
+github.repository.variables=VITE_GOOGLE_CLIENT_ID,VITE_ALLOWED_HD
+github.production_environment.variables=AWS_ACCOUNT_ID,AWS_DEPLOY_ROLE_ARN,CLOUDFORMATION_ROLE_ARN,HOSTED_ZONE_ID
+release.controller.ref=refs/tags/molroom-release-controller-v1
+release.controller.sha=7ba2814f491dccee9462c7bf01958dd28600b048
+release.controller.inputs=mode,version,target_sha,candidate_run_id,security_gate_run_id,execute_cutover,confirmation
+```
 
-1. `target_sha`가 현재 `origin/main`인지 확인한다.
-2. package version이 `version`과 일치하는지 확인한다.
-3. `v<version>` tag와 GitHub Release가 모두 없는지 확인한다. 같은 SHA의 부분 완료만 repair mode로 허용하고, 다른 SHA collision은 실패한다.
-4. workflow permission `contents: write`, `id-token: write`, production environment 접근, AWS role/account/stack 상태를 검증한다.
-5. GitHub OIDC로 bootstrap stack의 AWS deploy role을 assume하고 caller account/role이 production environment 설정과 일치하는지 확인한다. 이 단계는 아직 AWS resource를 변경하지 않는다.
-6. 인증된 S3에서 `_security-gate.json`이 이미 있으면 장기 권위 copy를 검증하고, 없으면 `security_gate_run_id`의 완료된 GitHub Actions run과 `security-gate-<target_sha>` artifact를 API로 확인한다. JSON evidence의 repository, exact target SHA, 두 report digest, reviewer approval, Critical 0, High 0을 검증하며 값이 다르면 cutover 전에 실패한다.
-7. CI 전체 검증을 깨끗한 checkout에서 다시 수행하고 deterministic `dist/` SHA-256 manifest와 `_release.json`을 만든다.
-8. GitHub `production` environment 공개 변수로 artifact를 만들고 manifest를 workflow artifact로도 보존한다. workflow artifact는 단기 진단 복사본이며 rollback의 영구 권위가 아니다.
-9. production stack이 없으면 `UNRELEASED/false`로 생성하고 `CREATE_COMPLETE`를 기다린다. 이미 있으면 active parameter를 `UsePreviousValue`로 유지하는 infrastructure change set만 적용한다.
-10. `releases/<target_sha>/`에 artifact, `_manifest.sha256`, `_release.json`, 승인된 `_security-gate.json`을 모든 key의 `If-None-Match: *` 조건으로 upload한다. 기존 key의 `412`는 원본 metadata와 모든 object hash가 같을 때만 재사용하고, 다르면 실패한다.
-11. release prefix asset/HTML과 S3 metadata를 active 전환 전에 direct 검증한다.
-12. production stack의 현재 `ActiveReleaseSha`와 `DistributionEnabled`를 기록하고, `target_sha/true`를 지정한 CloudFormation change set을 생성·실행한다. Function 직접 update API는 호출하지 않는다. workflow concurrency는 production environment에 하나만 허용해 release/rollback cutover가 겹치지 않게 한다.
-13. stack `UPDATE_COMPLETE`, CloudFront Function publish, distribution `Deployed` 상태와 제한된 route invalidation 완료를 기다린 뒤 운영 route, asset, header, GIS boot smoke를 수행한다.
-14. 실패하면 이전 release가 있으면 이전 SHA/true, 첫 release면 `UNRELEASED/false` change set으로 자동 복귀한다. rollback 또는 disabled 상태를 확인한 뒤 release metadata 없이 실패한다.
-15. 성공하면 annotated `v<version>` tag를 동일 SHA에 생성·push한다.
-16. tag가 같은 SHA에 이미 있고 Release만 없으면 deploy를 반복하지 않고 stack의 `ActiveReleaseSha`, S3 manifest, S3 `_security-gate.json`을 확인한 뒤 Release와 metadata asset을 복구 생성한다.
-17. 변경 요약, security gate/source-report digest 링크, rollback 입력을 포함한 GitHub Release를 생성하고 `_manifest.sha256`, `_release.json`, `_security-gate.json`을 Release asset으로도 첨부한다.
+권한 경계는 세 workflow로 분리한다.
 
-rollback mode:
+1. `.github/workflows/release.yml`은 `target_sha`만 받는 credential-free candidate artifact producer다. independently protected annotated `refs/tags/molroom-release-controller-v1`을 checkout하고 peeled commit이 `7ba2814f491dccee9462c7bf01958dd28600b048`인지 확인한다. candidate install/test/build는 exact four public VITE 값만 가진 disposable container 안에서 수행한다. secret, Environment, OIDC, AWS, GitHub write는 없다. container wait/stop/copy/remove 뒤 trusted host가 stable copied tree를 최종 scan/digest하고 새 receipt를 만들며 retained artifact만 후속 단계의 source가 된다.
+2. approved `.github/workflows/security-gate.yml`은 같은 target SHA의 사람 승인 evidence를 만든다. controller는 Actions API의 repository/path/head/event/conclusion/artifact ID/server digest를 검사하고, approved security-gate workflow blob을 target SHA의 blob과 byte 비교하며 evidence의 `dispatch_actor`를 server workflow-run actor에 묶는다.
+3. `.github/workflows/release-controller.yml`은 separately dispatched trusted controller다. workflow file은 independently protected immutable controller tag에서만 실행하며 candidate commit을 checkout/import/execute하지 않는다. dispatch inputs는 정확히 `mode,version,target_sha,candidate_run_id,security_gate_run_id,execute_cutover,confirmation`이다. release mode만 두 run ID를 받고 repair/rollback에서는 비워 둔다.
 
-1. 기존 annotated `v<version>` tag가 가리키는 SHA와 S3 `releases/<sha>/_manifest.sha256`을 검증한다. GitHub Release asset은 교차 확인용 복사본이다.
-2. 해당 `releases/<sha>/`의 모든 object hash와 `_release.json`을 확인한다.
-3. 현재 `origin/main`과 같을 필요는 없다.
-4. stack에서 직전 `ActiveReleaseSha`와 `DistributionEnabled`를 읽고 대상 SHA/true를 parameter로 넣은 CloudFormation change set을 실행한다. `UPDATE_COMPLETE`, CloudFront propagation, route invalidation 뒤 전체 production smoke를 수행한다.
-5. 실패하면 직전 parameter pair로 새 change set을 실행해 자동 복귀한다.
-6. tag를 이동하거나 새 release를 만들지 않고 deployment 기록만 남긴다.
+release mode의 순서는 candidate run → security-gate run → controller dispatch다. 먼저 `execute_cutover=false` PLAN을 검토하고, required reviewer가 self-approval 없이 승인한 뒤 `execute_cutover=true`, `confirmation=RELEASE`로 실행한다. fresh unprivileged prepare는 exact artifact ID ZIP과 server digest를 검증하고 safe extractor로 candidate/security ZIP을 서로 다른 temp root에 푼다. fresh production Environment deploy만 `id-token: write`를 받아 AWS를 사용하며, fresh publish만 `contents: write`를 받는다.
 
-workflow의 모든 단계는 rerun 가능해야 한다. 이미 적용된 stack, 동일 manifest prefix, 동일 SHA tag, 기존 Release는 일치 여부를 확인해 skip/repair하고, 불일치는 덮어쓰지 않고 실패한다. rerun은 새 `_release.json` provenance를 만들지 않고 S3에 처음 저장된 metadata를 검증·재사용하며, Actions artifact retention에 장기 repair를 의존하지 않는다.
+deploy는 stable CloudFormation observer가 exact absence일 때만 CREATE, stable present일 때 UPDATE 또는 no-change를 선택한다. prior `ActiveReleaseSha`/`DistributionEnabled`와 stack absence를 먼저 기록한 뒤 conditional prefix upload, exact remote verification, invalidation, propagation, target-SHA release-metadata smoke를 수행한다. 어느 단계든 실패하면 prior pair로 restore하고 restored-SHA smoke를 수행한다. 최초 CREATE 실패는 DeleteStack+confirmed absence로 복구해 `UNRELEASED/false`가 된다. restore 실패는 fatal이다.
+
+repair는 active target SHA/version의 existing immutable prefix와 `_release.json.package_version`을 검증하고 metadata/GitHub Release만 보수하며 cutover하지 않는다. rollback은 existing annotated version tag와 immutable prefix를 검증한 뒤 active pointer만 바꾸고 동일 smoke/restore 계약을 적용한다. repair/rollback은 candidate dependency, test, build, archive upload를 실행하지 않는다. publish는 origin/main과 annotated tag를 create 전후 다시 확인하고 Release body/assets를 exact 비교한다.
+
+GitHub repository variable은 `VITE_GOOGLE_CLIENT_ID`, `VITE_ALLOWED_HD` 둘뿐이다. production Environment variable은 `AWS_ACCOUNT_ID`, `AWS_DEPLOY_ROLE_ARN`, `CLOUDFORMATION_ROLE_ARN`, `HOSTED_ZONE_ID` 넷뿐이다. Environment에는 required reviewer, no self-approval, protected controller tag deployment-ref restriction을 둔다. controller tag와 `v*` tag를 보호하며 no long-lived AWS credentials 원칙을 지킨다.
+
+AWS root가 아닌 AWS SSO 관리자가 `us-east-1`에서 `infra/aws/molroom-bootstrap.yml`을 실행한다. parameter는 `ControllerTag=molroom-release-controller-v1`, `HostedZoneId`, `ProductionStackName=molroom-production`, optional `ExistingGitHubOidcProviderArn`, exact subject `repo:kim-song-jun/meeting-wrapper:environment:production`이다. trust는 `.github/workflows/release-controller.yml@refs/tags/molroom-release-controller-v1`에만 허용한다. stack output `GitHubDeployRoleArn`과 `CloudFormationExecutionRoleArn`을 각각 production Environment role ARN에 매핑한다.
+
+위 GitHub protection/Environment, AWS bootstrap, Google human evidence, release/repair/rollback, DNS/TLS, smoke/restore는 아직 실제 외부 시스템에서 수행되지 않았다. configured/deployed/live 상태를 주장하지 않는다.
 
 ## 9. 구성과 비밀값
 
@@ -398,7 +396,12 @@ workflow의 모든 단계는 rerun 가능해야 한다. 이미 적용된 stack, 
 - `src/config/rooms.json`의 room resource calendar IDs
 - `src/config/policy.json`의 booking policy와 표시용 관리자 이메일
 
-위 네 `VITE_*` 값만 GitHub `production` Environment variable로 관리한다. 이름에 `VITE_`가 붙은 값은 번들에서 공개된다는 사실을 README에 명시한다. `rooms.json`과 `policy.json`은 repository에 추적되는 공개 배포 구성이고 Environment variable이 아니다.
+`VITE_GOOGLE_CLIENT_ID`와 `VITE_ALLOWED_HD`만 GitHub repository variable로
+관리한다. `VITE_DEPLOYMENT=production`과 `VITE_ADAPTER=google`은
+credential-free candidate workflow가 고정한다. public VITE 값을 GitHub
+`production` Environment에 복제하지 않는다. 이름에 `VITE_`가 붙은 값은
+번들에서 공개된다는 사실을 README에 명시한다. `rooms.json`과 `policy.json`은
+repository에 추적되는 공개 배포 구성이고 Environment variable이 아니다.
 
 `src/app/env.ts`가 env와 JSON config를 한 번 파싱해 immutable `AppConfig`를 만든다. precedence는 명령 환경변수 → Vite mode env file → 위 기본값 순서다. room/policy/admin 값은 env JSON으로 복제하지 않고 tracked JSON을 단일 source로 유지한다.
 
@@ -466,31 +469,37 @@ Wave 0에서는 다음 대형 파일의 characterization evidence와 extraction 
 - `README.ko.md`: 한국어 전체 운영 가이드
 - `README.en.md`: 영어 전체 운영 가이드
 
-두 전체 README는 동일한 장 순서를 가진다.
+두 전체 README는 다음 canonical 8-section ID와 순서를 정확히 공유한다.
 
-1. 제품과 trust boundary
-2. 로컬 mock 실행
-3. Google Cloud 프로젝트 생성
-4. Internal OAuth consent와 web client 생성
-5. Workspace room resource와 ACL/auto-accept 설정
-6. 실제 integration spike 실행
-7. GitHub Environment variable 설정
-8. AWS 로그인과 CloudFormation bootstrap
-9. `molroom.molcube.com` 첫 배포
-10. CI/CD release 실행
-11. smoke, 관측, 장애 대응
-12. rollback과 자격증명 회수
-13. 보안 금지사항과 문제 해결
+release.readme.sections=release.toolchain,release.google-oauth,release.env,release.validation,release.aws-oidc,release.first-release,release.rollback,release.security
+
+1. [release.toolchain] 고정 toolchain과 host/process preflight
+2. [release.google-oauth] Google Cloud OAuth, Workspace, room/account human setup
+3. [release.env] public/private env, ignored 0600 files, local validators
+4. [release.validation] static checks and credential-free candidate gate
+5. [release.aws-oidc] GitHub protection/Environment and AWS SSO bootstrap
+6. [release.first-release] candidate→security gate→controller PLAN/release/repair
+7. [release.rollback] immutable-prefix rollback, smoke, restore
+8. [release.security] external blockers, prohibited secrets, incident response
 
 명령·URL·환경변수 이름·검증 결과는 두 언어에서 동일하게 유지한다. 문서 검증 스크립트가 양쪽 heading과 locked command block의 대응을 검사한다.
 
 ### 11.1 문서 재현성 검증
 
-한국어 runbook은 최초 운영 provisioning의 실제 실행 문서다. 새 clone, 비어 있는 로컬 `.env.production.local`, 새 브라우저 profile에서 시작하고, 필요한 Google Workspace/AWS/GitHub 관리자 권한을 가진 담당자가 `README.ko.md`만 보며 Google project/OAuth, room ACL, AWS bootstrap, GitHub Environment, 첫 release, production smoke, rollback rehearsal을 순서대로 수행한다. account ID·ARN·client ID는 일부 가린 checklist, 각 command exit code, 생성 resource 목록, smoke 결과, rollback 전후 active SHA를 evidence로 보존한다.
+한국어 runbook은 최초 운영 provisioning의 실제 실행 문서다. 새 clone에서
+committed `.env.example`과 `.env.google-spike.example`을 각각 ignored
+`.env`와 `.env.google-spike.local`로 복사해 0600으로 제한하고, 새 브라우저
+profile에서 시작한다. 필요한 Google Workspace/AWS/GitHub 관리자 권한을 가진
+담당자가 `README.ko.md`만 보며 Google project/OAuth, room ACL, AWS SSO
+bootstrap, GitHub Environment, archive verification, 첫 release, production
+smoke, rollback rehearsal을 순서대로 수행한다. local archive verification은
+AWS/GitHub credential을 받지 않으며 GitHub-only deploy role을 검사하지 않는다.
+account ID·ARN·client ID는 일부 가린 checklist, 각 command exit code, 생성
+resource 목록, smoke 결과, rollback 전후 active SHA를 evidence로 보존한다.
 
-영문 runbook은 독립 검토자가 새 clone과 새 브라우저 profile에서 `README.en.md`만 보고 검증한다. 한국어 문서와 이 설계 문서는 참고하지 않는다. 실제 resource를 중복 생성하지 않고 read-only Google/AWS/GitHub preflight, production build, CloudFormation template validation과 execute하지 않는 change set 작성, production route/header/OAuth smoke, rollback dry-run을 수행한다. command exit code, change-set diff, smoke 결과, dry-run 대상 SHA를 evidence로 남긴다.
+영문 runbook은 독립 검토자가 새 clone과 새 브라우저 profile에서 `README.en.md`만 보고 검증한다. 한국어 문서와 이 설계 문서는 참고하지 않는다. 실제 resource를 중복 생성하지 않고 read-only Google/AWS SSO preflight, retained archive receipt reinspection, CloudFormation template validation과 execute하지 않는 change set 작성, production route/header/OAuth smoke, rollback dry-run을 수행한다. command exit code, change-set diff, smoke 결과, dry-run 대상 SHA를 evidence로 남긴다.
 
-parity validator는 두 문서의 heading 순서, locked command block hash, URL, environment variable 이름, workflow input, expected terminal state를 비교한다. 검증 중 문서 밖 설명이나 현장 수정이 한 번이라도 필요하면 두 문서를 함께 고치고 해당 언어 clean-room 절차를 처음부터 다시 수행한다.
+parity validator는 두 문서의 heading 순서, section count, URL, environment variable 이름, workflow input, expected terminal state와 각 runbook의 byte-identical one-line archive command를 비교한다. 일반 shell allowlist나 문서 속 executable controller는 사용하지 않는다. 검증 중 문서 밖 설명이나 현장 수정이 한 번이라도 필요하면 두 문서를 함께 고치고 해당 언어 clean-room 절차를 처음부터 다시 수행한다.
 
 ## 12. Wave 계획
 
@@ -555,7 +564,7 @@ parity validator는 두 문서의 heading 순서, locked command block hash, URL
 다음이 모두 실제 결과로 확인되어야 “운영 릴리즈 완료”라고 말할 수 있다.
 
 1. 모든 기존 변경이 의도별 커밋으로 분류되고 미분류 tracked/untracked product 파일이 없다.
-2. 새 `git archive`에서 `npm ci`, design generation/validation, tests, typecheck, build가 통과한다.
+2. 새 `git archive`에서 `npm ci`, design generation/validation, tests, typecheck, build가 통과하고, 그 archive-built bytes를 no-follow copy·atomic rename·재검사로 retained artifact로 고정한다. protected release job은 같은 receipt/tree digest를 다시 검증한 bytes만 manifest와 upload 입력으로 사용한다.
 3. production `dist/`에 금지된 secret, mock identity, QA backdoor 문자열이 없다.
 4. §5.6의 Google OAuth, Calendar, Drive acceptance matrix 전체가 실제 `molcube.com` 일반 사용자와 관리자 계정으로 통과한다.
 5. 최종 후보 SHA의 수동 threat checklist와 official Deep Security Scan이 완료되고 Critical/High finding이 0건이다.
