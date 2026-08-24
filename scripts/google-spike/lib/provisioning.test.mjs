@@ -22,15 +22,24 @@ import {
 
 const testRoot = dirname(fileURLToPath(import.meta.url));
 const spikeRoot = join(testRoot, "..");
+const repositoryRoot = join(spikeRoot, "..", "..");
 const validateProvisioningCli = join(spikeRoot, "validate-provisioning.mjs");
+const validateAccountMatrixCli = join(spikeRoot, "validate-account-matrix.mjs");
 const provisioningGuide = join(
-  spikeRoot,
-  "..",
-  "..",
+  repositoryRoot,
   "docs",
   "spikes",
   "google-workspace",
   "provisioning.md",
+);
+const publicEnvExample = join(repositoryRoot, ".env.example");
+const privateSpikeEnvExample = join(repositoryRoot, ".env.google-spike.example");
+const accountMatrixDocument = join(
+  repositoryRoot,
+  "docs",
+  "spikes",
+  "google-workspace",
+  "account-matrix.json",
 );
 const temporaryRoots = [];
 const accountSeparator = String.fromCharCode(64);
@@ -155,6 +164,76 @@ function envText(values = safeEnvValues) {
   return `${Object.entries(values)
     .map(([key, value]) => `${key}=${value}`)
     .join("\n")}\n`;
+}
+
+function activeDotenvValues(contents) {
+  const entries = [];
+  const seenKeys = new Set();
+  for (const line of contents.split(/\r?\n/)) {
+    if (line.length === 0 || line.startsWith("#")) continue;
+    const separator = line.indexOf("=");
+    if (separator < 1) throw new Error("invalid example dotenv assignment");
+    const key = line.slice(0, separator);
+    if (seenKeys.has(key)) throw new Error("duplicate example dotenv key");
+    seenKeys.add(key);
+    entries.push([key, line.slice(separator + 1)]);
+  }
+  return Object.fromEntries(entries);
+}
+
+function renderPrivateSpikeTemplate(contents) {
+  const replacements = {
+    "<google-oauth-web-client-id>": safeEnvValues.VITE_GOOGLE_CLIENT_ID,
+    "<workspace-hosted-domain>": safeEnvValues.VITE_ALLOWED_HD,
+    "<authorized-origin-list>": safeEnvValues.GOOGLE_SPIKE_AUTHORIZED_ORIGINS,
+    "<ordinary-workspace-account>": safeEnvValues.GOOGLE_SPIKE_ORDINARY_ACCOUNT,
+    "<room-writer-admin-workspace-account>": safeEnvValues.GOOGLE_SPIKE_ADMIN_ACCOUNT,
+    "<room-a-calendar-id>": safeEnvValues.GOOGLE_SPIKE_ROOM_A_CALENDAR_ID,
+    "<room-b-calendar-id>": safeEnvValues.GOOGLE_SPIKE_ROOM_B_CALENDAR_ID,
+  };
+
+  return Object.entries(replacements).reduce(
+    (rendered, [placeholder, value]) => rendered.replaceAll(placeholder, value),
+    contents,
+  );
+}
+
+function validatePortableProvisioningGuide(guide) {
+  if (/\/Users\//.test(guide)) throw new Error("hard-coded home path");
+
+  const bashLines = [...guide.matchAll(/```bash\r?\n([\s\S]*?)```/g)]
+    .flatMap((match) => match[1].split(/\r?\n/));
+  const bashCommands = [];
+  let continuedCommand = "";
+  for (const line of bashLines) {
+    const part = line.trim();
+    if (part.length === 0 || part.startsWith("#")) continue;
+    const continues = part.endsWith("\\");
+    const withoutContinuation = continues ? part.slice(0, -1).trimEnd() : part;
+    continuedCommand = `${continuedCommand} ${withoutContinuation}`.trim();
+    if (!continues) {
+      bashCommands.push(continuedCommand);
+      continuedCommand = "";
+    }
+  }
+  if (continuedCommand.length > 0) bashCommands.push(continuedCommand);
+
+  const unpinnedLauncher = /^(?:[A-Za-z_][A-Za-z0-9_]*=\S+\s+)*(?:env\s+)?(?:node|npm)(?:\s|$)|\$\(\s*(?:node|npm)(?:\s|$)/;
+  const scriptPattern = /scripts\/google-spike\/[a-z0-9-]+\.mjs/;
+  const invocations = [];
+
+  for (const command of bashCommands) {
+    if (unpinnedLauncher.test(command)) {
+      throw new Error("unpinned node or npm command");
+    }
+    const script = scriptPattern.exec(command)?.[0];
+    if (!script) continue;
+    if (!command.startsWith(`"$MOLROOM_NODE" ${script}`)) {
+      throw new Error("unpinned Google-spike script launcher");
+    }
+    invocations.push(script);
+  }
+  return invocations;
 }
 
 function expectPolicyFailure(action, category, pointer, forbiddenValues = []) {
@@ -711,6 +790,114 @@ describe("Google Workspace provisioning policy", () => {
     expect(result.status).not.toBe(0);
     expect(result.stdout).toBe("");
     expect(result.stderr).toBe("PROVISIONING_PATH_NOT_REGULAR pointer=/envFile\n");
+  });
+
+  it("keeps the public Vite example explicit Google configuration without a mock fallback", async () => {
+    const contents = await readFile(publicEnvExample, "utf8");
+    const activeAssignments = contents
+      .split(/\r?\n/)
+      .filter((line) => line.length > 0 && !line.startsWith("#"));
+    const example = activeDotenvValues(contents);
+
+    expect(activeAssignments).toHaveLength(4);
+    expect(example).toEqual({
+      VITE_DEPLOYMENT: "production",
+      VITE_ADAPTER: "google",
+      VITE_GOOGLE_CLIENT_ID: "<google-oauth-web-client-id>",
+      VITE_ALLOWED_HD: "<workspace-hosted-domain>",
+    });
+  });
+
+  it.each([
+    [
+      "prepended",
+      (contents) => contents.replace(
+        "VITE_ADAPTER=google",
+        "VITE_ADAPTER=mock\nVITE_ADAPTER=google",
+      ),
+    ],
+    [
+      "appended",
+      (contents) => contents.replace(
+        "VITE_ADAPTER=google",
+        "VITE_ADAPTER=google\nVITE_ADAPTER=mock",
+      ),
+    ],
+  ])("rejects a %s duplicate public VITE_ADAPTER assignment", async (_case, mutate) => {
+    const contents = await readFile(publicEnvExample, "utf8");
+    const mutated = mutate(contents);
+
+    expect(mutated).not.toBe(contents);
+    expect(() => activeDotenvValues(mutated)).toThrow("duplicate example dotenv key");
+  });
+
+  it("renders the private seven-key template for provisioning and Task 5 account validation", async () => {
+    const root = await mkdtemp(join(tmpdir(), "molroom-private-spike-template-"));
+    temporaryRoots.push(root);
+    const envPath = join(root, "operator.env");
+    const rendered = renderPrivateSpikeTemplate(await readFile(privateSpikeEnvExample, "utf8"));
+
+    expect(parseProvisioningEnv(rendered)).toEqual(safeEnvValues);
+    await writePrivate(envPath, rendered);
+
+    const result = spawnSync(process.execPath, [
+      validateAccountMatrixCli,
+      accountMatrixDocument,
+      envPath,
+    ], { encoding: "utf8" });
+    expect(result.error).toBeUndefined();
+    expect(result.status).toBe(0);
+    expect(result.stdout).toBe("account-matrix-valid schemaVersion=1 status=UNBOUND\n");
+    expect(result.stderr).toBe("");
+  });
+
+  it("documents only portable pinned Google-spike validation commands", async () => {
+    const guide = await readFile(provisioningGuide, "utf8");
+
+    expect(guide).not.toMatch(/\/Users\//);
+    expect(guide).toContain("MOLROOM_NODE_ROOT");
+    expect(guide).toContain('"$MOLROOM_NODE" "$MOLROOM_NPM_CLI" --version');
+    expect(validatePortableProvisioningGuide(guide)).toEqual([
+      "scripts/google-spike/validate-evidence.mjs",
+      "scripts/google-spike/validate-provisioning.mjs",
+      "scripts/google-spike/validate-account-matrix.mjs",
+      "scripts/google-spike/scan-sensitive-paths.mjs",
+      "scripts/google-spike/validate-provisioning.mjs",
+      "scripts/google-spike/validate-evidence.mjs",
+    ]);
+  });
+
+  it.each([
+    [
+      "a hard-coded macOS home",
+      (guide) => guide.replace(
+        'MOLROOM_NODE_ROOT="${MOLROOM_NODE_ROOT:?set to the Node 24.19.0 installation root}"',
+        "MOLROOM_NODE_ROOT=/Users/alice/.nvm/versions/node/v24.19.0",
+      ),
+      "hard-coded home path",
+    ],
+    [
+      "a bare node validator launcher",
+      (guide) => guide.replace(
+        '"$MOLROOM_NODE" scripts/google-spike/validate-provisioning.mjs',
+        "node scripts/google-spike/validate-provisioning.mjs",
+      ),
+      "unpinned node or npm command",
+    ],
+    [
+      "a bare npm launcher",
+      (guide) => guide.replace(
+        '"$MOLROOM_NODE" "$MOLROOM_NPM_CLI" --version',
+        "npm --version",
+      ),
+      "unpinned node or npm command",
+    ],
+  ])("rejects provisioning instructions with %s", async (_case, mutate, message) => {
+    const guide = await readFile(provisioningGuide, "utf8");
+    const mutated = mutate(guide);
+
+    expect(mutated).not.toBe(guide);
+    expect(() => validatePortableProvisioningGuide(mutated)).toThrow(message);
   });
 
   it("documents a private, captured temporary path for redacted output", async () => {
