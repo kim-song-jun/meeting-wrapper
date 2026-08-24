@@ -569,10 +569,10 @@
     "accountMatrixAccount": {
       "type": "object", "additionalProperties": false,
       "required": ["alias", "role", "bindingAlias", "roomWriter", "browserProfiles"],
-      "properties": { "alias": { "enum": ["ordinary", "room-writer-admin"] }, "role": { "enum": ["ordinary", "room-writer-admin"] }, "bindingAlias": { "pattern": "^account:(ordinary|room-writer-admin)$" }, "roomWriter": { "type": "boolean" }, "browserProfiles": { "type": "array", "minItems": 2, "items": { "$ref": "#/$defs/alias" } } }
+      "properties": { "alias": { "enum": ["ordinary", "room-writer-admin"] }, "role": { "enum": ["ordinary", "room-writer-admin"] }, "bindingAlias": { "pattern": "^account:(ordinary|room-writer-admin)$" }, "roomWriter": { "type": "boolean" }, "browserProfiles": { "type": "array", "minItems": 2, "maxItems": 2, "uniqueItems": true, "items": { "enum": ["ordinary-chrome-desktop", "ordinary-safari-desktop", "admin-chrome-desktop", "admin-safari-desktop"] } } }
     },
-    "accountMatrixOrdinary": { "allOf": [{ "$ref": "#/$defs/accountMatrixAccount" }, { "properties": { "alias": { "const": "ordinary" }, "role": { "const": "ordinary" }, "bindingAlias": { "const": "account:ordinary" }, "roomWriter": { "const": false } } }] },
-    "accountMatrixAdmin": { "allOf": [{ "$ref": "#/$defs/accountMatrixAccount" }, { "properties": { "alias": { "const": "room-writer-admin" }, "role": { "const": "room-writer-admin" }, "bindingAlias": { "const": "account:room-writer-admin" }, "roomWriter": { "const": true } } }] },
+    "accountMatrixOrdinary": { "allOf": [{ "$ref": "#/$defs/accountMatrixAccount" }, { "properties": { "alias": { "const": "ordinary" }, "role": { "const": "ordinary" }, "bindingAlias": { "const": "account:ordinary" }, "roomWriter": { "const": false }, "browserProfiles": { "oneOf": [{ "prefixItems": [{ "const": "ordinary-chrome-desktop" }, { "const": "ordinary-safari-desktop" }], "items": false }, { "prefixItems": [{ "const": "ordinary-safari-desktop" }, { "const": "ordinary-chrome-desktop" }], "items": false }] } } }] },
+    "accountMatrixAdmin": { "allOf": [{ "$ref": "#/$defs/accountMatrixAccount" }, { "properties": { "alias": { "const": "room-writer-admin" }, "role": { "const": "room-writer-admin" }, "bindingAlias": { "const": "account:room-writer-admin" }, "roomWriter": { "const": true }, "browserProfiles": { "oneOf": [{ "prefixItems": [{ "const": "admin-chrome-desktop" }, { "const": "admin-safari-desktop" }], "items": false }, { "prefixItems": [{ "const": "admin-safari-desktop" }, { "const": "admin-chrome-desktop" }], "items": false }] } } }] },
     "accountMatrixRoom": {
       "type": "object", "additionalProperties": false, "required": ["alias", "bindingAlias"],
       "properties": { "alias": { "enum": ["room-a", "room-b"] }, "bindingAlias": { "pattern": "^room:(room-a|room-b)$" } }
@@ -581,8 +581,9 @@
     "accountMatrixRoomB": { "allOf": [{ "$ref": "#/$defs/accountMatrixRoom" }, { "properties": { "alias": { "const": "room-b" }, "bindingAlias": { "const": "room:room-b" } } }] },
     "accountMatrixFixture": {
       "type": "object", "additionalProperties": false, "required": ["alias", "mutableId", "owner", "room"],
-      "properties": { "alias": { "$ref": "#/$defs/alias" }, "mutableId": { "$ref": "#/$defs/alias" }, "owner": { "enum": ["ordinary", "room-writer-admin"] }, "room": { "enum": ["room-a", "room-b"] } }
+      "properties": { "alias": { "$ref": "#/$defs/alias" }, "mutableId": { "$ref": "#/$defs/fixtureId" }, "owner": { "enum": ["ordinary", "room-writer-admin"] }, "room": { "enum": ["room-a", "room-b"] } }
     },
+    "fixtureId": { "type": "string", "enum": ["fixture:ordinary-own-event", "fixture:ordinary-room-copy", "fixture:admin-room-copy", "fixture:cross-browser-preference", "fixture:conflict-event-a", "fixture:conflict-event-b"] },
     "accountMatrixFixtureOrdinaryOwn": { "allOf": [{ "$ref": "#/$defs/accountMatrixFixture" }, { "properties": { "alias": { "const": "ordinary-own-event" }, "mutableId": { "const": "fixture:ordinary-own-event" }, "owner": { "const": "ordinary" }, "room": { "const": "room-a" } } }] },
     "accountMatrixFixtureOrdinaryCopy": { "allOf": [{ "$ref": "#/$defs/accountMatrixFixture" }, { "properties": { "alias": { "const": "ordinary-room-copy" }, "mutableId": { "const": "fixture:ordinary-room-copy" }, "owner": { "const": "ordinary" }, "room": { "const": "room-b" } } }] },
     "accountMatrixFixtureAdminCopy": { "allOf": [{ "$ref": "#/$defs/accountMatrixFixture" }, { "properties": { "alias": { "const": "admin-room-copy" }, "mutableId": { "const": "fixture:admin-room-copy" }, "owner": { "const": "room-writer-admin" }, "room": { "const": "room-a" } } }] },

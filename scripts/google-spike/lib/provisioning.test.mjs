@@ -246,6 +246,60 @@ describe("Google Workspace provisioning policy", () => {
     );
   });
 
+  it.each([
+    [
+      "embedded tab",
+      envText({
+        ...safeEnvValues,
+        VITE_GOOGLE_CLIENT_ID: clientId.replace("fixture", "fixture\t"),
+      }),
+    ],
+    [
+      "bare carriage return",
+      envText({
+        ...safeEnvValues,
+        VITE_GOOGLE_CLIENT_ID: clientId.replace("fixture", "fixture\r"),
+      }),
+    ],
+  ])("rejects lexical %s before provisioning semantics", (_case, contents) => {
+    expectPolicyFailure(
+      () => parseProvisioningEnv(contents),
+      "INVALID_PROVISIONING_ENV",
+      "/env",
+      [clientId],
+    );
+  });
+
+  it.each([
+    [
+      "embedded tab",
+      envText({
+        ...safeEnvValues,
+        VITE_GOOGLE_CLIENT_ID: clientId.replace("fixture", "fixture\t"),
+      }),
+    ],
+    [
+      "bare carriage return",
+      envText({
+        ...safeEnvValues,
+        VITE_GOOGLE_CLIENT_ID: clientId.replace("fixture", "fixture\r"),
+      }),
+    ],
+  ])("keeps public provisioning CLI lexical %s failures redacted", async (_case, contents) => {
+    const root = await mkdtemp(join(tmpdir(), "molroom-provisioning-control-"));
+    temporaryRoots.push(root);
+    const envPath = join(root, "operator.env");
+    const receiptPath = join(root, "operator-receipt.json");
+    await writePrivate(envPath, contents);
+    await writePrivate(receiptPath, `${JSON.stringify(completeReceipt)}\n`);
+
+    const result = runCli([envPath, receiptPath]);
+    expect(result.status).toBe(1);
+    expect(result.stdout).toBe("");
+    expect(result.stderr).toBe("INVALID_PROVISIONING_ENV pointer=/env\n");
+    expect(`${result.stdout}${result.stderr}`).not.toContain("fixture");
+  });
+
   it("rejects wrong client/domain/origin/account/room env facts", () => {
     const cases = [
       {

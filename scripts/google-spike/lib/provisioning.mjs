@@ -1,14 +1,7 @@
 import { EvidencePolicyError, validateEvidence } from "./evidence.mjs";
+import { EnvContractError, parseSharedEnv, SHARED_ENV_KEYS } from "./env-contract.mjs";
 
-const ENV_KEYS = Object.freeze([
-  "VITE_GOOGLE_CLIENT_ID",
-  "VITE_ALLOWED_HD",
-  "GOOGLE_SPIKE_AUTHORIZED_ORIGINS",
-  "GOOGLE_SPIKE_ORDINARY_ACCOUNT",
-  "GOOGLE_SPIKE_ADMIN_ACCOUNT",
-  "GOOGLE_SPIKE_ROOM_A_CALENDAR_ID",
-  "GOOGLE_SPIKE_ROOM_B_CALENDAR_ID",
-]);
+const ENV_KEYS = SHARED_ENV_KEYS;
 const ENV_KEY_SET = new Set(ENV_KEYS);
 const RECEIPT_KEYS = new Set([
   "schemaVersion",
@@ -37,8 +30,6 @@ const ACCOUNT_LOCAL_PATTERN = /^(?=.{1,64}$)[a-z0-9!#$%&'*+/=?^_`{|}~-]+(?:\.[a-
 const DOMAIN_LABEL_PATTERN = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/;
 const CLIENT_ID_PATTERN = /^\d{6,}-([a-z0-9]{8,})\.apps\.googleusercontent\.com$/;
 const CLIENT_ID_SUFFIX_PATTERN = /^[a-z0-9]{8}$/;
-const MAX_INPUT_BYTES = 16 * 1024;
-
 function fail(category, pointer) {
   throw new EvidencePolicyError(category, pointer);
 }
@@ -242,37 +233,16 @@ function evidenceFromReceipt(receipt) {
 }
 
 export function parseProvisioningEnv(text) {
-  if (
-    typeof text !== "string" ||
-    Buffer.byteLength(text, "utf8") > MAX_INPUT_BYTES ||
-    /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/.test(text)
-  ) {
-    fail("INVALID_PROVISIONING_ENV", "/env");
+  let result;
+  try {
+    result = parseSharedEnv(text, {
+      category: "INVALID_PROVISIONING_ENV",
+      requiredKeys: ENV_KEYS,
+    });
+  } catch (error) {
+    if (error instanceof EnvContractError) fail(error.category, error.pointer);
+    throw error;
   }
-
-  const parsed = Object.create(null);
-  for (const line of text.split(/\r?\n/)) {
-    if (line.trim() === "" || /^\s*#/.test(line)) continue;
-    const separator = line.indexOf("=");
-    if (separator <= 0 || line.startsWith("export ")) {
-      fail("INVALID_PROVISIONING_ENV", "/env");
-    }
-    const key = line.slice(0, separator);
-    const value = line.slice(separator + 1);
-    if (
-      !ENV_KEY_SET.has(key) ||
-      Object.hasOwn(parsed, key) ||
-      value.includes("$") ||
-      value.includes('"') ||
-      value.includes("'") ||
-      value.includes("`")
-    ) {
-      fail("INVALID_PROVISIONING_ENV", "/env");
-    }
-    parsed[key] = value;
-  }
-
-  const result = Object.fromEntries(ENV_KEYS.map((key) => [key, parsed[key]]));
   validateEnvRecord(result);
   return deepFreeze(result);
 }

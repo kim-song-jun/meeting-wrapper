@@ -262,6 +262,70 @@ function acceptsTimestampSchema(timestampDefinition, value) {
   );
 }
 
+function schemaDeepEqual(left, right) {
+  return JSON.stringify(left) === JSON.stringify(right);
+}
+
+function resolveLocalSchemaRef(root, reference) {
+  if (typeof reference !== "string" || !reference.startsWith("#/")) return undefined;
+  return reference.slice(2).split("/").reduce(
+    (value, segment) => value?.[segment.replace(/~1/g, "/").replace(/~0/g, "~")],
+    root,
+  );
+}
+
+function matchesJsonSchema(instance, definition, root) {
+  if (definition === true) return true;
+  if (definition === false || typeof definition !== "object" || definition === null) return false;
+  if (definition.$ref && !matchesJsonSchema(instance, resolveLocalSchemaRef(root, definition.$ref), root)) {
+    return false;
+  }
+  if (Object.hasOwn(definition, "const") && !schemaDeepEqual(instance, definition.const)) return false;
+  if (definition.enum && !definition.enum.some((value) => schemaDeepEqual(instance, value))) return false;
+  if (definition.type) {
+    const typeMatches = {
+      array: Array.isArray(instance),
+      boolean: typeof instance === "boolean",
+      integer: Number.isInteger(instance),
+      object: typeof instance === "object" && instance !== null && !Array.isArray(instance),
+      string: typeof instance === "string",
+    };
+    if (!typeMatches[definition.type]) return false;
+  }
+  if (definition.pattern && (typeof instance !== "string" || !new RegExp(definition.pattern).test(instance))) {
+    return false;
+  }
+  if (definition.minLength !== undefined && (typeof instance !== "string" || instance.length < definition.minLength)) return false;
+  if (definition.maxLength !== undefined && (typeof instance !== "string" || instance.length > definition.maxLength)) return false;
+  if (definition.minimum !== undefined && (typeof instance !== "number" || instance < definition.minimum)) return false;
+  if (definition.maximum !== undefined && (typeof instance !== "number" || instance > definition.maximum)) return false;
+  if (definition.allOf && !definition.allOf.every((schema) => matchesJsonSchema(instance, schema, root))) return false;
+  if (definition.oneOf && definition.oneOf.filter((schema) => matchesJsonSchema(instance, schema, root)).length !== 1) return false;
+  if (definition.not && matchesJsonSchema(instance, definition.not, root)) return false;
+
+  if (typeof instance === "object" && instance !== null && !Array.isArray(instance)) {
+    if (definition.required?.some((key) => !Object.hasOwn(instance, key))) return false;
+    if (definition.properties) {
+      if (Object.entries(definition.properties).some(([key, schema]) => Object.hasOwn(instance, key) && !matchesJsonSchema(instance[key], schema, root))) return false;
+      if (definition.additionalProperties === false && Object.keys(instance).some((key) => !Object.hasOwn(definition.properties, key))) return false;
+    }
+  }
+
+  if (Array.isArray(instance)) {
+    if (definition.minItems !== undefined && instance.length < definition.minItems) return false;
+    if (definition.maxItems !== undefined && instance.length > definition.maxItems) return false;
+    if (definition.uniqueItems && new Set(instance.map((value) => JSON.stringify(value))).size !== instance.length) return false;
+    if (definition.prefixItems && definition.prefixItems.some((schema, index) => !matchesJsonSchema(instance[index], schema, root))) return false;
+    if (definition.items === false && definition.prefixItems && instance.length > definition.prefixItems.length) return false;
+    if (definition.items && definition.items !== false && instance.some((value) => !matchesJsonSchema(value, definition.items, root))) return false;
+    if (definition.contains) {
+      const matchCount = instance.filter((value) => matchesJsonSchema(value, definition.contains, root)).length;
+      if (matchCount < (definition.minContains ?? 1) || (definition.maxContains !== undefined && matchCount > definition.maxContains)) return false;
+    }
+  }
+  return true;
+}
+
 afterEach(async () => {
   await Promise.all(temporaryRoots.splice(0).map((root) => rm(root, { force: true, recursive: true })));
 });
@@ -791,6 +855,22 @@ describe("Google spike evidence policy", () => {
     const schema = JSON.parse(await readFile(join(schemasRoot, "evidence.schema.json"), "utf8"));
     expect(schema.$defs.accountMatrixOrdinary.allOf[1].properties.bindingAlias).toEqual({ const: "account:ordinary" });
     expect(schema.$defs.accountMatrixAdmin.allOf[1].properties.roomWriter).toEqual({ const: true });
+    expect(schema.$defs.accountMatrixOrdinary.allOf[1].properties.browserProfiles).toEqual({
+      oneOf: expect.arrayContaining([
+        expect.objectContaining({
+          prefixItems: [{ const: "ordinary-chrome-desktop" }, { const: "ordinary-safari-desktop" }],
+          items: false,
+        }),
+      ]),
+    });
+    expect(schema.$defs.accountMatrixAdmin.allOf[1].properties.browserProfiles).toEqual({
+      oneOf: expect.arrayContaining([
+        expect.objectContaining({
+          prefixItems: [{ const: "admin-chrome-desktop" }, { const: "admin-safari-desktop" }],
+          items: false,
+        }),
+      ]),
+    });
     expect(schema.$defs.accountMatrixRoomA.allOf[1].properties.bindingAlias).toEqual({ const: "room:room-a" });
     const rowChecks = schema.$defs.accountMatrixEvidence.properties.rows.allOf.map(({ contains }) => contains.$ref);
     expect(rowChecks).toEqual(expect.arrayContaining(["#/$defs/accountMatrixRowOrdinaryCopy", "#/$defs/accountMatrixRowConflictA", "#/$defs/accountMatrixRowConflictB"]));
@@ -822,6 +902,24 @@ describe("Google spike evidence policy", () => {
       expect(properties.concurrencyGroup.const).toBeTruthy();
       expect(typeof properties.concurrent.const).toBe("boolean");
     }
+  });
+
+  it("validates the canonical account matrix against JSON Schema fixture-id constraints", async () => {
+    const schema = JSON.parse(await readFile(join(schemasRoot, "evidence.schema.json"), "utf8"));
+    const fixtureIds = [
+      "fixture:ordinary-own-event",
+      "fixture:ordinary-room-copy",
+      "fixture:admin-room-copy",
+      "fixture:cross-browser-preference",
+      "fixture:conflict-event-a",
+      "fixture:conflict-event-b",
+    ];
+    expect(matchesJsonSchema(accountMatrix, schema, schema)).toBe(true);
+    expect(schema.$defs.fixtureId).toEqual({ type: "string", enum: fixtureIds });
+
+    const nonCanonicalFixtureId = structuredClone(accountMatrix);
+    nonCanonicalFixtureId.fixtures[0].mutableId = "fixture:not-in-matrix";
+    expect(matchesJsonSchema(nonCanonicalFixtureId, schema, schema)).toBe(false);
   });
 
   it("keeps CLI success and failure output stable and redacted", async () => {

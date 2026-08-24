@@ -1,0 +1,168 @@
+{
+  "schemaVersion": 1,
+  "kind": "account-matrix",
+  "probeId": "account-matrix",
+  "status": "UNBOUND",
+  "observation": "UNOBSERVED",
+  "domain": "MOLCUBE_COM",
+  "accounts": [
+    {
+      "alias": "ordinary",
+      "role": "ordinary",
+      "bindingAlias": "account:ordinary",
+      "roomWriter": false,
+      "browserProfiles": [
+        "ordinary-chrome-desktop",
+        "ordinary-safari-desktop"
+      ]
+    },
+    {
+      "alias": "room-writer-admin",
+      "role": "room-writer-admin",
+      "bindingAlias": "account:ordinary",
+      "roomWriter": true,
+      "browserProfiles": [
+        "admin-chrome-desktop",
+        "admin-safari-desktop"
+      ]
+    }
+  ],
+  "rooms": [
+    {
+      "alias": "room-a",
+      "bindingAlias": "room:room-a"
+    },
+    {
+      "alias": "room-b",
+      "bindingAlias": "room:room-b"
+    }
+  ],
+  "fixtures": [
+    {
+      "alias": "ordinary-own-event",
+      "mutableId": "fixture:ordinary-own-event",
+      "owner": "ordinary",
+      "room": "room-a"
+    },
+    {
+      "alias": "ordinary-room-copy",
+      "mutableId": "fixture:ordinary-room-copy",
+      "owner": "ordinary",
+      "room": "room-b"
+    },
+    {
+      "alias": "admin-room-copy",
+      "mutableId": "fixture:admin-room-copy",
+      "owner": "room-writer-admin",
+      "room": "room-a"
+    },
+    {
+      "alias": "cross-browser-preference",
+      "mutableId": "fixture:cross-browser-preference",
+      "owner": "ordinary",
+      "room": "room-a"
+    },
+    {
+      "alias": "conflict-event-a",
+      "mutableId": "fixture:conflict-event-a",
+      "owner": "ordinary",
+      "room": "room-b"
+    },
+    {
+      "alias": "conflict-event-b",
+      "mutableId": "fixture:conflict-event-b",
+      "owner": "room-writer-admin",
+      "room": "room-b"
+    }
+  ],
+  "rows": [
+    {
+      "alias": "ordinary-room-read",
+      "actor": "ordinary",
+      "resource": "room-a",
+      "owner": "ordinary",
+      "cleanupOwner": "ordinary",
+      "fixture": "ordinary-own-event",
+      "expectedCapability": "SUPPORTED",
+      "concurrencyGroup": "ordinary-read",
+      "concurrent": false
+    },
+    {
+      "alias": "ordinary-own-event-mutation",
+      "actor": "ordinary",
+      "resource": "room-a",
+      "owner": "ordinary",
+      "cleanupOwner": "ordinary",
+      "fixture": "ordinary-own-event",
+      "expectedCapability": "SUPPORTED",
+      "concurrencyGroup": "ordinary-mutation",
+      "concurrent": false
+    },
+    {
+      "alias": "ordinary-room-copy-write",
+      "actor": "ordinary",
+      "resource": "room-b",
+      "owner": "ordinary",
+      "cleanupOwner": "ordinary",
+      "fixture": "ordinary-room-copy",
+      "expectedCapability": "DENIED",
+      "concurrencyGroup": "ordinary-room-copy",
+      "concurrent": false
+    },
+    {
+      "alias": "admin-room-copy-write",
+      "actor": "room-writer-admin",
+      "resource": "room-a",
+      "owner": "room-writer-admin",
+      "cleanupOwner": "room-writer-admin",
+      "fixture": "admin-room-copy",
+      "expectedCapability": "INCONCLUSIVE",
+      "concurrencyGroup": "admin-room-copy",
+      "concurrent": false
+    },
+    {
+      "alias": "same-account-cross-browser-drive",
+      "actor": "ordinary",
+      "resource": "drive-appdata",
+      "owner": "ordinary",
+      "cleanupOwner": "ordinary",
+      "fixture": "cross-browser-preference",
+      "expectedCapability": "SUPPORTED",
+      "concurrencyGroup": "drive-read",
+      "concurrent": false
+    },
+    {
+      "alias": "people-directory-search",
+      "actor": "ordinary",
+      "resource": "people-directory",
+      "owner": "ordinary",
+      "cleanupOwner": "ordinary",
+      "fixture": "cross-browser-preference",
+      "expectedCapability": "INCONCLUSIVE",
+      "concurrencyGroup": "people-search",
+      "concurrent": false
+    },
+    {
+      "alias": "two-browser-conflict-a",
+      "actor": "ordinary",
+      "resource": "room-b",
+      "owner": "ordinary",
+      "cleanupOwner": "ordinary",
+      "fixture": "conflict-event-a",
+      "expectedCapability": "INCONCLUSIVE",
+      "concurrencyGroup": "conflict-room-b",
+      "concurrent": true
+    },
+    {
+      "alias": "two-browser-conflict-b",
+      "actor": "room-writer-admin",
+      "resource": "room-b",
+      "owner": "room-writer-admin",
+      "cleanupOwner": "room-writer-admin",
+      "fixture": "conflict-event-b",
+      "expectedCapability": "INCONCLUSIVE",
+      "concurrencyGroup": "conflict-room-b",
+      "concurrent": true
+    }
+  ]
+}

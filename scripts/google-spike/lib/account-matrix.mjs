@@ -1,4 +1,4 @@
-import { readFile } from "node:fs/promises";
+import { EnvContractError, parseSharedEnv } from "./env-contract.mjs";
 
 export class AccountMatrixError extends Error {
   constructor(category, pointer = "/") {
@@ -9,182 +9,163 @@ export class AccountMatrixError extends Error {
   }
 }
 
-const ACCOUNT_ALIASES = new Set(["ordinary", "room-writer-admin"]);
-const ROOM_ALIASES = new Set(["room-a", "room-b"]);
-const CAPABILITIES = new Set(["SUPPORTED", "DENIED", "INCONCLUSIVE"]);
-const REQUIRED_ROW_ALIASES = new Set([
-  "ordinary-room-read",
-  "ordinary-own-event-mutation",
-  "ordinary-room-copy-write",
-  "admin-room-copy-write",
-  "same-account-cross-browser-drive",
-  "people-directory-search",
-  "two-browser-conflict-a",
-  "two-browser-conflict-b",
-]);
-const ENV_KEYS = Object.freeze([
+const TASK5_ENV_KEYS = Object.freeze([
   "GOOGLE_SPIKE_ORDINARY_ACCOUNT",
   "GOOGLE_SPIKE_ADMIN_ACCOUNT",
   "GOOGLE_SPIKE_ROOM_A_CALENDAR_ID",
   "GOOGLE_SPIKE_ROOM_B_CALENDAR_ID",
 ]);
-const ENV_BINDINGS = Object.freeze({
-  GOOGLE_SPIKE_ORDINARY_ACCOUNT: "account:ordinary",
-  GOOGLE_SPIKE_ADMIN_ACCOUNT: "account:room-writer-admin",
-  GOOGLE_SPIKE_ROOM_A_CALENDAR_ID: "room:room-a",
-  GOOGLE_SPIKE_ROOM_B_CALENDAR_ID: "room:room-b",
+const ACCOUNT_EMAIL_PATTERN = /^[a-z0-9!#$%&'*+/=?^_`{|}~-]+(?:\.[a-z0-9!#$%&'*+/=?^_`{|}~-]+)*@molcube\.com$/;
+const CALENDAR_ID_PATTERN = /^[a-z0-9!#$%&'*+/=?^_`{|}~-]+(?:\.[a-z0-9!#$%&'*+/=?^_`{|}~-]+)*@[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?$/;
+
+const CANONICAL_ACCOUNTS = Object.freeze({
+  ordinary: Object.freeze({
+    alias: "ordinary",
+    role: "ordinary",
+    bindingAlias: "account:ordinary",
+    roomWriter: false,
+    browserProfiles: Object.freeze(["ordinary-chrome-desktop", "ordinary-safari-desktop"]),
+  }),
+  "room-writer-admin": Object.freeze({
+    alias: "room-writer-admin",
+    role: "room-writer-admin",
+    bindingAlias: "account:room-writer-admin",
+    roomWriter: true,
+    browserProfiles: Object.freeze(["admin-chrome-desktop", "admin-safari-desktop"]),
+  }),
+});
+const CANONICAL_ROOMS = Object.freeze({
+  "room-a": Object.freeze({ alias: "room-a", bindingAlias: "room:room-a" }),
+  "room-b": Object.freeze({ alias: "room-b", bindingAlias: "room:room-b" }),
+});
+const CANONICAL_FIXTURES = Object.freeze({
+  "ordinary-own-event": Object.freeze({ alias: "ordinary-own-event", mutableId: "fixture:ordinary-own-event", owner: "ordinary", room: "room-a" }),
+  "ordinary-room-copy": Object.freeze({ alias: "ordinary-room-copy", mutableId: "fixture:ordinary-room-copy", owner: "ordinary", room: "room-b" }),
+  "admin-room-copy": Object.freeze({ alias: "admin-room-copy", mutableId: "fixture:admin-room-copy", owner: "room-writer-admin", room: "room-a" }),
+  "cross-browser-preference": Object.freeze({ alias: "cross-browser-preference", mutableId: "fixture:cross-browser-preference", owner: "ordinary", room: "room-a" }),
+  "conflict-event-a": Object.freeze({ alias: "conflict-event-a", mutableId: "fixture:conflict-event-a", owner: "ordinary", room: "room-b" }),
+  "conflict-event-b": Object.freeze({ alias: "conflict-event-b", mutableId: "fixture:conflict-event-b", owner: "room-writer-admin", room: "room-b" }),
+});
+const CANONICAL_ROWS = Object.freeze({
+  "ordinary-room-read": Object.freeze({ alias: "ordinary-room-read", actor: "ordinary", resource: "room-a", owner: "ordinary", cleanupOwner: "ordinary", fixture: "ordinary-own-event", expectedCapability: "SUPPORTED", concurrencyGroup: "ordinary-read", concurrent: false }),
+  "ordinary-own-event-mutation": Object.freeze({ alias: "ordinary-own-event-mutation", actor: "ordinary", resource: "room-a", owner: "ordinary", cleanupOwner: "ordinary", fixture: "ordinary-own-event", expectedCapability: "SUPPORTED", concurrencyGroup: "ordinary-mutation", concurrent: false }),
+  "ordinary-room-copy-write": Object.freeze({ alias: "ordinary-room-copy-write", actor: "ordinary", resource: "room-b", owner: "ordinary", cleanupOwner: "ordinary", fixture: "ordinary-room-copy", expectedCapability: "DENIED", concurrencyGroup: "ordinary-room-copy", concurrent: false }),
+  "admin-room-copy-write": Object.freeze({ alias: "admin-room-copy-write", actor: "room-writer-admin", resource: "room-a", owner: "room-writer-admin", cleanupOwner: "room-writer-admin", fixture: "admin-room-copy", expectedCapability: "INCONCLUSIVE", concurrencyGroup: "admin-room-copy", concurrent: false }),
+  "same-account-cross-browser-drive": Object.freeze({ alias: "same-account-cross-browser-drive", actor: "ordinary", resource: "drive-appdata", owner: "ordinary", cleanupOwner: "ordinary", fixture: "cross-browser-preference", expectedCapability: "SUPPORTED", concurrencyGroup: "drive-read", concurrent: false }),
+  "people-directory-search": Object.freeze({ alias: "people-directory-search", actor: "ordinary", resource: "people-directory", owner: "ordinary", cleanupOwner: "ordinary", fixture: "cross-browser-preference", expectedCapability: "INCONCLUSIVE", concurrencyGroup: "people-search", concurrent: false }),
+  "two-browser-conflict-a": Object.freeze({ alias: "two-browser-conflict-a", actor: "ordinary", resource: "room-b", owner: "ordinary", cleanupOwner: "ordinary", fixture: "conflict-event-a", expectedCapability: "INCONCLUSIVE", concurrencyGroup: "conflict-room-b", concurrent: true }),
+  "two-browser-conflict-b": Object.freeze({ alias: "two-browser-conflict-b", actor: "room-writer-admin", resource: "room-b", owner: "room-writer-admin", cleanupOwner: "room-writer-admin", fixture: "conflict-event-b", expectedCapability: "INCONCLUSIVE", concurrencyGroup: "conflict-room-b", concurrent: true }),
 });
 
 function fail(category, pointer) {
   throw new AccountMatrixError(category, pointer);
 }
 
-function record(value, pointer) {
+function assertRecord(value, pointer) {
   if (typeof value !== "object" || value === null || Array.isArray(value)) fail("INVALID_ACCOUNT_MATRIX", pointer);
-  return value;
 }
 
-function string(value, pointer) {
-  if (typeof value !== "string" || value.length === 0 || /[\u0000-\u001f\u007f@]/.test(value)) fail("INVALID_ACCOUNT_MATRIX", pointer);
-  return value;
-}
-
-function exactKeys(value, allowed, pointer) {
-  for (const key of Object.keys(value)) if (!allowed.has(key)) fail("INVALID_ACCOUNT_MATRIX", `${pointer}/_unknown`);
-}
-
-function unique(values, pointer) {
-  if (new Set(values).size !== values.length) fail("INVALID_ACCOUNT_MATRIX", pointer);
-}
-
-function assertAccount(account, index) {
-  const pointer = `/accounts/${index}`;
-  record(account, pointer);
-  exactKeys(account, new Set(["alias", "role", "bindingAlias", "roomWriter", "browserProfiles"]), pointer);
-  if (!ACCOUNT_ALIASES.has(account.alias) || account.role !== account.alias) fail("INVALID_ACCOUNT_MATRIX", `${pointer}/alias`);
-  if (typeof account.bindingAlias !== "string" || !/^account:(ordinary|room-writer-admin)$/.test(account.bindingAlias)) fail("INVALID_ACCOUNT_MATRIX", `${pointer}/bindingAlias`);
-  if (typeof account.roomWriter !== "boolean" || account.roomWriter !== (account.alias === "room-writer-admin")) fail("INVALID_ACCOUNT_MATRIX", `${pointer}/roomWriter`);
-  if (!Array.isArray(account.browserProfiles) || account.browserProfiles.length < 2) fail("INVALID_ACCOUNT_MATRIX", `${pointer}/browserProfiles`);
-  account.browserProfiles.forEach((profile, profileIndex) => string(profile, `${pointer}/browserProfiles/${profileIndex}`));
-  unique(account.browserProfiles, `${pointer}/browserProfiles`);
-}
-
-function assertRoom(room, index) {
-  const pointer = `/rooms/${index}`;
-  record(room, pointer);
-  exactKeys(room, new Set(["alias", "bindingAlias"]), pointer);
-  if (!ROOM_ALIASES.has(room.alias) || room.bindingAlias !== `room:${room.alias}`) fail("INVALID_ACCOUNT_MATRIX", `${pointer}/alias`);
-}
-
-function assertFixture(fixture, index, accounts, rooms) {
-  const pointer = `/fixtures/${index}`;
-  record(fixture, pointer);
-  exactKeys(fixture, new Set(["alias", "mutableId", "owner", "room"]), pointer);
-  for (const key of ["alias", "mutableId"]) string(fixture[key], `${pointer}/${key}`);
-  if (!ACCOUNT_ALIASES.has(fixture.owner) || !ROOM_ALIASES.has(fixture.room)) fail("INVALID_ACCOUNT_MATRIX", pointer);
-  if (fixture.mutableId.includes("@")) fail("FORBIDDEN_ACCOUNT_MATRIX_VALUE", `${pointer}/mutableId`);
-  if (!accounts.has(fixture.owner) || !rooms.has(fixture.room)) fail("INVALID_ACCOUNT_MATRIX", pointer);
-}
-
-function assertRow(row, index, accounts, rooms, fixtures) {
-  const pointer = `/rows/${index}`;
-  record(row, pointer);
-  exactKeys(row, new Set(["alias", "actor", "resource", "owner", "cleanupOwner", "fixture", "expectedCapability", "concurrencyGroup", "concurrent"]), pointer);
-  string(row.alias, `${pointer}/alias`);
-  if (!accounts.has(row.actor) || !accounts.has(row.owner) || !accounts.has(row.cleanupOwner)) fail("INVALID_ACCOUNT_MATRIX", pointer);
-  if (!rooms.has(row.resource) && !new Set(["drive-appdata", "people-directory"]).has(row.resource)) fail("INVALID_ACCOUNT_MATRIX", `${pointer}/resource`);
-  if (!fixtures.has(row.fixture)) fail("INVALID_ACCOUNT_MATRIX", `${pointer}/fixture`);
-  if (!CAPABILITIES.has(row.expectedCapability)) fail("INVALID_ACCOUNT_MATRIX", `${pointer}/expectedCapability`);
-  if (typeof row.concurrencyGroup !== "string" || typeof row.concurrent !== "boolean") fail("INVALID_ACCOUNT_MATRIX", pointer);
-}
-
-function parseEnv(text) {
-  if (typeof text !== "string") fail("INVALID_ACCOUNT_MATRIX_ENV", "/env");
-  const values = Object.create(null);
-  for (const line of text.split(/\r?\n/)) {
-    if (line.trim() === "" || /^\s*#/.test(line)) continue;
-    const separator = line.indexOf("=");
-    if (separator <= 0 || line.startsWith("export ")) fail("INVALID_ACCOUNT_MATRIX_ENV", "/env");
-    const key = line.slice(0, separator);
-    const value = line.slice(separator + 1);
-    if (!ENV_KEYS.includes(key) || Object.hasOwn(values, key) || value.length === 0 || value.includes("$") || value.includes('"') || value.includes("'") || value.includes("`")) fail("INVALID_ACCOUNT_MATRIX_ENV", "/env");
-    values[key] = value;
+function assertExactKeys(value, expected, pointer) {
+  const expectedKeys = Object.keys(expected);
+  for (const key of Object.keys(value)) {
+    if (!expectedKeys.includes(key)) fail("INVALID_ACCOUNT_MATRIX", `${pointer}/_unknown`);
   }
-  if (Object.keys(values).length !== ENV_KEYS.length) fail("INVALID_ACCOUNT_MATRIX_ENV", "/env");
-  const accountPattern = /^[a-z0-9!#$%&'*+/=?^_`{|}~-]+(?:\.[a-z0-9!#$%&'*+/=?^_`{|}~-]+)*@molcube\.com$/;
-  const calendarPattern = /^[a-z0-9!#$%&'*+/=?^_`{|}~-]+(?:\.[a-z0-9!#$%&'*+/=?^_`{|}~-]+)*@[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?$/;
-  if (!accountPattern.test(values.GOOGLE_SPIKE_ORDINARY_ACCOUNT) || !accountPattern.test(values.GOOGLE_SPIKE_ADMIN_ACCOUNT)) fail("INVALID_ACCOUNT_MATRIX_ENV", "/env/accounts");
-  if (!calendarPattern.test(values.GOOGLE_SPIKE_ROOM_A_CALENDAR_ID) || !calendarPattern.test(values.GOOGLE_SPIKE_ROOM_B_CALENDAR_ID)) fail("INVALID_ACCOUNT_MATRIX_ENV", "/env/rooms");
-  if (values.GOOGLE_SPIKE_ORDINARY_ACCOUNT === values.GOOGLE_SPIKE_ADMIN_ACCOUNT) fail("INVALID_ACCOUNT_MATRIX_ENV", "/env/accounts");
-  if (values.GOOGLE_SPIKE_ROOM_A_CALENDAR_ID === values.GOOGLE_SPIKE_ROOM_B_CALENDAR_ID) fail("INVALID_ACCOUNT_MATRIX_ENV", "/env/rooms");
-  return values;
+  for (const key of expectedKeys) {
+    if (!Object.hasOwn(value, key)) fail("INVALID_ACCOUNT_MATRIX", `${pointer}/${key}`);
+  }
+}
+
+function assertExactTuple(value, expected, pointer) {
+  assertRecord(value, pointer);
+  assertExactKeys(value, expected, pointer);
+  for (const [key, expectedValue] of Object.entries(expected)) {
+    if (Array.isArray(expectedValue)) {
+      if (!Array.isArray(value[key]) || value[key].length !== expectedValue.length) {
+        fail("INVALID_ACCOUNT_MATRIX", `${pointer}/${key}`);
+      }
+      const expectedSet = new Set(expectedValue);
+      value[key].forEach((entry, index) => {
+        if (!expectedSet.has(entry)) fail("INVALID_ACCOUNT_MATRIX", `${pointer}/${key}/${index}`);
+      });
+      if (new Set(value[key]).size !== expectedSet.size) fail("INVALID_ACCOUNT_MATRIX", `${pointer}/${key}`);
+    } else if (value[key] !== expectedValue) {
+      fail("INVALID_ACCOUNT_MATRIX", `${pointer}/${key}`);
+    }
+  }
+}
+
+function assertExactCollection(value, expectedByAlias, pointer) {
+  if (!Array.isArray(value) || value.length !== Object.keys(expectedByAlias).length) {
+    fail("INVALID_ACCOUNT_MATRIX", pointer);
+  }
+  const seen = new Set();
+  value.forEach((entry, index) => {
+    assertRecord(entry, `${pointer}/${index}`);
+    const expected = expectedByAlias[entry.alias];
+    if (!expected || seen.has(entry.alias)) fail("INVALID_ACCOUNT_MATRIX", `${pointer}/${index}/alias`);
+    seen.add(entry.alias);
+    assertExactTuple(entry, expected, `${pointer}/${index}`);
+  });
+}
+
+function parseTask5Env(text) {
+  let env;
+  try {
+    env = parseSharedEnv(text, {
+      category: "INVALID_ACCOUNT_MATRIX_ENV",
+      requiredKeys: TASK5_ENV_KEYS,
+      unknownPointer: "/env/_unknown",
+      reportMissingKey: true,
+    });
+  } catch (error) {
+    if (error instanceof EnvContractError) fail(error.category, error.pointer);
+    throw error;
+  }
+  if (!ACCOUNT_EMAIL_PATTERN.test(env.GOOGLE_SPIKE_ORDINARY_ACCOUNT)) {
+    fail("INVALID_ACCOUNT_MATRIX_ENV", "/env/accounts/ordinary");
+  }
+  if (!ACCOUNT_EMAIL_PATTERN.test(env.GOOGLE_SPIKE_ADMIN_ACCOUNT)) {
+    fail("INVALID_ACCOUNT_MATRIX_ENV", "/env/accounts/roomWriterAdmin");
+  }
+  if (env.GOOGLE_SPIKE_ORDINARY_ACCOUNT === env.GOOGLE_SPIKE_ADMIN_ACCOUNT) {
+    fail("INVALID_ACCOUNT_MATRIX_ENV", "/env/accounts/distinct");
+  }
+  if (!CALENDAR_ID_PATTERN.test(env.GOOGLE_SPIKE_ROOM_A_CALENDAR_ID)) {
+    fail("INVALID_ACCOUNT_MATRIX_ENV", "/env/rooms/0");
+  }
+  if (!CALENDAR_ID_PATTERN.test(env.GOOGLE_SPIKE_ROOM_B_CALENDAR_ID)) {
+    fail("INVALID_ACCOUNT_MATRIX_ENV", "/env/rooms/1");
+  }
+  if (env.GOOGLE_SPIKE_ROOM_A_CALENDAR_ID === env.GOOGLE_SPIKE_ROOM_B_CALENDAR_ID) {
+    fail("INVALID_ACCOUNT_MATRIX_ENV", "/env/rooms");
+  }
+  return env;
 }
 
 export function validateAccountMatrix(value, { envText } = {}) {
-  const matrix = record(value, "/");
-  exactKeys(matrix, new Set(["schemaVersion", "kind", "probeId", "status", "observation", "domain", "accounts", "rooms", "fixtures", "rows"]), "/");
-  if (matrix.schemaVersion !== 1 || matrix.kind !== "account-matrix" || matrix.probeId !== "account-matrix" || matrix.status !== "UNBOUND" || matrix.observation !== "UNOBSERVED" || matrix.domain !== "MOLCUBE_COM") fail("INVALID_ACCOUNT_MATRIX", "/");
-  if (!Array.isArray(matrix.accounts) || matrix.accounts.length !== 2) fail("INVALID_ACCOUNT_MATRIX", "/accounts");
-  matrix.accounts.forEach(assertAccount);
-  const accounts = new Set(matrix.accounts.map(({ alias }) => alias));
-  unique(matrix.accounts.map(({ bindingAlias }) => bindingAlias), "/accounts/bindingAlias");
-  if (accounts.size !== 2 || accounts.has("ordinary") === false || accounts.has("room-writer-admin") === false) fail("INVALID_ACCOUNT_MATRIX", "/accounts");
-  if (matrix.accounts[0].bindingAlias === matrix.accounts[1].bindingAlias) fail("INVALID_ACCOUNT_MATRIX", "/accounts/distinct");
-  const rooms = Array.isArray(matrix.rooms) ? matrix.rooms : fail("INVALID_ACCOUNT_MATRIX", "/rooms");
-  if (rooms.length !== 2) fail("INVALID_ACCOUNT_MATRIX", "/rooms");
-  rooms.forEach(assertRoom);
-  const roomAliases = new Set(rooms.map(({ alias }) => alias));
-  unique(rooms.map(({ bindingAlias }) => bindingAlias), "/rooms/bindingAlias");
-  if (roomAliases.size !== 2) fail("INVALID_ACCOUNT_MATRIX", "/rooms");
-  const fixtures = Array.isArray(matrix.fixtures) ? matrix.fixtures : fail("INVALID_ACCOUNT_MATRIX", "/fixtures");
-  if (fixtures.length < 6) fail("INVALID_ACCOUNT_MATRIX", "/fixtures");
-  fixtures.forEach((fixture, index) => assertFixture(fixture, index, accounts, roomAliases));
-  unique(fixtures.map(({ alias }) => alias), "/fixtures/alias");
-  unique(fixtures.map(({ mutableId }) => mutableId), "/fixtures/mutableId");
-  const fixtureAliases = new Set(fixtures.map(({ alias }) => alias));
-  const rows = Array.isArray(matrix.rows) ? matrix.rows : fail("INVALID_ACCOUNT_MATRIX", "/rows");
-  if (rows.length !== REQUIRED_ROW_ALIASES.size) fail("INVALID_ACCOUNT_MATRIX", "/rows");
-  rows.forEach((row, index) => assertRow(row, index, accounts, roomAliases, fixtureAliases));
-  unique(rows.map(({ alias }) => alias), "/rows/alias");
-  if (new Set(rows.map(({ alias }) => alias)).size !== REQUIRED_ROW_ALIASES.size || rows.some(({ alias }) => !REQUIRED_ROW_ALIASES.has(alias))) fail("INVALID_ACCOUNT_MATRIX", "/rows/alias");
-  const byAlias = new Map(rows.map((row) => [row.alias, row]));
-  const exact = (alias, expected) => {
-    const row = byAlias.get(alias);
-    for (const [key, value] of Object.entries(expected)) if (row[key] !== value) fail("INVALID_ACCOUNT_MATRIX", `/rows/${rows.indexOf(row)}/${key}`);
+  assertRecord(value, "/");
+  const matrixKeys = {
+    schemaVersion: 1,
+    kind: "account-matrix",
+    probeId: "account-matrix",
+    status: "UNBOUND",
+    observation: "UNOBSERVED",
+    domain: "MOLCUBE_COM",
+    accounts: undefined,
+    rooms: undefined,
+    fixtures: undefined,
+    rows: undefined,
   };
-  exact("ordinary-room-read", { actor: "ordinary", owner: "ordinary", resource: "room-a", expectedCapability: "SUPPORTED" });
-  exact("ordinary-own-event-mutation", { actor: "ordinary", owner: "ordinary", resource: "room-a", expectedCapability: "SUPPORTED" });
-  exact("ordinary-room-copy-write", { actor: "ordinary", owner: "ordinary", resource: "room-b", expectedCapability: "DENIED" });
-  exact("admin-room-copy-write", { actor: "room-writer-admin", owner: "room-writer-admin", resource: "room-a", expectedCapability: "INCONCLUSIVE" });
-  exact("same-account-cross-browser-drive", { actor: "ordinary", owner: "ordinary", resource: "drive-appdata", expectedCapability: "SUPPORTED" });
-  exact("people-directory-search", { actor: "ordinary", owner: "ordinary", resource: "people-directory", expectedCapability: "INCONCLUSIVE" });
-  exact("two-browser-conflict-a", { actor: "ordinary", owner: "ordinary", resource: "room-b", expectedCapability: "INCONCLUSIVE", concurrencyGroup: "conflict-room-b" });
-  exact("two-browser-conflict-b", { actor: "room-writer-admin", owner: "room-writer-admin", resource: "room-b", expectedCapability: "INCONCLUSIVE", concurrencyGroup: "conflict-room-b" });
-  const fixtureRows = new Map();
-  for (const row of rows) {
-    const fixture = fixtureAliases.has(row.fixture) ? matrix.fixtures.find((candidate) => candidate.alias === row.fixture) : undefined;
-    if (!fixture || row.cleanupOwner !== fixture.owner || (ROOM_ALIASES.has(row.resource) && row.resource !== fixture.room)) fail("INVALID_ACCOUNT_MATRIX", `/rows/${rows.indexOf(row)}/cleanupOwner`);
-    const previous = fixtureRows.get(row.fixture);
-    if (previous && (previous.concurrent || row.concurrent || previous.concurrencyGroup === row.concurrencyGroup)) fail("INVALID_ACCOUNT_MATRIX", `/rows/${rows.indexOf(row)}/fixture`);
-    fixtureRows.set(row.fixture, row);
+  assertExactKeys(value, matrixKeys, "/");
+  for (const [key, expected] of Object.entries(matrixKeys)) {
+    if (expected !== undefined && value[key] !== expected) fail("INVALID_ACCOUNT_MATRIX", `/${key}`);
   }
-  if (envText !== undefined) {
-    const env = parseEnv(envText);
-    for (const [key, bindingAlias] of Object.entries(ENV_BINDINGS)) {
-      const expected = bindingAlias === "account:ordinary" ? "ordinary" : bindingAlias === "account:room-writer-admin" ? "room-writer-admin" : bindingAlias.slice("room:".length);
-      if (!matrix.accounts.concat(matrix.rooms).some((entry) => entry.bindingAlias === bindingAlias && entry.alias === expected)) fail("INVALID_ACCOUNT_MATRIX", `/env/${key}`);
-      if (env[key].length === 0) fail("INVALID_ACCOUNT_MATRIX_ENV", `/env/${key}`);
-    }
-  }
-  return matrix;
-}
 
-export async function readAccountMatrix(path) {
-  let parsed;
-  try {
-    parsed = JSON.parse(await readFile(path, "utf8"));
-  } catch {
-    fail("ACCOUNT_MATRIX_NOT_READABLE", "/");
-  }
-  return validateAccountMatrix(parsed);
+  assertExactCollection(value.accounts, CANONICAL_ACCOUNTS, "/accounts");
+  assertExactCollection(value.rooms, CANONICAL_ROOMS, "/rooms");
+  assertExactCollection(value.fixtures, CANONICAL_FIXTURES, "/fixtures");
+  assertExactCollection(value.rows, CANONICAL_ROWS, "/rows");
+
+  if (envText !== undefined) parseTask5Env(envText);
+  return value;
 }
