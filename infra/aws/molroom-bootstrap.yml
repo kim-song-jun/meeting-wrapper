@@ -2,6 +2,11 @@ AWSTemplateFormatVersion: "2010-09-09"
 Description: MolRoom GitHub OIDC trust and least-privilege deployment roles
 
 Parameters:
+  ControllerTag:
+    Type: String
+    Default: molroom-release-controller-v1
+    AllowedPattern: '^molroom-release-controller-v[1-9][0-9]*$'
+    Description: Immutable protected tag containing the trusted release-controller workflow.
   ExistingGitHubOidcProviderArn:
     Type: String
     Default: ""
@@ -236,6 +241,7 @@ Resources:
               StringEquals:
                 token.actions.githubusercontent.com:aud: sts.amazonaws.com
                 token.actions.githubusercontent.com:sub: !Ref GitHubOidcSubject
+                token.actions.githubusercontent.com:workflow_ref: !Sub 'kim-song-jun/meeting-wrapper/.github/workflows/release-controller.yml@refs/tags/${ControllerTag}'
       Policies:
         - PolicyName: molroom-release-deployment
           PolicyDocument:
@@ -245,6 +251,7 @@ Resources:
                 Effect: Allow
                 Action:
                   - cloudformation:CreateChangeSet
+                  - cloudformation:DeleteStack
                   - cloudformation:DeleteChangeSet
                   - cloudformation:DescribeChangeSet
                   - cloudformation:DescribeStackEvents

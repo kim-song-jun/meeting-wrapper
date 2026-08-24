@@ -1,0 +1,643 @@
+name: Trusted production release controller
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: release, repair, or rollback
+        required: true
+        type: choice
+        options: [release, repair, rollback]
+      version:
+        description: Semantic version without v prefix
+        required: true
+        type: string
+      target_sha:
+        description: Exact lowercase 40-character release SHA
+        required: true
+        type: string
+      candidate_run_id:
+        description: Successful Verify release candidate run ID; required only for release
+        required: false
+        type: string
+      security_gate_run_id:
+        description: Successful security-gate run ID; required only for release
+        required: false
+        type: string
+      execute_cutover:
+        description: Apply the CloudFormation cutover
+        required: true
+        default: false
+        type: boolean
+      confirmation:
+        description: Exact RELEASE, REPAIR, or ROLLBACK acknowledgement
+        required: true
+        type: string
+
+concurrency:
+  group: molroom-production-controller
+  cancel-in-progress: false
+
+jobs:
+  classify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    outputs:
+      release: ${{ steps.classify.outputs.release }}
+      repair: ${{ steps.classify.outputs.repair }}
+      rollback: ${{ steps.classify.outputs.rollback }}
+    steps:
+      - name: Checkout only the tagged controller commit
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+          path: controller
+          persist-credentials: false
+          ref: ${{ github.sha }}
+      - name: Bind dispatch to the protected immutable controller tag and classify inputs
+        id: classify
+        env:
+          CANDIDATE_RUN_ID: ${{ inputs.candidate_run_id }}
+          CONFIRMATION: ${{ inputs.confirmation }}
+          GH_TOKEN: ${{ github.token }}
+          MODE: ${{ inputs.mode }}
+          SECURITY_GATE_RUN_ID: ${{ inputs.security_gate_run_id }}
+          TARGET_SHA: ${{ inputs.target_sha }}
+          VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF" = refs/tags/molroom-release-controller-v1
+          test "$(git -C controller rev-parse HEAD)" = "$GITHUB_SHA"
+          test "$(git -C controller rev-parse 'refs/tags/molroom-release-controller-v1^{}')" = "$GITHUB_SHA"
+          node --input-type=module <<'NODE'
+          if (!/^[0-9a-f]{40}$/.test(process.env.TARGET_SHA)) process.exit(1);
+          if (!/^(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)$/.test(process.env.VERSION)) process.exit(1);
+          const positiveRunId = /^[1-9][0-9]*$/;
+          if (process.env.MODE === "release") {
+            if (!positiveRunId.test(process.env.CANDIDATE_RUN_ID) || !positiveRunId.test(process.env.SECURITY_GATE_RUN_ID)) process.exit(1);
+          } else if (process.env.CANDIDATE_RUN_ID !== "" || process.env.SECURITY_GATE_RUN_ID !== "") process.exit(1);
+          NODE
+          expected_confirmation="$(printf '%s' "$MODE" | tr '[:lower:]' '[:upper:]')"
+          test "$CONFIRMATION" = "$expected_confirmation"
+          if [ "$MODE" != release ]; then
+            tag_object_sha="$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/v$VERSION" --jq '.object.sha')"
+            tag_object_type="$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/v$VERSION" --jq '.object.type')"
+            test "$tag_object_type" = tag
+            test "$(gh api "repos/$GITHUB_REPOSITORY/git/tags/$tag_object_sha" --jq '.object.sha')" = "$TARGET_SHA"
+          fi
+          printf 'release=%s\nrepair=%s\nrollback=%s\n' \
+            "$([ "$MODE" = release ] && echo true || echo false)" \
+            "$([ "$MODE" = repair ] && echo true || echo false)" \
+            "$([ "$MODE" = rollback ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+
+  prepare-release:
+    needs: classify
+    if: needs.classify.outputs.release == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      actions: read
+      contents: read
+    env:
+      CANDIDATE_RUN_ID: ${{ inputs.candidate_run_id }}
+      SECURITY_GATE_RUN_ID: ${{ inputs.security_gate_run_id }}
+      TARGET_SHA: ${{ inputs.target_sha }}
+      VERSION: ${{ inputs.version }}
+    steps:
+      - name: Checkout only the tagged controller commit
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 1
+          path: controller
+          persist-credentials: false
+          ref: ${{ github.sha }}
+      - name: Verify controller tag and set up exact Node
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF" = refs/tags/molroom-release-controller-v1
+          test "$(git -C controller rev-parse HEAD)" = "$GITHUB_SHA"
+      - name: Set up controller Node runtime
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 24.19.0
+          cache: ""
+      - name: Bind the candidate producer run and mandatory server artifact digest
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -m 700 "$RUNNER_TEMP/candidate-metadata"
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$CANDIDATE_RUN_ID" > "$RUNNER_TEMP/candidate-metadata/run.json"
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$CANDIDATE_RUN_ID/artifacts?per_page=100" > "$RUNNER_TEMP/candidate-metadata/artifacts.json"
+          TARGET_SHA="$TARGET_SHA" node --input-type=module <<'NODE'
+          import { readFile, writeFile } from "node:fs/promises";
+          const root = process.env.RUNNER_TEMP + "/candidate-metadata";
+          const run = JSON.parse(await readFile(`${root}/run.json`, "utf8"));
+          if (run.repository?.full_name !== process.env.GITHUB_REPOSITORY || run.path !== ".github/workflows/release.yml" || run.event !== "workflow_dispatch" || run.status !== "completed" || run.conclusion !== "success" || run.head_branch !== "main" || run.head_sha !== process.env.TARGET_SHA) throw new Error("candidate producer run binding failed");
+          const response = JSON.parse(await readFile(`${root}/artifacts.json`, "utf8"));
+          const matches = response.artifacts?.filter((artifact) => artifact?.name === `verified-release-${process.env.TARGET_SHA}` && artifact?.expired === false) ?? [];
+          if (matches.length !== 1 || !Number.isSafeInteger(matches[0].id) || matches[0].id <= 0 || !Number.isSafeInteger(matches[0].size_in_bytes) || matches[0].size_in_bytes <= 0 || typeof matches[0].archive_download_url !== "string" || !matches[0].archive_download_url.startsWith("https://") || !/^sha256:[0-9a-f]{64}$/.test(matches[0].digest ?? "")) throw new Error("candidate artifact digest binding failed");
+          await writeFile(`${root}/artifact.json`, `${JSON.stringify(matches[0])}\n`, { mode: 0o600 });
+          NODE
+      - name: Download the exact bound candidate artifact ID and verify its ZIP digest
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          candidate_root="$RUNNER_TEMP/candidate-metadata"
+          artifact_id="$(node -e 'console.log(require(process.env.RUNNER_TEMP + "/candidate-metadata/artifact.json").id)')"
+          expected_digest="$(node -e 'console.log(require(process.env.RUNNER_TEMP + "/candidate-metadata/artifact.json").digest)')"
+          test "$artifact_id" -gt 0
+          gh api -H "Accept: application/vnd.github+json" "repos/$GITHUB_REPOSITORY/actions/artifacts/$artifact_id/zip" > "$candidate_root/candidate.zip"
+          actual_digest="sha256:$(sha256sum "$candidate_root/candidate.zip" | cut -d' ' -f1)"
+          test "$actual_digest" = "$expected_digest"
+          mkdir -m 700 "$RUNNER_TEMP/candidate-archive"
+          node controller/scripts/release-control.mjs extract-candidate-zip \
+            --zip-path "$candidate_root/candidate.zip" \
+            --output-root "$RUNNER_TEMP/candidate-archive"
+      - name: Reinspect the producer receipt and artifact tree
+        run: |
+          set -euo pipefail
+          node controller/scripts/release-control.mjs verify-archive \
+            --artifact-root "$RUNNER_TEMP/candidate-archive/artifact" \
+            --candidate-sha "$TARGET_SHA" \
+            --receipt-path "$RUNNER_TEMP/candidate-archive/receipt.json"
+      - name: Bind the exact successful security-gate run and mandatory artifact digest
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          umask 077
+          gate_root="$RUNNER_TEMP/security-gate"
+          mkdir -m 700 "$gate_root"
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$SECURITY_GATE_RUN_ID" > "$gate_root/run.json"
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$SECURITY_GATE_RUN_ID/artifacts?per_page=100" > "$gate_root/artifacts.json"
+          gh api "repos/$GITHUB_REPOSITORY/contents/.github/workflows/security-gate.yml?ref=$TARGET_SHA" \
+            > "$gate_root/target-workflow.json"
+          node --input-type=module <<'NODE'
+          import { readFile, writeFile } from "node:fs/promises";
+          const root = process.env.RUNNER_TEMP + "/security-gate";
+          const response = JSON.parse(await readFile(`${root}/target-workflow.json`, "utf8"));
+          if (response?.type !== "file" || response.path !== ".github/workflows/security-gate.yml" || response.encoding !== "base64" || !Number.isSafeInteger(response.size) || response.size <= 0 || response.size > 65536 || typeof response.content !== "string") throw new Error("target security gate workflow lookup failed");
+          const compact = response.content.replace(/\n/g, "");
+          if (!/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(compact)) throw new Error("target security gate workflow encoding failed");
+          const workflow = Buffer.from(compact, "base64");
+          if (workflow.length !== response.size || workflow.toString("base64") !== compact) throw new Error("target security gate workflow encoding failed");
+          await writeFile(`${root}/target-security-gate.yml`, workflow, { flag: "wx", mode: 0o600 });
+          NODE
+          TARGET_SHA="$TARGET_SHA" node --input-type=module <<'NODE'
+          import { readFile, writeFile } from "node:fs/promises";
+          const root = process.env.RUNNER_TEMP + "/security-gate";
+          const response = JSON.parse(await readFile(`${root}/artifacts.json`, "utf8"));
+          const matches = response.artifacts?.filter((artifact) => artifact?.name === `security-gate-${process.env.TARGET_SHA}` && artifact?.expired === false) ?? [];
+          if (matches.length !== 1 || !/^sha256:[0-9a-f]{64}$/.test(matches[0].digest ?? "")) throw new Error("security gate artifact selection failed");
+          await writeFile(`${root}/artifact.json`, `${JSON.stringify(matches[0])}\n`, { mode: 0o600 });
+          NODE
+          artifact_id="$(node -e 'console.log(require(process.env.RUNNER_TEMP + "/security-gate/artifact.json").id)')"
+          expected_digest="$(node -e 'console.log(require(process.env.RUNNER_TEMP + "/security-gate/artifact.json").digest)')"
+          test "$artifact_id" -gt 0
+          gh api -H "Accept: application/vnd.github+json" "repos/$GITHUB_REPOSITORY/actions/artifacts/$artifact_id/zip" > "$gate_root/evidence.zip"
+          actual_digest="sha256:$(sha256sum "$gate_root/evidence.zip" | cut -d' ' -f1)"
+          test "$actual_digest" = "$expected_digest"
+          artifact_sha256="${actual_digest#sha256:}"
+          mkdir -m 700 "$gate_root/evidence"
+          node controller/scripts/release-control.mjs extract-candidate-zip \
+            --zip-path "$gate_root/evidence.zip" \
+            --output-root "$gate_root/evidence"
+          node controller/scripts/release-control.mjs verify-security-gate \
+            --approved-workflow-path "controller/.github/workflows/security-gate.yml" \
+            --artifact-path "$gate_root/artifact.json" \
+            --artifact-sha256 "$artifact_sha256" \
+            --candidate-sha "$TARGET_SHA" \
+            --evidence-path "$gate_root/evidence/_security-gate.json" \
+            --run-path "$gate_root/run.json" \
+            --target-workflow-path "$gate_root/target-security-gate.yml"
+      - name: Build and verify the canonical prepared release root
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          prepared_root="$RUNNER_TEMP/prepared-release"
+          mkdir -m 700 "$prepared_root"
+          cp -a "$RUNNER_TEMP/candidate-archive/artifact" "$prepared_root/artifact"
+          install -m 0600 "$RUNNER_TEMP/security-gate/evidence/_security-gate.json" "$prepared_root/artifact/_security-gate.json"
+          commit_json="$(gh api "repos/$GITHUB_REPOSITORY/git/commits/$TARGET_SHA")"
+          source_date_epoch="$(COMMIT_JSON="$commit_json" node -e 'console.log(Math.floor(Date.parse(JSON.parse(process.env.COMMIT_JSON).committer.date) / 1000))')"
+          node controller/scripts/build-release-manifest.mjs \
+            --artifact-root "$prepared_root/artifact" \
+            --commit-sha "$TARGET_SHA" \
+            --package-version "$VERSION" \
+            --source-date-epoch "$source_date_epoch"
+          node controller/scripts/release-control.mjs verify-prepared-package \
+            --prepared-root "$prepared_root" \
+            --bucket "molroom-${{ vars.AWS_ACCOUNT_ID }}-us-east-1-origin" \
+            --candidate-sha "$TARGET_SHA" \
+            --package-version "$VERSION"
+      - name: Upload one exact prepared package root
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: prepared-release-${{ inputs.target_sha }}
+          path: ${{ runner.temp }}/prepared-release/
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 90
+          overwrite: false
+
+  deploy:
+    needs: [classify, prepare-release]
+    if: always() && (needs.classify.outputs.release == 'true' || needs.classify.outputs.repair == 'true') && (needs.prepare-release.result == 'success' || needs.prepare-release.result == 'skipped')
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    environment: production
+    permissions:
+      actions: read
+      contents: read
+      id-token: write
+    env:
+      AWS_REGION: us-east-1
+      MODE: ${{ inputs.mode }}
+      TARGET_SHA: ${{ inputs.target_sha }}
+      VERSION: ${{ inputs.version }}
+    steps:
+      - name: Checkout only the tagged controller commit
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 1
+          path: controller
+          persist-credentials: false
+          ref: ${{ github.sha }}
+      - name: Set up controller Node runtime
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 24.19.0
+          cache: ""
+      - name: Download the exact prepared root for a new release
+        if: needs.classify.outputs.release == 'true'
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: prepared-release-${{ inputs.target_sha }}
+          path: ${{ runner.temp }}/prepared-release
+      - name: Verify the exact prepared artifact path before cloud authority
+        if: needs.classify.outputs.release == 'true'
+        run: |
+          set -euo pipefail
+          node controller/scripts/release-control.mjs verify-prepared-package \
+            --prepared-root "$RUNNER_TEMP/prepared-release" \
+            --bucket "molroom-${{ vars.AWS_ACCOUNT_ID }}-us-east-1-origin" \
+            --candidate-sha "$TARGET_SHA" \
+            --package-version "$VERSION"
+      - name: Configure the controller-ref-restricted OIDC role
+        if: inputs.execute_cutover
+        uses: aws-actions/configure-aws-credentials@e6de054238d6b7531b4efff3b6587d9aade6a06c # v6.2.3
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          role-session-name: molroom-controller-${{ github.run_id }}-${{ github.run_attempt }}
+          aws-region: us-east-1
+          allowed-account-ids: ${{ vars.AWS_ACCOUNT_ID }}
+          mask-aws-account-id: true
+      - name: Verify or upload the immutable prefix and plan CREATE UPDATE or no-change
+        if: inputs.execute_cutover
+        run: |
+          set -euo pipefail
+          bucket="molroom-${{ vars.AWS_ACCOUNT_ID }}-us-east-1-origin"
+          working_root="$RUNNER_TEMP/deployment"
+          mkdir -m 700 "$working_root"
+          node controller/scripts/release-control.mjs observe-cloudformation-stack \
+            --output-path "$working_root/current.json"
+          node controller/scripts/release-control.mjs plan-deployment \
+            --current-path "$working_root/current.json" \
+            --mode "$MODE" \
+            --target-sha "$TARGET_SHA" > "$working_root/plan.json"
+          install -m 0600 "$working_root/current.json" "$working_root/restore.json"
+          if [ "$MODE" = repair ]; then
+            mkdir -m 700 "$working_root/repair-prefix"
+            aws s3 sync "s3://$bucket/releases/$TARGET_SHA/" "$working_root/repair-prefix/artifact" --no-progress --only-show-errors
+            node controller/scripts/release-control.mjs verify-remote-prefix --artifact-root "$working_root/repair-prefix/artifact" --bucket "$bucket" --candidate-sha "$TARGET_SHA" --package-version "$VERSION"
+          else
+            node controller/scripts/upload-release-prefix.mjs --artifact-root "$RUNNER_TEMP/prepared-release/artifact" --bucket "$bucket" --commit-sha "$TARGET_SHA" --package-version "$VERSION" --execute
+            node controller/scripts/release-control.mjs verify-remote-prefix --artifact-root "$RUNNER_TEMP/prepared-release/artifact" --bucket "$bucket" --candidate-sha "$TARGET_SHA" --package-version "$VERSION"
+          fi
+      - name: Cut over, target-SHA smoke, and fatal verified restoration
+        if: inputs.execute_cutover && needs.classify.outputs.release == 'true'
+        env:
+          CLOUDFORMATION_ROLE_ARN: ${{ vars.CLOUDFORMATION_ROLE_ARN }}
+        run: |
+          set -euo pipefail
+          working_root="$RUNNER_TEMP/deployment"
+          plan_type="$(node -e 'console.log(require(process.env.RUNNER_TEMP + "/deployment/plan.json").changeSetType)')"
+          apply_state() {
+            active_sha="$1" enabled="$2" change_type="$3" change_name="$4"
+            if [ "$change_type" = NONE ]; then return 0; fi
+            aws cloudformation create-change-set --stack-name molroom-production --change-set-name "$change_name" --change-set-type "$change_type" --template-body file://controller/infra/aws/molroom-production.yml --role-arn "$CLOUDFORMATION_ROLE_ARN" --parameters ParameterKey=HostedZoneId,ParameterValue="${{ vars.HOSTED_ZONE_ID }}" ParameterKey=ActiveReleaseSha,ParameterValue="$active_sha" ParameterKey=DistributionEnabled,ParameterValue="$enabled" --capabilities CAPABILITY_NAMED_IAM --region "$AWS_REGION" >/dev/null
+            aws cloudformation wait change-set-create-complete --stack-name molroom-production --change-set-name "$change_name" --region "$AWS_REGION"
+            aws cloudformation execute-change-set --stack-name molroom-production --change-set-name "$change_name" --region "$AWS_REGION"
+            if [ "$change_type" = CREATE ]; then
+              aws cloudformation wait stack-create-complete --stack-name molroom-production --region "$AWS_REGION"
+            elif [ "$change_type" = UPDATE ]; then
+              aws cloudformation wait stack-update-complete --stack-name molroom-production --region "$AWS_REGION"
+            else
+              return 2
+            fi
+          }
+          restore_release() {
+            prior_sha="$(node -e 'console.log(require(process.env.RUNNER_TEMP + "/deployment/current.json").activeReleaseSha)')"
+            prior_enabled="$(node -e 'console.log(require(process.env.RUNNER_TEMP + "/deployment/current.json").distributionEnabled)')"
+            prior_exists="$(node -e 'console.log(require(process.env.RUNNER_TEMP + "/deployment/current.json").exists)')"
+            if [ "$prior_exists" = false ]; then
+              node controller/scripts/release-control.mjs restore-absent-cloudformation-stack \
+                --output-path "$working_root/applied-restore.json"
+              smoke_path=NONE
+            else
+              apply_state "$prior_sha" "$prior_enabled" UPDATE "restore-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+              node controller/scripts/release-control.mjs observe-cloudformation-stack \
+                --output-path "$working_root/applied-restore.json"
+              distribution_id="$(aws cloudformation describe-stacks --stack-name molroom-production --query 'Stacks[0].Outputs[?OutputKey==`DistributionId`].OutputValue' --output text)"
+              invalidation_id="$(aws cloudfront create-invalidation --distribution-id "$distribution_id" --paths '/*' --query Invalidation.Id --output text)"
+              aws cloudfront wait invalidation-completed --distribution-id "$distribution_id" --id "$invalidation_id"
+              if [ "$prior_enabled" = true ]; then
+                node controller/scripts/release-control.mjs smoke-production \
+                  --expected-sha "$prior_sha" \
+                  --output-path "$working_root/restore-smoke.json"
+                smoke_path="$working_root/restore-smoke.json"
+              else
+                smoke_path=NONE
+              fi
+            fi
+            node controller/scripts/release-control.mjs verify-restoration --restore-path "$working_root/restore.json" --applied-path "$working_root/applied-restore.json" --smoke-path "$smoke_path"
+          }
+          prior_sha="$(node -e 'console.log(require(process.env.RUNNER_TEMP + "/deployment/current.json").activeReleaseSha)')"
+          prior_enabled="$(node -e 'console.log(require(process.env.RUNNER_TEMP + "/deployment/current.json").distributionEnabled)')"
+          prior_exists="$(node -e 'console.log(require(process.env.RUNNER_TEMP + "/deployment/current.json").exists)')"
+          if [ "$prior_enabled" = true ]; then
+            bucket="molroom-${{ vars.AWS_ACCOUNT_ID }}-us-east-1-origin"
+            mkdir -m 700 "$working_root/prior-prefix"
+            aws s3 sync "s3://$bucket/releases/$prior_sha/" "$working_root/prior-prefix/artifact" --no-progress --only-show-errors
+            node controller/scripts/release-control.mjs verify-remote-prefix --artifact-root "$working_root/prior-prefix/artifact" --bucket "$bucket" --candidate-sha "$prior_sha"
+          else
+            if [ "$prior_exists" = false ]; then test "$prior_sha" = UNRELEASED; fi
+          fi
+          handle_release_error() {
+            status=$?
+            trap - ERR
+            set +e
+            ( set -euo pipefail; restore_release )
+            restore_status=$?
+            set -e
+            if [ "$restore_status" -ne 0 ]; then exit 97; fi
+            exit "$status"
+          }
+          trap handle_release_error ERR
+          apply_state "$TARGET_SHA" true "$plan_type" "release-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          distribution_id="$(aws cloudformation describe-stacks --stack-name molroom-production --query 'Stacks[0].Outputs[?OutputKey==`DistributionId`].OutputValue' --output text)"
+          invalidation_id="$(aws cloudfront create-invalidation --distribution-id "$distribution_id" --paths '/*' --query Invalidation.Id --output text)"
+          aws cloudfront wait invalidation-completed --distribution-id "$distribution_id" --id "$invalidation_id"
+          node controller/scripts/release-control.mjs smoke-production \
+            --expected-sha "$TARGET_SHA" \
+            --output-path "$working_root/target-smoke.json"
+          trap - ERR
+      - name: Materialize authoritative publication metadata for the fresh publish job
+        if: inputs.execute_cutover
+        run: |
+          set -euo pipefail
+          publication_root="$RUNNER_TEMP/publication-assets"
+          mkdir -m 700 "$publication_root"
+          if [ "$MODE" = release ]; then
+            cp "$RUNNER_TEMP/prepared-release/artifact/_manifest.sha256" "$publication_root/"
+            cp "$RUNNER_TEMP/prepared-release/artifact/_release.json" "$publication_root/"
+            cp "$RUNNER_TEMP/prepared-release/artifact/_security-gate.json" "$publication_root/"
+          else
+            aws s3 cp "s3://molroom-${{ vars.AWS_ACCOUNT_ID }}-us-east-1-origin/releases/$TARGET_SHA/_manifest.sha256" "$publication_root/_manifest.sha256"
+            aws s3 cp "s3://molroom-${{ vars.AWS_ACCOUNT_ID }}-us-east-1-origin/releases/$TARGET_SHA/_release.json" "$publication_root/_release.json"
+            aws s3 cp "s3://molroom-${{ vars.AWS_ACCOUNT_ID }}-us-east-1-origin/releases/$TARGET_SHA/_security-gate.json" "$publication_root/_security-gate.json"
+          fi
+      - name: Upload authoritative publication metadata only
+        if: inputs.execute_cutover
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: publication-assets-${{ inputs.target_sha }}
+          path: ${{ runner.temp }}/publication-assets/
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 90
+          overwrite: false
+
+  publish:
+    needs: [classify, deploy]
+    if: needs.deploy.result == 'success' && inputs.execute_cutover && (needs.classify.outputs.release == 'true' || needs.classify.outputs.repair == 'true')
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      actions: read
+      contents: write
+    env:
+      MODE: ${{ inputs.mode }}
+      TARGET_SHA: ${{ inputs.target_sha }}
+      VERSION: ${{ inputs.version }}
+    steps:
+      - name: Checkout only the tagged controller commit
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 1
+          path: controller
+          persist-credentials: false
+          ref: ${{ github.sha }}
+      - name: Set up controller Node runtime
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 24.19.0
+          cache: ""
+      - name: Download the authoritative metadata copied by deploy
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: publication-assets-${{ inputs.target_sha }}
+          path: ${{ runner.temp }}/publication-assets
+      - name: Recheck main and annotated tag before and after exact Release repair or creation
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          publication_root="$RUNNER_TEMP/publication-assets"
+          main_sha="$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/main" --jq .object.sha)"
+          test "$main_sha" = "$TARGET_SHA"
+          tag_name="v$VERSION"
+          tag_before=null
+          if tag_ref="$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$tag_name" 2>/dev/null)"; then
+            tag_object_sha="$(printf '%s' "$tag_ref" | jq -r .object.sha)"
+            tag_target="$(gh api "repos/$GITHUB_REPOSITORY/git/tags/$tag_object_sha" --jq .object.sha)"
+            test "$tag_target" = "$TARGET_SHA"
+            tag_before="$(jq -n --arg sha "$tag_target" '{annotated:true,target_sha:$sha}')"
+          else
+            tag_object_sha="$(gh api --method POST "repos/$GITHUB_REPOSITORY/git/tags" -f tag="$tag_name" -f message="MolRoom $tag_name" -f object="$TARGET_SHA" -f type=commit --jq .sha)"
+            gh api --method POST "repos/$GITHUB_REPOSITORY/git/refs" -f ref="refs/tags/$tag_name" -f sha="$tag_object_sha" >/dev/null
+          fi
+          tag_object_sha="$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$tag_name" --jq .object.sha)"
+          tag_target="$(gh api "repos/$GITHUB_REPOSITORY/git/tags/$tag_object_sha" --jq .object.sha)"
+          test "$tag_target" = "$TARGET_SHA"
+          release_body_path="$RUNNER_TEMP/publication-body.txt"
+          printf 'MolRoom %s\nSHA: %s\n' "$tag_name" "$TARGET_SHA" > "$release_body_path"
+          if gh release view "$tag_name" >/dev/null 2>&1; then
+            gh api "repos/$GITHUB_REPOSITORY/releases/tags/$tag_name" > "$RUNNER_TEMP/publication-release-before.json"
+            RELEASE="$RUNNER_TEMP/publication-release-before.json" BODY="$release_body_path" TAG="$tag_name" node --input-type=module <<'NODE'
+            import { readFile } from "node:fs/promises";
+            const release = JSON.parse(await readFile(process.env.RELEASE, "utf8"));
+            const body = await readFile(process.env.BODY, "utf8");
+            if (release.body !== body || release.draft !== false || release.name !== `MolRoom ${process.env.TAG}` || release.prerelease !== false || release.tag_name !== process.env.TAG) process.exit(1);
+            NODE
+          else
+            gh release create "$tag_name" --verify-tag --title "MolRoom $tag_name" --notes-file "$release_body_path"
+          fi
+          for asset in _manifest.sha256 _release.json _security-gate.json; do
+            if ! gh release view "$tag_name" --json assets --jq '.assets[].name' | grep -Fxq "$asset"; then
+              gh release upload "$tag_name" "$publication_root/$asset"
+            fi
+          done
+          rm -rf "$RUNNER_TEMP/publication-postcheck"
+          mkdir -m 700 "$RUNNER_TEMP/publication-postcheck"
+          gh release download "$tag_name" --dir "$RUNNER_TEMP/publication-postcheck" --pattern '_manifest.sha256' --pattern '_release.json' --pattern '_security-gate.json'
+          gh api "repos/$GITHUB_REPOSITORY/releases/tags/$tag_name" > "$RUNNER_TEMP/publication-release.json"
+          gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/main" > "$RUNNER_TEMP/publication-main-after.json"
+          tag_object_sha="$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$tag_name" --jq .object.sha)"
+          gh api "repos/$GITHUB_REPOSITORY/git/tags/$tag_object_sha" > "$RUNNER_TEMP/publication-tag-after.json"
+          EXPECTED="$RUNNER_TEMP/publication-expected.json" OBSERVED="$RUNNER_TEMP/publication-observed.json" BODY="$release_body_path" TAG_BEFORE="$tag_before" TARGET_SHA="$TARGET_SHA" VERSION="$VERSION" PUBLICATION_ROOT="$publication_root" node --input-type=module <<'NODE'
+          import { createHash } from "node:crypto";
+          import { readFile, stat, writeFile } from "node:fs/promises";
+          const names = ["_manifest.sha256", "_release.json", "_security-gate.json"];
+          const describe = async (root, name) => {
+            const path = `${root}/${name}`;
+            const bytes = await readFile(path);
+            return { digest: `sha256:${createHash("sha256").update(bytes).digest("hex")}`, name, size: (await stat(path)).size };
+          };
+          const expectedAssets = await Promise.all(names.map((name) => describe(process.env.PUBLICATION_ROOT, name)));
+          const observedAssets = await Promise.all(names.map((name) => describe(`${process.env.RUNNER_TEMP}/publication-postcheck`, name)));
+          const actualRelease = JSON.parse(await readFile(`${process.env.RUNNER_TEMP}/publication-release.json`, "utf8"));
+          const actualMain = JSON.parse(await readFile(`${process.env.RUNNER_TEMP}/publication-main-after.json`, "utf8"));
+          const actualTag = JSON.parse(await readFile(`${process.env.RUNNER_TEMP}/publication-tag-after.json`, "utf8"));
+          const apiAssets = actualRelease.assets.map(({ name, size }) => ({ name, size })).sort((a, b) => a.name.localeCompare(b.name));
+          const downloadedAssets = observedAssets.map(({ name, size }) => ({ name, size })).sort((a, b) => a.name.localeCompare(b.name));
+          if (JSON.stringify(apiAssets) !== JSON.stringify(downloadedAssets)) process.exit(1);
+          const expected = { assets: expectedAssets, body: await readFile(process.env.BODY, "utf8"), sha: process.env.TARGET_SHA, version: process.env.VERSION };
+          const observed = { main_sha: actualMain.object.sha, release: { assets: observedAssets, body: actualRelease.body, draft: actualRelease.draft, name: actualRelease.name, prerelease: actualRelease.prerelease, tag_name: actualRelease.tag_name, target_sha: actualTag.object.sha }, tag_after: { annotated: actualTag.object.type === "commit", target_sha: actualTag.object.sha }, tag_before: JSON.parse(process.env.TAG_BEFORE) };
+          await writeFile(process.env.EXPECTED, `${JSON.stringify(expected)}\n`, { mode: 0o600 });
+          await writeFile(process.env.OBSERVED, `${JSON.stringify(observed)}\n`, { mode: 0o600 });
+          NODE
+          node controller/scripts/release-control.mjs verify-publication --expected-path "$RUNNER_TEMP/publication-expected.json" --observed-path "$RUNNER_TEMP/publication-observed.json"
+
+  rollback:
+    needs: classify
+    if: needs.classify.outputs.rollback == 'true' && inputs.execute_cutover
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    environment: production
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      AWS_REGION: us-east-1
+      TARGET_SHA: ${{ inputs.target_sha }}
+      VERSION: ${{ inputs.version }}
+    steps:
+      - name: Checkout only the tagged controller commit
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 1
+          path: controller
+          persist-credentials: false
+          ref: ${{ github.sha }}
+      - name: Set up controller Node runtime
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 24.19.0
+          cache: ""
+      - name: Configure the controller-ref-restricted OIDC role
+        uses: aws-actions/configure-aws-credentials@e6de054238d6b7531b4efff3b6587d9aade6a06c # v6.2.3
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          role-session-name: molroom-rollback-${{ github.run_id }}-${{ github.run_attempt }}
+          aws-region: us-east-1
+          allowed-account-ids: ${{ vars.AWS_ACCOUNT_ID }}
+          mask-aws-account-id: true
+      - name: Reuse only the fully verified immutable target prefix and preserve prior state
+        run: |
+          set -euo pipefail
+          bucket="molroom-${{ vars.AWS_ACCOUNT_ID }}-us-east-1-origin"
+          rollback_root="$RUNNER_TEMP/rollback"
+          mkdir -m 700 "$rollback_root/artifact"
+          aws s3 sync "s3://$bucket/releases/$TARGET_SHA/" "$rollback_root/artifact" --no-progress --only-show-errors
+          node controller/scripts/release-control.mjs verify-remote-prefix --artifact-root "$rollback_root/artifact" --bucket "$bucket" --candidate-sha "$TARGET_SHA" --package-version "$VERSION"
+          node controller/scripts/release-control.mjs observe-cloudformation-stack \
+            --output-path "$rollback_root/current.json"
+          node controller/scripts/release-control.mjs plan-deployment --current-path "$rollback_root/current.json" --mode rollback --target-sha "$TARGET_SHA" > "$rollback_root/plan.json"
+          install -m 0600 "$rollback_root/current.json" "$rollback_root/restore.json"
+          prior_sha="$(node -e 'console.log(require(process.env.RUNNER_TEMP + "/rollback/current.json").activeReleaseSha)')"
+          prior_enabled="$(node -e 'console.log(require(process.env.RUNNER_TEMP + "/rollback/current.json").distributionEnabled)')"
+          prior_exists="$(node -e 'console.log(require(process.env.RUNNER_TEMP + "/rollback/current.json").exists)')"
+          if [ "$prior_enabled" = true ]; then
+            mkdir -m 700 "$rollback_root/prior-prefix"
+            aws s3 sync "s3://$bucket/releases/$prior_sha/" "$rollback_root/prior-prefix/artifact" --no-progress --only-show-errors
+            node controller/scripts/release-control.mjs verify-remote-prefix --artifact-root "$rollback_root/prior-prefix/artifact" --bucket "$bucket" --candidate-sha "$prior_sha"
+          else
+            if [ "$prior_exists" = false ]; then test "$prior_sha" = UNRELEASED; fi
+          fi
+          apply_state() {
+            active_sha="$1" enabled="$2" change_type="$3" change_name="$4"
+            if [ "$change_type" = NONE ]; then return 0; fi
+            aws cloudformation create-change-set --stack-name molroom-production --change-set-name "$change_name" --change-set-type "$change_type" --template-body file://controller/infra/aws/molroom-production.yml --role-arn "${{ vars.CLOUDFORMATION_ROLE_ARN }}" --parameters ParameterKey=HostedZoneId,ParameterValue="${{ vars.HOSTED_ZONE_ID }}" ParameterKey=ActiveReleaseSha,ParameterValue="$active_sha" ParameterKey=DistributionEnabled,ParameterValue="$enabled" --capabilities CAPABILITY_NAMED_IAM --region "$AWS_REGION" >/dev/null
+            aws cloudformation wait change-set-create-complete --stack-name molroom-production --change-set-name "$change_name" --region "$AWS_REGION"
+            aws cloudformation execute-change-set --stack-name molroom-production --change-set-name "$change_name" --region "$AWS_REGION"
+            if [ "$change_type" = CREATE ]; then
+              aws cloudformation wait stack-create-complete --stack-name molroom-production --region "$AWS_REGION"
+            elif [ "$change_type" = UPDATE ]; then
+              aws cloudformation wait stack-update-complete --stack-name molroom-production --region "$AWS_REGION"
+            else
+              return 2
+            fi
+          }
+          invalidate_distribution() {
+            distribution_id="$(aws cloudformation describe-stacks --stack-name molroom-production --query 'Stacks[0].Outputs[?OutputKey==`DistributionId`].OutputValue' --output text)"
+            invalidation_id="$(aws cloudfront create-invalidation --distribution-id "$distribution_id" --paths '/*' --query Invalidation.Id --output text)"
+            aws cloudfront wait invalidation-completed --distribution-id "$distribution_id" --id "$invalidation_id"
+          }
+          restore_rollback() {
+            if [ "$prior_exists" = false ]; then
+              node controller/scripts/release-control.mjs restore-absent-cloudformation-stack \
+                --output-path "$rollback_root/applied-restore.json"
+              smoke_path=NONE
+            else
+              restore_type=UPDATE
+              if [ "$prior_sha" = "$TARGET_SHA" ] && [ "$prior_enabled" = true ]; then restore_type=NONE; fi
+              apply_state "$prior_sha" "$prior_enabled" "$restore_type" "restore-rollback-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+              node controller/scripts/release-control.mjs observe-cloudformation-stack \
+                --output-path "$rollback_root/applied-restore.json"
+              invalidate_distribution
+              if [ "$prior_enabled" = true ]; then
+                node controller/scripts/release-control.mjs smoke-production \
+                  --expected-sha "$prior_sha" \
+                  --output-path "$rollback_root/restore-smoke.json"
+                smoke_path="$rollback_root/restore-smoke.json"
+              else
+                smoke_path=NONE
+              fi
+            fi
+            node controller/scripts/release-control.mjs verify-restoration --restore-path "$rollback_root/restore.json" --applied-path "$rollback_root/applied-restore.json" --smoke-path "$smoke_path"
+          }
+          plan_type="$(node -e 'console.log(require(process.env.RUNNER_TEMP + "/rollback/plan.json").changeSetType)')"
+          should_invalidate="$(node -e 'console.log(require(process.env.RUNNER_TEMP + "/rollback/plan.json").invalidate)')"
+          handle_rollback_error() {
+            status=$?
+            trap - ERR
+            set +e
+            ( set -euo pipefail; restore_rollback )
+            restore_status=$?
+            set -e
+            if [ "$restore_status" -ne 0 ]; then exit 97; fi
+            exit "$status"
+          }
+          trap handle_rollback_error ERR
+          apply_state "$TARGET_SHA" true "$plan_type" "rollback-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          if [ "$should_invalidate" = true ]; then invalidate_distribution; fi
+          node controller/scripts/release-control.mjs smoke-production \
+            --expected-sha "$TARGET_SHA" \
+            --output-path "$rollback_root/target-smoke.json"
+          trap - ERR

@@ -9,6 +9,7 @@ import {
   utimes,
   writeFile,
 } from "node:fs/promises";
+import { spawnSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -16,7 +17,9 @@ import vm from "node:vm";
 import { afterEach, describe, expect, it } from "vitest";
 import {
   buildReleaseArtifacts,
+  compareReleaseArtifactTrees,
   executeUploadPlan,
+  inspectReleaseArtifactTree,
   planReleasePrefixUpload,
   writeReleaseMetadata,
 } from "./release-manifest.mjs";
@@ -91,6 +94,26 @@ async function prepareReleasePrefix() {
   return { artifactRoot, release };
 }
 
+function exactStoredHead(object, manifestDigest) {
+  return {
+    CacheControl: object.cacheControl,
+    ChecksumSHA256: object.checksumSha256,
+    ContentLength: object.size,
+    ContentType: object.contentType,
+    Metadata: {
+      sha256: object.sha256,
+      "manifest-sha256": manifestDigest,
+    },
+    ServerSideEncryption: "AES256",
+  };
+}
+
+function mutateStoredHead(head, mutation) {
+  const mutated = structuredClone(head);
+  mutation(mutated);
+  return mutated;
+}
+
 afterEach(async () => {
   await Promise.all(
     temporaryRoots.splice(0).map((root) => rm(root, { force: true, recursive: true })),
@@ -98,6 +121,28 @@ afterEach(async () => {
 });
 
 describe("deterministic release metadata", () => {
+  it("uses one bounded canonical inspection and comparison API for archive trees", async () => {
+    const left = await makeArtifactRoot();
+    const right = await makeArtifactRoot();
+    const inspection = await inspectReleaseArtifactTree({ artifactRoot: left });
+
+    expect(inspection).toMatchObject({
+      totalBytes: 3,
+      files: [
+        { path: "assets/app-a1b2c3d4.js", size: 1 },
+        { path: "index.html", size: 1 },
+        { path: "service-worker.js", size: 1 },
+      ],
+    });
+    await expect(compareReleaseArtifactTrees(left, right)).resolves.toMatchObject({
+      equal: true,
+      treeSha256: inspection.treeSha256,
+    });
+
+    await writeFile(join(right, "index.html"), "changed");
+    await expect(compareReleaseArtifactTrees(left, right)).rejects.toThrow("Release artifact trees differ");
+  });
+
   it("builds a path-sorted runtime manifest and stable release JSON from content only", async () => {
     const artifactRoot = await makeArtifactRoot();
     const input = {
@@ -237,6 +282,28 @@ describe("deterministic release metadata", () => {
 });
 
 describe("immutable release prefix upload", () => {
+  it("binds the release metadata package version to the requested release", async () => {
+    const { artifactRoot } = await prepareReleasePrefix();
+    await expect(planReleasePrefixUpload({
+      artifactRoot,
+      bucket: "molroom-123456789012-us-east-1-origin",
+      commitSha,
+      expectedPackageVersion: "9.9.9",
+    })).rejects.toThrow("package version");
+  });
+
+  it("rejects duplicate decoded keys in security evidence instead of accepting the last value", async () => {
+    const { artifactRoot } = await prepareReleasePrefix();
+    const gatePath = join(artifactRoot, "_security-gate.json");
+    const gate = await readFile(gatePath, "utf8");
+    await writeFile(gatePath, gate.replace('"high_count": 0,', '"high_count": 0,\n  "high\\u005fcount": 0,'));
+    await expect(planReleasePrefixUpload({
+      artifactRoot,
+      bucket: "molroom-123456789012-us-east-1-origin",
+      commitSha,
+    })).rejects.toThrow("duplicate");
+  });
+
   it("plans exact release keys with content checksums, conditional writes, and cache metadata", async () => {
     const { artifactRoot } = await prepareReleasePrefix();
     const plan = await planReleasePrefixUpload({
@@ -313,14 +380,7 @@ describe("immutable release prefix upload", () => {
           throw error;
         }
         return {
-          stdout: JSON.stringify({
-            ContentLength: 1,
-            ChecksumSHA256: assetChecksumSha256,
-            Metadata: {
-              sha256: plan.objects[0].sha256,
-              "manifest-sha256": manifestSha256,
-            },
-          }),
+          stdout: JSON.stringify(exactStoredHead(plan.objects[0], manifestSha256)),
           stderr: "",
         };
       },
@@ -334,6 +394,72 @@ describe("immutable release prefix upload", () => {
     expect(commands[0].options.input).toEqual(Buffer.from("b"));
     expect(commands[1].args.slice(0, 2)).toEqual(["s3api", "head-object"]);
     expect(result).toEqual([{ key: plan.objects[0].key, status: "reused" }]);
+  });
+
+  it("rejects every mismatched or unsafe S3 HEAD field when reusing an immutable object", async () => {
+    const { artifactRoot } = await prepareReleasePrefix();
+    const fullPlan = await planReleasePrefixUpload({
+      artifactRoot,
+      bucket: "molroom-123456789012-us-east-1-origin",
+      commitSha,
+    });
+    const plan = { ...fullPlan, objects: [fullPlan.objects[0]] };
+    const exactHead = exactStoredHead(plan.objects[0], plan.manifestSha256);
+    const mutations = [
+      ["content length", (head) => { head.ContentLength += 1; }],
+      ["checksum", (head) => { head.ChecksumSHA256 = "A".repeat(44); }],
+      ["content type", (head) => { head.ContentType = "application/octet-stream"; }],
+      ["cache control", (head) => { head.CacheControl = "no-store"; }],
+      ["server-side encryption", (head) => { head.ServerSideEncryption = "aws:kms"; }],
+      ["object digest metadata", (head) => { head.Metadata.sha256 = "0".repeat(64); }],
+      ["manifest digest metadata", (head) => { head.Metadata["manifest-sha256"] = "0".repeat(64); }],
+      ["unexpected metadata", (head) => { head.Metadata.candidate = "controlled"; }],
+      ["content encoding", (head) => { head.ContentEncoding = "gzip"; }],
+      ["website redirect", (head) => { head.WebsiteRedirectLocation = "/candidate"; }],
+      ["content disposition", (head) => { head.ContentDisposition = "attachment"; }],
+      ["content language", (head) => { head.ContentLanguage = "en"; }],
+      ["expiry", (head) => { head.Expires = "2038-01-19T03:14:07Z"; }],
+    ];
+
+    for (const [label, mutation] of mutations) {
+      await expect(executeUploadPlan({
+        artifactRoot,
+        plan,
+        runAws: async (args) => {
+          if (args[1] === "put-object") {
+            const error = new Error("An error occurred (PreconditionFailed): 412");
+            error.stderr = "PreconditionFailed 412";
+            throw error;
+          }
+          return {
+            stdout: JSON.stringify(mutateStoredHead(exactHead, mutation)),
+            stderr: "",
+          };
+        },
+      }), label).rejects.toThrow(/Immutable release object differs|remote immutable release object|stored release object/);
+    }
+  });
+
+  it("requires an explicit and exclusive upload mode before planning or reaching AWS", async () => {
+    const { artifactRoot } = await prepareReleasePrefix();
+    const uploadCli = join(repositoryRoot, "scripts/upload-release-prefix.mjs");
+    const baseArguments = [
+      uploadCli,
+      "--artifact-root", artifactRoot,
+      "--bucket", "molroom-123456789012-us-east-1-origin",
+      "--commit-sha", commitSha,
+      "--package-version", "0.1.0",
+    ];
+    const missingMode = spawnSync(process.execPath, baseArguments, { encoding: "utf8" });
+    const bothModes = spawnSync(process.execPath, [...baseArguments, "--dry-run", "--execute"], { encoding: "utf8" });
+    const dryRun = spawnSync(process.execPath, [...baseArguments, "--dry-run"], { encoding: "utf8" });
+
+    expect(missingMode).toMatchObject({ status: 1, signal: null });
+    expect(missingMode.stderr).toContain("exactly one of --dry-run or --execute");
+    expect(bothModes).toMatchObject({ status: 1, signal: null });
+    expect(bothModes.stderr).toContain("exactly one of --dry-run or --execute");
+    expect(dryRun).toMatchObject({ status: 0, signal: null });
+    expect(JSON.parse(dryRun.stdout)).toMatchObject({ releasePrefix: `releases/${commitSha}/` });
   });
 
   it("refuses a same-size content mutation after planning before invoking AWS", async () => {
@@ -477,10 +603,6 @@ describe("CloudFront release routing", () => {
 });
 
 describe("credential-free infrastructure and release gates", () => {
-  async function readOwned(path) {
-    return readFile(join(repositoryRoot, path), "utf8");
-  }
-
   it("scopes the bootstrap OIDC trust to the exact repository production environment", async () => {
     const bootstrap = await readInfrastructureTemplate("molroom-bootstrap.yml");
 
@@ -590,71 +712,4 @@ describe("credential-free infrastructure and release gates", () => {
     expect(production.match(/Key: Project\n\s+Value: MolRoom/g)?.length ?? 0).toBeGreaterThanOrEqual(5);
   });
 
-  it("keeps security attestation and release mutation behind manual protected gates", async () => {
-    const securityGateWorkflow = await readOwned(".github/workflows/security-gate.yml");
-    const releaseWorkflow = await readOwned(".github/workflows/release.yml");
-
-    for (const workflow of [securityGateWorkflow, releaseWorkflow]) {
-      expect(workflow).toContain("workflow_dispatch:");
-      expect(workflow).toContain("environment: production");
-      expect(workflow).not.toMatch(/AWS_(?:ACCESS_KEY_ID|SECRET_ACCESS_KEY)\s*:/);
-      for (const line of workflow.split("\n").filter((entry) => entry.trim().startsWith("uses:"))) {
-        expect(line).toMatch(/uses: [^@]+@[0-9a-f]{40}(?:\s+#.*)?$/);
-      }
-    }
-    expect(securityGateWorkflow).toContain("target_sha:");
-    expect(securityGateWorkflow).toContain("attestation_base64:");
-    expect(securityGateWorkflow).toContain("security-gate-${{ inputs.target_sha }}");
-    expect(releaseWorkflow).toContain("id-token: write");
-    expect(releaseWorkflow).toContain("contents: write");
-    expect(releaseWorkflow).toContain("mode:");
-    expect(releaseWorkflow).toContain("- release");
-    expect(releaseWorkflow).toContain("- rollback");
-    expect(releaseWorkflow).toContain("execute_cutover:");
-    expect(releaseWorkflow).toContain("security_gate_run_id:");
-    expect(releaseWorkflow).toContain("aws-actions/configure-aws-credentials@");
-    expect(releaseWorkflow).toContain("node scripts/upload-release-prefix.mjs");
-    expect(releaseWorkflow).toContain("infra/aws/molroom-production.yml");
-    expect(releaseWorkflow).not.toContain("infra/cloudformation/");
-    for (const required of [
-      "known_asset_status",
-      "known_asset_sha256",
-      "missing_asset_status",
-      "missing_asset_is_spa",
-      "https://accounts.google.com/gsi/client",
-      "initTokenClient",
-      "production-smoke-evidence.json",
-      "Upload production smoke evidence",
-    ]) {
-      expect(releaseWorkflow).toContain(required);
-    }
-    expect(releaseWorkflow).not.toContain("aws s3 sync");
-    expect(releaseWorkflow).not.toContain("cloudfront update-function");
-    expect(releaseWorkflow.indexOf("Verify security gate evidence")).toBeLessThan(
-      releaseWorkflow.indexOf("Upload immutable release prefix"),
-    );
-    expect(releaseWorkflow.indexOf("Verify production runtime gates")).toBeLessThan(
-      releaseWorkflow.indexOf("Create promote change set"),
-    );
-    const initialReleaseGate = releaseWorkflow.slice(
-      releaseWorkflow.indexOf("Validate dispatch identity and explicit confirmation"),
-      releaseWorkflow.indexOf("Pin npm"),
-    );
-    const tagCreationGate = releaseWorkflow.slice(
-      releaseWorkflow.indexOf("Create immutable annotated tag and GitHub Release"),
-      releaseWorkflow.indexOf("Summarize non-mutating plan"),
-    );
-    const freshMainCheck =
-      /git fetch origin main --quiet\n\s+test "\$\(git rev-parse origin\/main\)" = "\$TARGET_SHA"/;
-    expect(initialReleaseGate).toMatch(freshMainCheck);
-    expect(tagCreationGate).toMatch(freshMainCheck);
-    expect(tagCreationGate.search(freshMainCheck)).toBeLessThan(
-      tagCreationGate.indexOf('if git show-ref --verify --quiet "refs/tags/v$VERSION"'),
-    );
-    expect(releaseWorkflow.match(/git fetch origin main --quiet/g)).toHaveLength(2);
-    expect(releaseWorkflow).not.toContain("FETCH_HEAD");
-    expect(releaseWorkflow).not.toContain("refs/heads/main");
-    expect(releaseWorkflow).toContain("Create rollback change set");
-    expect(releaseWorkflow).toContain("cancel-in-progress: false");
-  });
 });

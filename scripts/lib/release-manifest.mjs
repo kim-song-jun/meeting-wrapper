@@ -222,18 +222,39 @@ async function scanArtifactFiles(artifactRoot, artifactLimits) {
   };
 }
 
-async function collectRuntimeFiles(artifactRoot, artifactLimits) {
+export async function inspectReleaseArtifactTree({ artifactRoot, artifactLimits }) {
   const scan = await scanArtifactFiles(artifactRoot, artifactLimits);
-  const runtimeDescriptors = scan.files.filter(({ path }) => !RELEASE_METADATA_PATHS.has(path));
   const files = [];
-  for (const descriptor of runtimeDescriptors) {
+  for (const descriptor of scan.files) {
     const { contents, size } = await readRegularFileNoFollow(descriptor.absolutePath, {
       expectedSize: descriptor.size,
       maxFileBytes: scan.limits.maxFileBytes,
     });
-    files.push({ ...descriptor, contents, size });
+    files.push({ path: descriptor.path, sha256: digest(contents), size });
   }
-  return { ...scan, files };
+  const treeSha256 = digest(files.map(({ path, sha256, size }) => `${sha256}  ${size}  ${path}\n`).join(""));
+  return {
+    files,
+    totalBytes: files.reduce((total, { size }) => total + size, 0),
+    treeSha256,
+  };
+}
+
+export async function compareReleaseArtifactTrees(leftArtifactRoot, rightArtifactRoot, { artifactLimits } = {}) {
+  const [left, right] = await Promise.all([
+    inspectReleaseArtifactTree({ artifactRoot: leftArtifactRoot, artifactLimits }),
+    inspectReleaseArtifactTree({ artifactRoot: rightArtifactRoot, artifactLimits }),
+  ]);
+  if (
+    left.files.length !== right.files.length ||
+    left.files.some((file, index) => {
+      const candidate = right.files[index];
+      return candidate === undefined || file.path !== candidate.path || file.size !== candidate.size || file.sha256 !== candidate.sha256;
+    })
+  ) {
+    throw new Error("Release artifact trees differ");
+  }
+  return { equal: true, treeSha256: left.treeSha256 };
 }
 
 function isHashedAsset(path) {
@@ -275,12 +296,12 @@ export async function buildReleaseArtifacts({
   assertPackageVersion(packageVersion);
   assertSourceDateEpoch(sourceDateEpoch);
 
-  const { files } = await collectRuntimeFiles(artifactRoot, artifactLimits);
-  const entries = files.map(({ contents, path, size }) => ({
+  const inspection = await inspectReleaseArtifactTree({ artifactRoot, artifactLimits });
+  const entries = inspection.files.filter(({ path }) => !RELEASE_METADATA_PATHS.has(path)).map(({ path, sha256, size }) => ({
     cacheControl: cacheControlForPath(path),
     contentType: contentTypeForPath(path),
     path,
-    sha256: digest(contents),
+    sha256,
     size,
   }));
   const manifestText = entries.map((entry) => `${entry.sha256}  ${entry.path}\n`).join("");
@@ -348,12 +369,121 @@ export async function writeReleaseMetadata({ artifactRoot, release }) {
   };
 }
 
-function parseJson(contents, label) {
+export function parseStrictJsonBytes(contents, label) {
+  let source;
   try {
-    return JSON.parse(contents.toString("utf8"));
+    source = new TextDecoder("utf-8", { fatal: true }).decode(contents);
   } catch {
-    throw new Error(`${label} must contain valid JSON`);
+    throw new Error(`${label} must contain valid UTF-8 JSON`);
   }
+
+  let index = 0;
+  const invalid = () => {
+    throw new Error(`${label} must contain valid JSON`);
+  };
+  const skipWhitespace = () => {
+    while (/[\t\n\r ]/.test(source[index] ?? "")) index += 1;
+  };
+  const parseStringToken = () => {
+    if (source[index] !== '"') invalid();
+    const start = index;
+    index += 1;
+    while (index < source.length) {
+      const character = source[index];
+      if (character === '"') {
+        index += 1;
+        try {
+          return JSON.parse(source.slice(start, index));
+        } catch {
+          invalid();
+        }
+      }
+      if (character === "\\") {
+        index += 1;
+        const escape = source[index];
+        if (escape === "u") {
+          if (!/^[0-9a-fA-F]{4}$/.test(source.slice(index + 1, index + 5))) invalid();
+          index += 5;
+          continue;
+        }
+        if (!'"\\/bfnrt'.includes(escape ?? "")) invalid();
+        index += 1;
+        continue;
+      }
+      if (character === undefined || character.charCodeAt(0) < 0x20) invalid();
+      index += 1;
+    }
+    invalid();
+  };
+  const parseValue = () => {
+    skipWhitespace();
+    const character = source[index];
+    if (character === '"') {
+      parseStringToken();
+      return;
+    }
+    if (character === "{") {
+      index += 1;
+      skipWhitespace();
+      const keys = new Set();
+      if (source[index] === "}") {
+        index += 1;
+        return;
+      }
+      while (true) {
+        skipWhitespace();
+        const key = parseStringToken();
+        if (keys.has(key)) throw new Error(`${label} contains a duplicate decoded object key`);
+        keys.add(key);
+        skipWhitespace();
+        if (source[index] !== ":") invalid();
+        index += 1;
+        parseValue();
+        skipWhitespace();
+        if (source[index] === "}") {
+          index += 1;
+          return;
+        }
+        if (source[index] !== ",") invalid();
+        index += 1;
+      }
+    }
+    if (character === "[") {
+      index += 1;
+      skipWhitespace();
+      if (source[index] === "]") {
+        index += 1;
+        return;
+      }
+      while (true) {
+        parseValue();
+        skipWhitespace();
+        if (source[index] === "]") {
+          index += 1;
+          return;
+        }
+        if (source[index] !== ",") invalid();
+        index += 1;
+      }
+    }
+    const remaining = source.slice(index);
+    const token = remaining.match(/^(?:true|false|null|-?(?:0|[1-9][0-9]*)(?:\.[0-9]+)?(?:[eE][+-]?[0-9]+)?)/)?.[0];
+    if (token === undefined) invalid();
+    index += token.length;
+  };
+
+  parseValue();
+  skipWhitespace();
+  if (index !== source.length) invalid();
+  try {
+    return JSON.parse(source);
+  } catch {
+    invalid();
+  }
+}
+
+function parseJson(contents, label) {
+  return parseStrictJsonBytes(contents, label);
 }
 
 function assertPlainObject(value, label) {
@@ -502,8 +632,9 @@ function objectFromRuntimeEntry({ entry, commitSha, bucket, manifestSha256 }) {
   };
 }
 
-export async function planReleasePrefixUpload({ artifactRoot, bucket, commitSha }) {
+export async function planReleasePrefixUpload({ artifactRoot, bucket, commitSha, expectedPackageVersion }) {
   assertCommitSha(commitSha);
+  if (expectedPackageVersion !== undefined) assertPackageVersion(expectedPackageVersion);
   if (!S3_BUCKET_PATTERN.test(bucket)) {
     throw new Error("Release bucket must be a valid DNS-compatible S3 bucket name");
   }
@@ -525,6 +656,9 @@ export async function planReleasePrefixUpload({ artifactRoot, bucket, commitSha 
   const releaseFile = await readDescriptor(descriptorFor("_release.json"));
   const gateFile = await readDescriptor(descriptorFor("_security-gate.json"));
   const releaseMetadata = validateReleaseMetadata(parseJson(releaseFile.contents, "_release.json"), commitSha);
+  if (expectedPackageVersion !== undefined && releaseMetadata.package_version !== expectedPackageVersion) {
+    throw new Error("_release.json package version does not match the requested release");
+  }
   validateSecurityGateEvidence(parseJson(gateFile.contents, "_security-gate.json"), commitSha);
 
   const release = await buildReleaseArtifacts({
@@ -649,13 +783,47 @@ function isPreconditionFailure(error) {
   return /(?:PreconditionFailed|status code: 412|\b412\b)/i.test(message);
 }
 
-function normalizeMetadata(value) {
-  if (value === null || typeof value !== "object" || Array.isArray(value)) {
-    return {};
+function normalizeExactMetadata(value) {
+  if (value === null || typeof value !== "object" || Array.isArray(value)) return null;
+  const normalized = {};
+  for (const [key, metadataValue] of Object.entries(value)) {
+    const normalizedKey = key.toLowerCase();
+    if (Object.hasOwn(normalized, normalizedKey)) return null;
+    normalized[normalizedKey] = metadataValue;
   }
-  return Object.fromEntries(
-    Object.entries(value).map(([key, metadataValue]) => [key.toLowerCase(), metadataValue]),
-  );
+  return normalized;
+}
+
+export function validateStoredReleaseObjectHead({
+  head,
+  object,
+  manifestSha256,
+  mismatchMessage = `Remote immutable release object headers differ from the plan: ${object?.key ?? "unknown"}`,
+}) {
+  const metadata = normalizeExactMetadata(head?.Metadata);
+  const unexpectedServingHeaders = [
+    "ContentEncoding",
+    "WebsiteRedirectLocation",
+    "ContentDisposition",
+    "ContentLanguage",
+    "Expires",
+  ];
+  if (
+    head === null || typeof head !== "object" || Array.isArray(head) ||
+    head.ContentLength !== object?.size ||
+    head.ChecksumSHA256 !== object?.checksumSha256 ||
+    head.ContentType !== object?.contentType ||
+    head.CacheControl !== object?.cacheControl ||
+    head.ServerSideEncryption !== "AES256" ||
+    metadata === null ||
+    Object.keys(metadata).length !== 2 ||
+    metadata.sha256 !== object?.sha256 ||
+    metadata["manifest-sha256"] !== manifestSha256 ||
+    unexpectedServingHeaders.some((header) => Object.hasOwn(head, header))
+  ) {
+    throw new Error(mismatchMessage);
+  }
+  return head;
 }
 
 function resolveObjectSource(artifactRoot, sourcePath) {
@@ -754,15 +922,12 @@ export async function executeUploadPlan({ artifactRoot, plan, runAws = defaultRu
       "json",
     ]);
     const head = parseJson(Buffer.from(headResult.stdout), `S3 head-object ${object.key}`);
-    const storedMetadata = normalizeMetadata(head.Metadata);
-    if (
-      head.ContentLength !== object.size ||
-      head.ChecksumSHA256 !== object.checksumSha256 ||
-      storedMetadata.sha256 !== object.sha256 ||
-      storedMetadata["manifest-sha256"] !== plan.manifestSha256
-    ) {
-      throw new Error(`Immutable release object differs from planned bytes: ${object.key}`);
-    }
+    validateStoredReleaseObjectHead({
+      head,
+      object,
+      manifestSha256: plan.manifestSha256,
+      mismatchMessage: `Immutable release object differs from planned bytes: ${object.key}`,
+    });
     results.push({ key: object.key, status: "reused" });
   }
   return results;
